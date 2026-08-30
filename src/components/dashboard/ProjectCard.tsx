@@ -1,0 +1,127 @@
+'use client';
+import React, { useState } from 'react';
+import { Play, MoreHorizontal, Clock, Cpu } from 'lucide-react';
+import { Badge } from '../ui/Badge';
+import Link from 'next/link';
+
+// Fixed waveform so SSR and client match exactly
+const THUMB_WAVEFORM = Array.from({ length: 40 }, (_, i) =>
+  `${Math.abs(Math.sin(i * 0.4)) * 65 + 10}%`
+);
+
+export interface Project {
+  id: string; title: string; duration: string; lastEdited: string;
+  status: 'ready' | 'processing' | 'draft'; thumbnail?: string;
+}
+
+const statusConfig = {
+  ready:      { label: 'Ready',      variant: 'success' as const },
+  processing: { label: 'Processing', variant: 'ai'      as const, dot: true },
+  draft:      { label: 'Draft',      variant: 'default' as const },
+};
+
+export function ProjectCard({ project }: { project: Project }) {
+  const status = statusConfig[project.status];
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <Link href={`/editor/${project.id}`} style={{ textDecoration: 'none' }}>
+      <div
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          background: '#111111',
+          border: `1px solid ${hovered ? '#333' : '#242424'}`,
+          borderRadius: 16, overflow: 'hidden',
+          transform: hovered ? 'translateY(-2px)' : 'none',
+          boxShadow: hovered ? '0 4px 24px rgba(0,0,0,0.4)' : 'none',
+          transition: 'all 200ms ease',
+          cursor: 'pointer',
+        }}
+      >
+        {/* Thumbnail */}
+        <div style={{ position: 'relative', aspectRatio: '16/9', background: 'linear-gradient(135deg,#0A0A0A 0%,#181818 50%,#111 100%)' }}>
+          {/* Waveform */}
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 28, display: 'flex', alignItems: 'flex-end', gap: 1, padding: '0 12px 4px' }}>
+            {THUMB_WAVEFORM.map((h, i) => (
+              <div key={i} style={{ flex: 1, borderRadius: 2, height: h, background: 'rgba(255,255,255,0.06)' }} />
+            ))}
+          </div>
+
+          {/* Play overlay */}
+          <div style={{
+            position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            opacity: hovered ? 1 : 0, transition: 'opacity 200ms',
+          }}>
+            <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Play size={14} fill="white" color="white" style={{ marginLeft: 2 }} />
+            </div>
+          </div>
+
+          {/* Status */}
+          <div style={{ position: 'absolute', top: 10, right: 10 }}>
+            <Badge variant={status.variant} size="sm" dot={(status as { dot?: boolean }).dot}>
+              {status.label}
+            </Badge>
+          </div>
+
+          {/* Processing overlay */}
+          {project.status === 'processing' && (
+            <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <Cpu size={14} style={{ color: '#4F8CFF', animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
+              <span style={{ fontSize: 12, color: '#4F8CFF', fontWeight: 600 }}>AI editing...</span>
+            </div>
+          )}
+        </div>
+
+        {/* Info */}
+        <div style={{ padding: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 600, color: '#FFFFFF', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+              {project.title}
+            </h3>
+            <button
+              onClick={e => { e.preventDefault(); e.stopPropagation(); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#666', padding: 2, borderRadius: 4, display: 'flex', flexShrink: 0 }}
+              onMouseEnter={e => { e.currentTarget.style.color = '#A1A1A1'; e.currentTarget.style.background = '#181818'; }}
+              onMouseLeave={e => { e.currentTarget.style.color = '#666'; e.currentTarget.style.background = 'none'; }}
+            >
+              <MoreHorizontal size={14} />
+            </button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#666' }}>
+              <Play size={10} />{project.duration}
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#666' }}>
+              <Clock size={10} />{project.lastEdited}
+            </span>
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+export function EmptyProjectState() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px', textAlign: 'center' }}>
+      <div style={{ width: 56, height: 56, borderRadius: 16, background: '#111111', border: '1px solid #242424', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+        <Play size={22} style={{ color: '#666' }} />
+      </div>
+      <h3 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 650, fontSize: 18, letterSpacing: '-0.03em', color: '#FFFFFF', margin: '0 0 8px' }}>
+        Your next edit starts here.
+      </h3>
+      <p style={{ fontSize: 13, color: '#666', margin: '0 0 24px' }}>Upload a video and let AI do the editing.</p>
+      <Link href="/upload" style={{ textDecoration: 'none' }}>
+        <button style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '0 20px', height: 42, fontSize: 13, fontWeight: 600,
+          background: '#4F8CFF', color: '#050505', border: 'none', borderRadius: 10, cursor: 'pointer',
+        }}>
+          Upload a video
+        </button>
+      </Link>
+    </div>
+  );
+}
