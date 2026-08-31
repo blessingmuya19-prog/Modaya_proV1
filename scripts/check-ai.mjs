@@ -114,8 +114,31 @@ try {
   console.log('  The AI panel will now understand requests in your own words.\n');
 } catch (err) {
   console.log('FAILED');
-  console.log(`  Error    : ${err.message}\n`);
-  console.log('  Common causes: key copied with a trailing space, key revoked,');
-  console.log('  a model name your account cannot access, or no network.\n');
+
+  // Say which of these it actually was. "Bad key" is the wrong advice when the
+  // machine simply has no route to the provider.
+  const msg    = String(err.message ?? err);
+  const cause  = err.cause instanceof Error ? err.cause.message : '';
+  const status = Number((msg.match(/HTTP (\d{3})/) || [])[1] || 0);
+  const offline = !status && /fetch failed|ENOTFOUND|ECONNREFUSED|EAI_AGAIN|network|getaddrinfo|timeout/i.test(msg + cause);
+
+  if (offline) {
+    console.log(`  Reason   : cannot reach ${chosen.host ?? chosen.name}${cause ? ` — ${cause}` : ''}`);
+    console.log('\n  This is a network problem, not a problem with your key.');
+    console.log('  Check your connection, a firewall, or an outbound proxy.');
+    console.log('  The key is still saved and will work wherever the app can reach the provider.\n');
+  } else if (status === 401 || status === 403) {
+    console.log(`  Reason   : ${chosen.name} rejected the key (HTTP ${status})`);
+    console.log('\n  Copy it again from the provider dashboard — keys get revoked,');
+    console.log('  and a paste that drops a character looks exactly like this.\n');
+  } else if (status === 429) {
+    console.log('  Reason   : over the free-tier rate limit (HTTP 429)');
+    console.log('\n  The key is valid. Wait a minute and run this again.\n');
+  } else if (status === 404 || /model/i.test(msg)) {
+    console.log(`  Reason   : ${chosen.name} will not serve "${model}" to this account`);
+    console.log('\n  The key is fine. Set LLM_MODEL in .env.local to a model you can access.\n');
+  } else {
+    console.log(`  Error    : ${msg}\n`);
+  }
   process.exit(1);
 }

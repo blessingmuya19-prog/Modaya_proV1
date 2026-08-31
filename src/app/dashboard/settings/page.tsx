@@ -160,6 +160,8 @@ export default function SettingsPage() {
   const [aiKey,      setAiKey     ] = useState('');
   const [showKey,    setShowKey   ] = useState(false);
   const [aiBusy,     setAiBusy    ] = useState(false);
+  const [aiError,    setAiError   ] = useState('');
+  const [aiCanForce, setAiCanForce] = useState(false);
   const [aiStatus,   setAiStatus  ] = useState<{
     configured: boolean; provider: string; model: string; keyHint: string; persisted: boolean;
   } | null>(null);
@@ -171,27 +173,39 @@ export default function SettingsPage() {
       .catch(() => {});
   }, []);
 
-  const saveAiKey = async (e: FormEvent) => {
-    e.preventDefault();
+  const submitAiKey = async (force: boolean) => {
     if (!aiKey.trim()) { addToast('Paste your API key first.', 'error'); return; }
     setAiBusy(true);
+    setAiError('');
     try {
       const res  = await fetch('/api/settings/ai', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ provider: aiProvider, key: aiKey.trim() }),
+        body:    JSON.stringify({ provider: aiProvider, key: aiKey.trim(), force }),
       });
       const data = await res.json();
-      if (!res.ok) { addToast(data.error ?? 'Could not verify that key.', 'error'); return; }
+      if (!res.ok) {
+        setAiError(data.error ?? 'Could not verify that key.');
+        setAiCanForce(data.canSaveAnyway === true);
+        return;
+      }
       setAiStatus(data);
       setAiKey('');
-      addToast(`Connected to ${data.provider}. The AI editor is live.`, 'success');
+      setAiCanForce(false);
+      addToast(
+        data.verified
+          ? `Connected to ${data.provider}. The AI editor is live.`
+          : `Key saved for ${data.provider}, but it could not be tested from here.`,
+        data.verified ? 'success' : 'info');
+      if (!data.verified && data.warning) setAiError(data.warning);
     } catch {
-      addToast('Could not reach the server.', 'error');
+      setAiError('Could not reach the server.');
     } finally {
       setAiBusy(false);
     }
   };
+
+  const saveAiKey = async (e: FormEvent) => { e.preventDefault(); await submitAiKey(false); };
 
   const removeAiKey = async () => {
     setAiBusy(true);
@@ -363,6 +377,23 @@ export default function SettingsPage() {
                :                           'openrouter.ai/keys'}
               </a>. It is verified before saving, kept on the server, and never shown again.
             </p>
+
+            {aiError && (
+              <div style={{ padding: '10px 12px', background: 'rgba(239,68,68,0.08)',
+                border: '1px solid rgba(239,68,68,0.25)', borderRadius: 9,
+                fontFamily: F, fontSize: 12, color: C.text, lineHeight: 1.6 }}>
+                {aiError}
+                {aiCanForce && (
+                  <button type="button" onClick={() => submitAiKey(true)} disabled={aiBusy}
+                    style={{ display: 'block', marginTop: 8, padding: '6px 12px',
+                      background: 'transparent', border: `1px solid ${C.b3}`, borderRadius: 8,
+                      fontFamily: F, fontSize: 12, color: C.text,
+                      cursor: aiBusy ? 'default' : 'pointer' }}>
+                    Save it anyway, without testing
+                  </button>
+                )}
+              </div>
+            )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
               <button type="submit" disabled={aiBusy}

@@ -29,6 +29,58 @@ export interface LlmResult {
   model:    string;
 }
 
+/**
+ * Why a call failed. The distinction matters: telling someone their key was
+ * rejected when the machine simply has no route to the provider sends them
+ * off to regenerate a perfectly good key.
+ */
+export type FailureReason =
+  | 'not_configured'
+  | 'unreachable'
+  | 'unauthorized'
+  | 'rate_limited'
+  | 'model_unavailable'
+  | 'timeout'
+  | 'empty_response'
+  | 'provider_error';
+
+export class ProviderError extends Error {
+  constructor(
+    readonly reason: FailureReason,
+    readonly status = 0,
+    readonly detail = '',
+  ) { super(`${reason}${status ? ` (HTTP ${status})` : ''}`); this.name = 'ProviderError'; }
+}
+
+/** Map an HTTP status (and body) from any provider onto a reason. */
+function reasonFor(status: number, body: string): FailureReason {
+  if (status === 401 || status === 403) return 'unauthorized';
+  if (status === 429) return 'rate_limited';
+  if (status === 404) return 'model_unavailable';
+  if (status === 400 && /model/i.test(body)) return 'model_unavailable';
+  if (status >= 500) return 'provider_error';
+  return 'provider_error';
+}
+
+/** fetch that turns a transport failure into a typed 'unreachable'. */
+async function httpFetch(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (err) {
+    const detail = err instanceof Error
+      ? (err.cause instanceof Error ? err.cause.message : err.message)
+      : String(err);
+    throw new ProviderError('unreachable', 0, detail);
+  }
+}
+
+/** Throw with the real reason unless the response is OK. */
+async function ensureOk(res: Response): Promise<void> {
+  if (res.ok) return;
+  const body = await res.text().catch(() => '');
+  throw new ProviderError(reasonFor(res.status, body), res.status, body.slice(0, 300));
+}
+
 interface ProviderConfig {
   name:    ProviderName;
   model:   string;
@@ -75,6 +127,21 @@ export function llmAvailable(): boolean {
   return detectProvider().ready;
 }
 
+/** Reject with a typed timeout; propagate every other error unchanged. */
+async function withTimeoutStrict<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      p,
+      new Promise<never>((_, rej) => {
+        timer = setTimeout(() => rej(new ProviderError('timeout', 0, `no response in ${ms} ms`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -95,7 +162,7 @@ async function openAiCompatible(
   baseUrl: string, apiKey: string, model: string, messages: ChatMessage[],
   json: boolean, extraHeaders: Record<string, string> = {},
 ): Promise<string | null> {
-  const res = await fetch(`${baseUrl}/chat/completions`, {
+  const res = await httpFetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type':  'application/json',
@@ -110,7 +177,7 @@ async function openAiCompatible(
       ...(json ? { response_format: { type: 'json_object' } } : {}),
     }),
   });
-  if (!res.ok) return null;
+  await ensureOk(res);
   const data = await res.json().catch(() => null);
   return data?.choices?.[0]?.message?.content ?? null;
 }
@@ -124,7 +191,7 @@ async function gemini(
     parts: [{ text: m.content }],
   }));
 
-  const res = await fetch(
+  const res = await httpFetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
       method:  'POST',
@@ -140,7 +207,7 @@ async function gemini(
       }),
     },
   );
-  if (!res.ok) return null;
+  await ensureOk(res);
   const data = await res.json().catch(() => null);
   return data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? '').join('') ?? null;
 }
@@ -148,7 +215,7 @@ async function gemini(
 async function cloudflare(
   token: string, account: string, model: string, messages: ChatMessage[],
 ): Promise<string | null> {
-  const res = await fetch(
+  const res = await httpFetch(
     `https://api.cloudflare.com/client/v4/accounts/${account}/ai/run/${model}`,
     {
       method:  'POST',
@@ -156,7 +223,7 @@ async function cloudflare(
       body:    JSON.stringify({ messages, max_tokens: 900 }),
     },
   );
-  if (!res.ok) return null;
+  await ensureOk(res);
   const data = await res.json().catch(() => null);
   return data?.result?.response ?? null;
 }
@@ -164,12 +231,12 @@ async function cloudflare(
 async function ollama(
   baseUrl: string, model: string, messages: ChatMessage[], json: boolean,
 ): Promise<string | null> {
-  const res = await fetch(`${baseUrl.replace(/\/$/, '')}/api/chat`, {
+  const res = await httpFetch(`${baseUrl.replace(/\/$/, '')}/api/chat`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ model, messages, stream: false, ...(json ? { format: 'json' } : {}) }),
   });
-  if (!res.ok) return null;
+  await ensureOk(res);
   const data = await res.json().catch(() => null);
   return data?.message?.content ?? null;
 }
@@ -186,31 +253,88 @@ export async function chat(
   const json      = opts.json ?? false;
   const timeoutMs = opts.timeoutMs ?? 20_000;
 
-  const call = (): Promise<string | null> => {
-    switch (cfg.name) {
-      case 'groq':
-        return openAiCompatible(env('GROQ_BASE_URL') || 'https://api.groq.com/openai/v1',
-          env('GROQ_API_KEY'), cfg.model, messages, json);
-      case 'gemini':
-        return gemini(env('GEMINI_API_KEY') || env('GOOGLE_API_KEY'), cfg.model, messages, json);
-      case 'openrouter':
-        return openAiCompatible(env('OPENROUTER_BASE_URL') || 'https://openrouter.ai/api/v1',
-          env('OPENROUTER_API_KEY'), cfg.model, messages, json, {
-          'HTTP-Referer': env('APP_URL') || 'https://modaya.app',
-          'X-Title':      'Modaya',
-        });
-      case 'cloudflare':
-        return cloudflare(env('CLOUDFLARE_API_TOKEN'), env('CLOUDFLARE_ACCOUNT_ID'), cfg.model, messages);
-      case 'ollama':
-        return ollama(env('OLLAMA_BASE_URL'), cfg.model, messages, json);
-      default:
-        return Promise.resolve(null);
-    }
-  };
+  const call = (): Promise<string | null> => callProvider(cfg, messages, json);
 
   const text = await withTimeout(call().catch(() => null), timeoutMs);
   if (!text) return null;
   return { text, provider: cfg.name, model: cfg.model };
+}
+
+function callProvider(
+  cfg: ProviderConfig, messages: ChatMessage[], json: boolean,
+): Promise<string | null> {
+  switch (cfg.name) {
+    case 'groq':
+      return openAiCompatible(env('GROQ_BASE_URL') || 'https://api.groq.com/openai/v1',
+        env('GROQ_API_KEY'), cfg.model, messages, json);
+    case 'gemini':
+      return gemini(env('GEMINI_API_KEY') || env('GOOGLE_API_KEY'), cfg.model, messages, json);
+    case 'openrouter':
+      return openAiCompatible(env('OPENROUTER_BASE_URL') || 'https://openrouter.ai/api/v1',
+        env('OPENROUTER_API_KEY'), cfg.model, messages, json, {
+          'HTTP-Referer': env('APP_URL') || 'https://modaya.app',
+          'X-Title':      'Modaya',
+        });
+    case 'cloudflare':
+      return cloudflare(env('CLOUDFLARE_API_TOKEN'), env('CLOUDFLARE_ACCOUNT_ID'), cfg.model, messages);
+    case 'ollama':
+      return ollama(env('OLLAMA_BASE_URL'), cfg.model, messages, json);
+    default:
+      return Promise.resolve(null);
+  }
+}
+
+export type ChatOutcome =
+  | { ok: true;  result: LlmResult }
+  | { ok: false; reason: FailureReason; status: number; detail: string };
+
+/**
+ * Same call as `chat`, but surfaces why it failed. Use this where a human is
+ * waiting on the answer (key setup, diagnostics); use `chat` on hot paths that
+ * just want to fall back silently.
+ */
+export async function chatDetailed(
+  messages: ChatMessage[],
+  opts: { json?: boolean; timeoutMs?: number } = {},
+): Promise<ChatOutcome> {
+  const cfg = detectProvider();
+  if (!cfg.ready) {
+    return { ok: false, reason: 'not_configured', status: 0, detail: 'no provider key in the environment' };
+  }
+  try {
+    const text = await withTimeoutStrict(callProvider(cfg, messages, opts.json ?? false), opts.timeoutMs ?? 20_000);
+    if (!text || !text.trim()) {
+      return { ok: false, reason: 'empty_response', status: 0, detail: 'the provider returned no text' };
+    }
+    return { ok: true, result: { text, provider: cfg.name, model: cfg.model } };
+  } catch (err) {
+    if (err instanceof ProviderError) {
+      return { ok: false, reason: err.reason, status: err.status, detail: err.detail };
+    }
+    return { ok: false, reason: 'provider_error', status: 0, detail: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** Human-readable, provider-aware explanation of a failure. */
+export function explainFailure(reason: FailureReason, provider: string, detail = ''): string {
+  switch (reason) {
+    case 'not_configured':
+      return 'No AI provider is configured, so the rules engine is doing the work.';
+    case 'unreachable':
+      return `This machine could not reach ${provider}. That is a network problem, not a problem with your key — check the connection, a firewall, or an outbound proxy.${detail ? ` (${detail})` : ''}`;
+    case 'unauthorized':
+      return `${provider} rejected that key. Copy it again from the provider's dashboard — keys are sometimes revoked, or truncated on paste.`;
+    case 'rate_limited':
+      return `${provider} says you are over its free-tier rate limit. The key is valid; wait a minute and try again.`;
+    case 'model_unavailable':
+      return `The key works, but ${provider} will not serve this model to your account. Set LLM_MODEL to one you can access.`;
+    case 'timeout':
+      return `${provider} did not answer in time. The key may well be fine — try once more.`;
+    case 'empty_response':
+      return `${provider} accepted the request but returned nothing.`;
+    default:
+      return `${provider} returned an error.${detail ? ` (${detail})` : ''}`;
+  }
 }
 
 /**

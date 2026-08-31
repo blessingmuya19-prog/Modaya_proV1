@@ -13,7 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { getCurrentUser } from '@/lib/auth';
-import { detectProvider, chat, ProviderName } from '@/lib/ai/llm';
+import { detectProvider, chatDetailed, explainFailure, ProviderName } from '@/lib/ai/llm';
 
 const ENV_VAR: Record<string, string> = {
   groq:       'GROQ_API_KEY',
@@ -66,23 +66,45 @@ export async function POST(req: NextRequest) {
   process.env[varName]  = key;
   process.env.LLM_PROVIDER = provider;
 
-  // Verify against the real provider before we keep it
-  const res = await chat([{ role: 'user', content: 'Reply with exactly: OK' }], { timeoutMs: 15_000 });
-  if (!res) {
+  const rollback = () => {
     if (previous === undefined) delete process.env[varName];
     else process.env[varName] = previous;
     delete process.env.LLM_PROVIDER;
+  };
+
+  const keep = () => {
+    const persisted = process.env.NODE_ENV === 'development' ? writeEnvLocal(varName, key) : false;
+    return persisted;
+  };
+
+  // Verify against the real provider before we keep it
+  const out = await chatDetailed([{ role: 'user', content: 'Reply with exactly: OK' }], { timeoutMs: 15_000 });
+
+  if (!out.ok) {
+    const message = explainFailure(out.reason, provider, out.detail);
+
+    // The key itself is fine — the network, the model choice or a rate limit is
+    // the problem. Refusing to save would be wrong, so offer to save anyway.
+    const keyNotAtFault = out.reason === 'unreachable' || out.reason === 'timeout';
+    if (keyNotAtFault && body.force === true) {
+      const persisted = keep();
+      return NextResponse.json({ ...status(), verified: false, persisted, warning: message });
+    }
+
+    rollback();
+    const httpStatus =
+      out.reason === 'unauthorized'      ? 400 :
+      out.reason === 'rate_limited'      ? 429 :
+      out.reason === 'unreachable'       ? 503 :
+      out.reason === 'timeout'           ? 504 :
+      out.reason === 'model_unavailable' ? 502 : 502;
+
     return NextResponse.json(
-      { error: 'The provider rejected that key, or did not respond. Check the key and try again.' },
-      { status: 502 });
+      { error: message, reason: out.reason, canSaveAnyway: keyNotAtFault },
+      { status: httpStatus });
   }
 
-  let persisted = false;
-  if (process.env.NODE_ENV === 'development') {
-    persisted = writeEnvLocal(varName, key);
-  }
-
-  return NextResponse.json({ ...status(), verified: true, persisted });
+  return NextResponse.json({ ...status(), verified: true, persisted: keep() });
 }
 
 export async function DELETE() {
