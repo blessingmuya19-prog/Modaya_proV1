@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "ai:check": "node scripts/check-ai.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

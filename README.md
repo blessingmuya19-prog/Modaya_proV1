@@ -28,11 +28,20 @@ Adding one free key turns on real language understanding of your requests:
 | **Cloudflare Workers AI** | Free daily allowance | Cloudflare dashboard |
 | **Ollama** | Entirely offline, your machine | <https://ollama.com> |
 
-Copy `.env.example` to `.env.local` and set one key:
+Create `.env.local` in the project root and set one key:
 
 ```bash
 GROQ_API_KEY=gsk_...
 ```
+
+Then confirm it works before touching the UI:
+
+```bash
+npm run ai:check     # names the provider, sends one request, reports OK or the exact error
+```
+
+`.env.local` is git-ignored, so a key can never be committed. On Vercel, add the
+same variable under Settings → Environment Variables and redeploy.
 
 Providers are auto-detected in the order above. Force one with `LLM_PROVIDER`,
 and change the model with `LLM_MODEL`.
