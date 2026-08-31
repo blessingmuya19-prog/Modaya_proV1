@@ -42,6 +42,7 @@ export default function DebugHud({ projectId }: { projectId?: string }) {
 
     const id = setInterval(() => {
       const v    = document.querySelector('video') as HTMLVideoElement | null;
+      const cv   = document.querySelector('[data-modaya-canvas]') as HTMLCanvasElement | null;
       const tl   = document.querySelector('[data-modaya-timeline]') as HTMLElement | null;
       const ph   = document.querySelector('[data-modaya-playhead]') as HTMLElement | null;
       const frames = projectId ? getProjectFrames(projectId) : [];
@@ -54,7 +55,7 @@ export default function DebugHud({ projectId }: { projectId?: string }) {
       } catch { /* unsupported */ }
 
       setR({
-        source:   v?.src ? (v.src.startsWith('blob:') ? 'real video (blob)' : 'real video') : 'MOCK — no video element',
+        source:   cv ? `canvas compositor ${cv.width}x${cv.height}` : v?.src ? 'raw video element' : 'MOCK — no video',
         videoT:   v ? `${v.currentTime.toFixed(2)}s  ${v.paused ? '(paused)' : '(playing)'}` : '—',
         ready:    v ? `readyState ${v.readyState}  net ${v.networkState}` : '—',
         dropped,

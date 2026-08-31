@@ -8,7 +8,7 @@ export default defineConfig({
   resolve: { alias: { '@': path.join(root, 'src') } },
   test: {
     environment: 'jsdom',
-    include: ['./tests/**/*.test.tsx'],
+    include: ['./tests/**/*.test.{ts,tsx}'],
     globals: true,
   },
 });

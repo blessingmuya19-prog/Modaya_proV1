@@ -5,6 +5,8 @@ import { Logo, LogoMark } from '../ui/Logo';
 import { ExportModal } from './ExportModal';
 import { getMedia, subscribeMedia } from '@/lib/videoStore';
 import DebugHud from './DebugHud';
+import PreviewCanvas from './PreviewCanvas';
+import { buildSequence, Sequence } from '@/lib/render/sequence';
 import { getProjectFrames } from '@/lib/thumbnailStore';
 
 /* ──────────────── STAGGER FADE-UP ──────────────── */
@@ -835,56 +837,12 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied }: A
 /* ──────────────── VIDEO PREVIEW ──────────────── */
 const AIChatPanel = React.memo(AIChatPanelBase);
 
-function VideoPreview({ playheadS, playing, onToggle, onSeek, onStop, totalS, videoUrl, aspectRatio }:
+function VideoPreview({ playheadS, playing, onToggle, onSeek, onStop, totalS, videoUrl, aspectRatio,
+  sequence, projectId }:
   { playheadS:number; playing:boolean; onToggle:()=>void; onSeek:(s:number)=>void; onStop:()=>void;
-    totalS:number; videoUrl?:string|null; aspectRatio?:string }) {
+    totalS:number; videoUrl?:string|null; aspectRatio?:string;
+    sequence:Sequence; projectId?:string }) {
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  // Sync play/pause
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    if (playing) { v.play().catch(()=>{}); }
-    else         { v.pause(); }
-  }, [playing]);
-
-  // Seek the element only when the change came from OUTSIDE playback (a scrub,
-  // a jump, a click on the timeline). While playing, the video owns the clock —
-  // writing currentTime from our own time reports is what caused the stutter.
-  const echoedS = useRef(-1);
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v || !isFinite(playheadS)) return;
-    if (Math.abs(playheadS - echoedS.current) < 0.05) return;   // our own echo
-    if (Math.abs(v.currentTime - playheadS) > 0.25) {
-      v.currentTime = playheadS;
-    }
-  }, [playheadS]);
-
-  // Smooth 60fps position reporting without touching currentTime
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v || !playing) return;
-    let raf = 0;
-    let lastReport = -1;
-    const tick = () => {
-      if (!v.paused && !v.seeking) {
-        const t = v.currentTime;
-        // ~30 updates/sec is smooth on screen but halves the React work
-        if (Math.abs(t - lastReport) >= 0.033) {
-          lastReport      = t;
-          echoedS.current = t;
-          onSeek(t);
-        }
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [playing, onSeek]);
-
-  // Derive CSS aspect ratio from the stored ratio string
   // Any detected ratio, not just the three we happened to hard-code
   const cssAspect = (() => {
     const m = /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(aspectRatio ?? '');
@@ -910,14 +868,15 @@ function VideoPreview({ playheadS, playing, onToggle, onSeek, onStop, totalS, vi
           onClick={onToggle}>
 
           {videoUrl ? (
-            /* ── Real video ── */
-            <video
-              ref={videoRef}
-              src={videoUrl}
-              style={{ width:'100%', height:'100%', objectFit:'contain', display:'block' }}
-              playsInline
-              preload="metadata"
-              onEnded={() => { onStop(); onSeek(0); /* stop + reset to start */ }}
+            /* ── Composited programme output ── */
+            <PreviewCanvas
+              sequence={sequence}
+              sourceUrl={videoUrl}
+              sourceId={projectId ?? 'main'}
+              playing={playing}
+              playheadS={playheadS}
+              onTime={onSeek}
+              onEnded={onStop}
             />
           ) : (
             /* ── Mockup canvas (no video available) ── */
@@ -1371,6 +1330,19 @@ export function EditorShell({
   }, [liveClips, clips, totalS, mediaEntry?.filename]);
   const analysing = !(liveClips.length || clips.length);
 
+  /* The programme the preview renders: clips mapped onto source ranges, so
+     playback shows the edit (cuts skipped, overlays composited) rather than
+     the raw file. */
+  const sequence = useMemo(() => buildSequence(
+    (liveClips.length ? liveClips : clips) as never[],
+    {
+      durationS: totalS,
+      width:     mediaEntry?.width  ?? 1920,
+      height:    mediaEntry?.height ?? 1080,
+      sourceId:  projectId ?? 'main',
+    },
+  ), [liveClips, clips, totalS, mediaEntry?.width, mediaEntry?.height, projectId]);
+
   // When parent re-fetches clips (e.g. after navigation), sync
   useEffect(() => { setLiveClips(clips); }, [clips]);
 
@@ -1480,7 +1452,7 @@ export function EditorShell({
               </div>
             </FadeUp>
             <FadeUp delay={360} style={{ flex:1, minWidth:0, display:'flex' }}>
-              <VideoPreview playheadS={phS} playing={playing} onToggle={togglePlay} onStop={stopPlay} onSeek={setPhS} totalS={totalS} videoUrl={videoUrl} aspectRatio={videoAspect} />
+              <VideoPreview playheadS={phS} playing={playing} onToggle={togglePlay} onStop={stopPlay} onSeek={setPhS} totalS={totalS} videoUrl={videoUrl} aspectRatio={videoAspect} sequence={sequence} projectId={projectId} />
             </FadeUp>
           </div>
 
