@@ -24,6 +24,38 @@ const ENV_VAR: Record<string, string> = {
 const mask = (k: string) =>
   k.length <= 8 ? '••••' : `${k.slice(0, 4)}…${k.slice(-4)}`;
 
+/** Every variable name the app actually reads. */
+const KNOWN = [
+  'GROQ_API_KEY', 'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'OPENROUTER_API_KEY',
+  'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'OLLAMA_BASE_URL',
+  'LLM_PROVIDER', 'LLM_MODEL',
+];
+
+/**
+ * Names only — never values. This answers the two questions that actually go
+ * wrong on a hosted deploy: was the variable given to *this* environment, and
+ * was it spelled the way the app reads it.
+ */
+function diagnostics() {
+  const present = KNOWN.filter(k => (process.env[k] ?? '').trim() !== '');
+
+  // Anything key-shaped the app does not read — catches GROK_API_KEY,
+  // GROQ_KEY, a trailing space in the name, or the value pasted as the name.
+  const lookalike = Object.keys(process.env)
+    .filter(k => !KNOWN.includes(k))
+    .filter(k => /GROQ|GROK|GEMINI|OPENROUTER|OPEN_ROUTER|CLAUDE|OPENAI|LLM|AI_KEY|API_KEY/i.test(k))
+    .slice(0, 12);
+
+  return {
+    present,
+    lookalike,
+    // 'preview' here with an empty `present` means the variable was saved for
+    // Production only — the single most common mistake.
+    vercelEnv: process.env.VERCEL_ENV ?? null,
+    onVercel:  !!process.env.VERCEL,
+  };
+}
+
 function status() {
   const cfg = detectProvider();
   const name = cfg.name as ProviderName;
@@ -40,7 +72,7 @@ function status() {
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
-  return NextResponse.json(status());
+  return NextResponse.json({ ...status(), diagnostics: diagnostics() });
 }
 
 export async function POST(req: NextRequest) {

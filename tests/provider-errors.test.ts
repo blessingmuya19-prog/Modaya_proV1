@@ -150,3 +150,50 @@ describe('explainFailure wording', () => {
     expect(m).not.toContain('gsk_secret_value_here');
   });
 });
+
+/**
+ * Diagnostics must name variables, never expose their values — the whole point
+ * is to debug a hosted deploy without anyone pasting a secret anywhere.
+ */
+describe('settings diagnostics', () => {
+  const load = async () => {
+    vi.resetModules();
+    vi.doMock('@/lib/auth', () => ({ getCurrentUser: async () => ({ id: 'u1' }) }));
+    const mod = await import('@/app/api/settings/ai/route');
+    const res = await mod.GET();
+    return res.json();
+  };
+
+  afterEach(() => { vi.doUnmock('@/lib/auth'); vi.resetModules(); });
+
+  it('lists a recognised variable by name and never its value', async () => {
+    process.env.GROQ_API_KEY = 'gsk_super_secret_value';
+    const d = await load();
+    expect(d.diagnostics.present).toContain('GROQ_API_KEY');
+    expect(JSON.stringify(d)).not.toContain('gsk_super_secret_value');
+  });
+
+  it('flags a misspelled variable so the typo is obvious', async () => {
+    process.env.GROK_API_KEY = 'gsk_typo';
+    const d = await load();
+    expect(d.diagnostics.present).not.toContain('GROK_API_KEY');
+    expect(d.diagnostics.lookalike).toContain('GROK_API_KEY');
+    expect(JSON.stringify(d)).not.toContain('gsk_typo');
+    delete process.env.GROK_API_KEY;
+  });
+
+  it('treats an empty variable as absent', async () => {
+    process.env.GROQ_API_KEY = '   ';
+    const d = await load();
+    expect(d.diagnostics.present).not.toContain('GROQ_API_KEY');
+    expect(d.configured).toBe(false);
+  });
+
+  it('reports which Vercel environment the build is', async () => {
+    process.env.VERCEL = '1';
+    process.env.VERCEL_ENV = 'preview';
+    const d = await load();
+    expect(d.diagnostics).toMatchObject({ onVercel: true, vercelEnv: 'preview' });
+    delete process.env.VERCEL; delete process.env.VERCEL_ENV;
+  });
+});

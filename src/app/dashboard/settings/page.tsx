@@ -164,6 +164,10 @@ export default function SettingsPage() {
   const [aiCanForce, setAiCanForce] = useState(false);
   const [aiStatus,   setAiStatus  ] = useState<{
     configured: boolean; provider: string; model: string; keyHint: string; persisted: boolean;
+    diagnostics?: {
+      present: string[]; lookalike: string[];
+      vercelEnv: string | null; onVercel: boolean;
+    };
   } | null>(null);
 
   useEffect(() => {
@@ -315,6 +319,36 @@ export default function SettingsPage() {
       {/* ── AI provider ── */}
       <Section title="AI editor"
         description="Connect a free AI provider so the editor understands requests in your own words. Without one it still works, using measurement-based rules.">
+
+        {aiStatus && !aiStatus.configured && aiStatus.diagnostics?.onVercel && (
+          <div style={{ marginBottom: 16, padding: '12px 14px',
+            background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.25)',
+            borderRadius: 10, fontFamily: F, fontSize: 12, color: C.text, lineHeight: 1.7 }}>
+            <strong style={{ fontWeight: 600 }}>No provider key reached this deployment.</strong>
+            <div style={{ marginTop: 6, color: C.dim }}>
+              This build is the{' '}
+              <span style={{ color: C.text }}>{aiStatus.diagnostics.vercelEnv ?? 'unknown'}</span>{' '}
+              environment.{' '}
+              {aiStatus.diagnostics.vercelEnv === 'preview' &&
+                'In Vercel, a variable saved for Production only is invisible here — tick Preview as well, then redeploy.'}
+              {aiStatus.diagnostics.vercelEnv === 'production' &&
+                'Check the variable is saved for Production, then redeploy — env vars are read at build time.'}
+            </div>
+            {aiStatus.diagnostics.lookalike.length > 0 && (
+              <div style={{ marginTop: 8, color: C.dim }}>
+                Similar names the app does not read:{' '}
+                <code style={{ color: C.text }}>{aiStatus.diagnostics.lookalike.join(', ')}</code>.
+                {' '}The name must be exactly <code style={{ color: C.text }}>GROQ_API_KEY</code>.
+              </div>
+            )}
+            <div style={{ marginTop: 8, color: C.dim }}>
+              Provider variables visible to the server:{' '}
+              <code style={{ color: C.text }}>
+                {aiStatus.diagnostics.present.length ? aiStatus.diagnostics.present.join(', ') : 'none'}
+              </code>
+            </div>
+          </div>
+        )}
 
         {aiStatus?.configured ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
