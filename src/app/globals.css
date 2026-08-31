@@ -14,7 +14,7 @@
   --color-accent:           #4F8CFF;
   --color-accent-hover:     #6EA3FF;
   --color-accent-dark:      #3d7ee0;
-  --font-tight: 'Inter Tight', sans-serif;
+  --font-tight: 'Inter Tight', Inter, system-ui, sans-serif;
   --font-sans:  'Inter', sans-serif;
   --radius-card:  16px;
   --radius-video: 16px;
@@ -91,6 +91,17 @@
   0%, 100% { box-shadow: 0 0 20px rgba(79,140,255,0.2),  0 4px 16px rgba(0,0,0,0.4); }
   50%       { box-shadow: 0 0 50px rgba(79,140,255,0.45), 0 8px 24px rgba(0,0,0,0.5); }
 }
+/* Editor entry — staggered fade-up per zone */
+@keyframes editor-fade-up {
+  0%   { opacity: 0; transform: translateY(14px); }
+  100% { opacity: 1; transform: translateY(0px); }
+}
+/* Alias used by dashboard/settings pages */
+@keyframes page-fade-up {
+  0%   { opacity: 0; transform: translateY(12px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
 @keyframes ping {
   0%        { transform: scale(1);   opacity: 0.8; }
   80%, 100% { transform: scale(2.4); opacity: 0;   }
@@ -225,4 +236,431 @@ body {
     animation-iteration-count: 1      !important;
     transition-duration:       0.01ms !important;
   }
+}
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVE SYSTEM
+   Breakpoints:
+     xs   ≤  480px  (small phones)
+     sm   ≤  640px  (phones)
+     md   ≤  768px  (tablets portrait)
+     lg   ≤ 1024px  (tablets landscape / small laptops)
+     xl   ≥ 1280px  (desktop)
+     2xl  ≥ 1440px  (large desktop)
+     3xl  ≥ 1920px  (ultrawide / 4K)
+   ═══════════════════════════════════════════════ */
+
+/* ── CSS custom properties for fluid scaling ── */
+:root {
+  --container-max: 1200px;
+  --container-pad: clamp(16px, 3vw, 48px);
+  --section-v-pad: clamp(56px, 10vw, 160px);
+  --grid-gap:      clamp(10px, 1.5vw, 20px);
+}
+
+/* ── Visibility helpers ── */
+@media (max-width: 768px)  { .desktop-only { display: none !important; } }
+@media (min-width: 769px)  { .mobile-only  { display: none !important; } }
+@media (max-width: 1024px) { .lg-hidden    { display: none !important; } }
+@media (min-width: 1025px) { .lg-only      { display: none !important; } }
+
+/* ── Navbar ── */
+@media (max-width: 768px) {
+  .nav-desktop   { display: none !important; }
+  .nav-cta-full  { display: none !important; }
+}
+@media (max-width: 640px) {
+  #mobile-menu-btn { display: flex !important; }
+}
+
+/* ── Section padding — fluid with clamp, no fixed breakpoints needed ── */
+.section-pad {
+  padding-top:    var(--section-v-pad);
+  padding-bottom: var(--section-v-pad);
+}
+
+/* ── Section inner container — unified 1200px max, fluid side padding ── */
+.section-inner {
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding-left:  var(--container-pad);
+  padding-right: var(--container-pad);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Extra breathing room on ultrawide */
+@media (min-width: 1920px) {
+  :root { --container-max: 1400px; --section-v-pad: 180px; }
+}
+
+/* ── Hero ── */
+@media (max-width: 768px) {
+  .hero-two-col {
+    flex-direction: column !important;
+    padding: 110px 18px 48px !important;
+    gap: 40px !important;
+    text-align: center;
+  }
+  .hero-left-col  { width: 100% !important; max-width: 100% !important; }
+  .hero-right-col { display: none !important; }
+}
+@media (max-width: 480px) {
+  .hero-two-col        { padding: 90px 14px 40px !important; }
+  .editor-mockup-wrap  { display: none !important; }
+}
+
+/* ── Typography — fully fluid via clamp, no breakpoint overrides needed ── */
+.hero-headline    { font-size: clamp(36px, 6vw, 84px); }
+.section-headline { font-size: clamp(26px, 4vw, 56px); }
+
+/* ── Section grids — all use var(--grid-gap) for fluid gutters ── */
+
+/* How it works — 3 col → 2 → 1 */
+.how-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--grid-gap);
+}
+@media (max-width: 900px) { .how-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 580px) { .how-grid { grid-template-columns: 1fr; } }
+
+/* AI caps — 3 col → 2 → 1 */
+.ai-caps-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--grid-gap);
+}
+@media (max-width: 960px) { .ai-caps-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px) { .ai-caps-grid { grid-template-columns: 1fr; } }
+
+/* Use cases — 3 col → 2 → 1 */
+.use-cases-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--grid-gap);
+}
+@media (max-width: 900px) { .use-cases-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .use-cases-grid { grid-template-columns: 1fr; } }
+
+/* Testimonials — 3 col → 2 → 1 */
+.testimonials-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--grid-gap);
+}
+@media (max-width: 900px) { .testimonials-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 580px) { .testimonials-grid { grid-template-columns: 1fr; } }
+
+/* Pricing — 3 col → 1 */
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--grid-gap);
+}
+@media (max-width: 860px) { .pricing-grid { grid-template-columns: 1fr; max-width: 480px; margin: 0 auto; } }
+
+/* Stats — 4 col → 2 → 1 */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--grid-gap);
+}
+@media (max-width: 860px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { .stats-grid { grid-template-columns: 1fr; } }
+
+/* Before/After */
+.before-after-row { display: flex; gap: clamp(12px, 2vw, 24px); align-items: flex-start; }
+@media (max-width: 700px) {
+  .before-after-row   { flex-direction: column !important; }
+  .before-after-arrow { transform: rotate(90deg) !important; padding: 8px 0 !important; }
+}
+
+/* FAQ */
+.faq-grid { max-width: 800px; margin: 0 auto; }
+@media (max-width: 640px) { .faq-grid { max-width: 100%; } }
+
+/* ── Footer ── */
+.footer-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: clamp(24px, 4vw, 56px);
+}
+@media (max-width: 960px) {
+  .footer-grid      { grid-template-columns: 1fr 1fr; gap: 32px; }
+  .footer-brand-col { grid-column: 1 / -1; }
+}
+@media (max-width: 480px) {
+  .footer-grid { grid-template-columns: 1fr; gap: 24px; }
+}
+
+/* ── Dashboard layout ── */
+@media (max-width: 900px) {
+  .dashboard-sidebar { width: 64px !important; }
+  .dashboard-sidebar .sidebar-label     { display: none !important; }
+  .dashboard-sidebar .sidebar-cta-text  { display: none !important; }
+  .dashboard-sidebar .sidebar-storage   { display: none !important; }
+}
+@media (max-width: 640px) {
+  .dashboard-sidebar    { display: none !important; }
+  .dashboard-mobile-bar { display: flex !important; }
+  .dashboard-layout-main { padding-bottom: 68px !important; }
+}
+
+/* Dashboard content — fluid padding */
+.dashboard-content { padding: clamp(14px, 2.5vw, 40px); }
+
+/* Project grid — fluid min card width */
+.project-grid-auto {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(clamp(160px, 18vw, 260px), 1fr));
+  gap: clamp(10px, 1.2vw, 16px);
+}
+@media (max-width: 400px) { .project-grid-auto { grid-template-columns: 1fr; } }
+
+/* Dashboard header row */
+.dashboard-header-row { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: clamp(16px, 2vw, 32px); }
+@media (max-width: 640px) {
+  .dashboard-header-row { flex-direction: column; gap: 14px; align-items: stretch; }
+}
+
+/* Filter + view row */
+.dashboard-filter-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: clamp(12px, 1.5vw, 24px); }
+@media (max-width: 640px) {
+  .dashboard-filter-row { flex-direction: column; gap: 10px; align-items: stretch; }
+}
+
+/* ── Upload page ── */
+.upload-content { padding: clamp(20px, 5vw, 64px) clamp(16px, 4vw, 48px); }
+
+.prompt-controls { display: flex; align-items: center; gap: 8px; }
+@media (max-width: 640px) {
+  .prompt-controls            { flex-direction: column !important; gap: 8px !important; }
+  .prompt-controls .ml-auto   { margin-left: 0 !important; width: 100%; }
+  .prompt-controls .ml-auto button { width: 100% !important; justify-content: center; }
+}
+
+/* ── Editor — desktop only, no mobile layout ── */
+/* Timeline not shown on narrow screens */
+@media (max-width: 900px) {
+  .editor-timeline { display: none !important; }
+  .editor-ai-panel { display: none !important; }
+}
+@media (max-width: 640px) {
+  .editor-props-panel { display: none !important; }
+}
+
+/* ── Editor panel widths scale on wider screens ── */
+/* These CSS variables let inline widths stay in sync */
+:root {
+  --editor-icon-nav-w:   64px;
+  --editor-props-w:     210px;
+  --editor-ai-w:        320px;
+  --editor-timeline-h:  340px;
+}
+@media (min-width: 1440px) {
+  :root {
+    --editor-props-w:   240px;
+    --editor-ai-w:      360px;
+    --editor-timeline-h: 360px;
+  }
+}
+@media (min-width: 1920px) {
+  :root {
+    --editor-props-w:   280px;
+    --editor-ai-w:      400px;
+    --editor-timeline-h: 380px;
+  }
+}
+
+/* ─────────────────────────────────────────────
+   TYPOGRAPHY SYSTEM — Modaya AI-native
+   Primary: Inter Tight (all UI)
+   Secondary: Inter (long-form body only)
+───────────────────────────────────────────── */
+:root {
+  /* Fonts */
+  --font-tight: 'Inter Tight', Inter, system-ui, sans-serif;
+  --font-body:  'Inter', sans-serif;
+
+  /* Text colours */
+  --text-primary:     #F5F7FA;
+  --text-secondary:   #9AA2AE;
+  --text-muted:       #626B78;
+  --text-dim:         #3A4149;
+  --text-active:      #FFFFFF;
+  --text-accent:      #4F8CFF;
+  --text-placeholder: #6F7784;
+
+  /* Tracking */
+  --tracking-tightest: -0.045em;
+  --tracking-tight:    -0.025em;
+  --tracking-ui:       -0.01em;
+  --tracking-timeline: -0.005em;
+  --tracking-overline:  0.07em;
+
+  /* Line heights */
+  --lh-heading:  1.0;
+  --lh-compact:  1.2;
+  --lh-ui:       1.3;
+  --lh-body:     1.5;
+  --lh-timeline: 1.1;
+}
+
+/* Base reset — Inter Tight for ALL elements */
+*, *::before, *::after {
+  font-family: var(--font-tight);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Only long-form body copy uses Inter */
+p.body-copy, .body-copy, textarea.body-input {
+  font-family: var(--font-body);
+}
+
+/* ── Utility classes ── */
+
+/* Sizes */
+.text-28 { font-size: 28px; }
+.text-20 { font-size: 20px; }
+.text-16 { font-size: 16px; }
+.text-15 { font-size: 15px; }
+.text-14 { font-size: 14px; }
+.text-13 { font-size: 13px; }
+.text-12 { font-size: 12px; }
+.text-11 { font-size: 11px; }
+.text-10 { font-size: 10px; }
+
+/* Weights */
+.fw-400 { font-weight: 400; }
+.fw-500 { font-weight: 500; }
+.fw-600 { font-weight: 600; }
+.fw-700 { font-weight: 700; }
+
+/* Tracking */
+.tracking-tightest { letter-spacing: var(--tracking-tightest); }
+.tracking-tight     { letter-spacing: var(--tracking-tight); }
+.tracking-ui        { letter-spacing: var(--tracking-ui); }
+.tracking-timeline  { letter-spacing: var(--tracking-timeline); }
+.tracking-overline  { letter-spacing: var(--tracking-overline); }
+
+/* Text colours */
+.text-primary   { color: var(--text-primary); }
+.text-secondary { color: var(--text-secondary); }
+.text-muted     { color: var(--text-muted); }
+.text-active    { color: var(--text-active); }
+.text-accent    { color: var(--text-accent); }
+
+/* Tabular nums for timecodes */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* AI panel hierarchy */
+.ai-section-label {
+  font-size: 10px; font-weight: 600;
+  letter-spacing: var(--tracking-overline);
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-family: var(--font-tight);
+}
+.ai-action-label {
+  font-size: 13px; font-weight: 500;
+  letter-spacing: var(--tracking-ui);
+  color: var(--text-primary);
+  font-family: var(--font-tight);
+  line-height: var(--lh-compact);
+}
+.ai-action-desc {
+  font-size: 12px; font-weight: 400;
+  letter-spacing: var(--tracking-ui);
+  color: var(--text-muted);
+  font-family: var(--font-tight);
+  line-height: var(--lh-ui);
+}
+.ai-prompt-input {
+  font-size: 14px; font-weight: 400;
+  letter-spacing: var(--tracking-ui);
+  color: var(--text-primary);
+  font-family: var(--font-tight);
+  line-height: var(--lh-body);
+}
+.ai-prompt-input::placeholder { color: var(--text-placeholder); }
+
+/* Timeline */
+.timeline-clip-label {
+  font-size: 11px; font-weight: 500;
+  letter-spacing: var(--tracking-timeline);
+  line-height: var(--lh-timeline);
+  font-family: var(--font-tight);
+  color: var(--text-primary);
+}
+.timeline-meta {
+  font-size: 10px; font-weight: 500;
+  letter-spacing: var(--tracking-timeline);
+  line-height: var(--lh-timeline);
+  font-family: var(--font-tight);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.timeline-timecode {
+  font-size: 11px; font-weight: 500;
+  letter-spacing: var(--tracking-timeline);
+  font-family: var(--font-tight);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Inspector */
+.inspector-label {
+  font-size: 12px; font-weight: 500;
+  letter-spacing: var(--tracking-ui);
+  color: var(--text-muted);
+  font-family: var(--font-tight);
+}
+.inspector-value {
+  font-size: 13px; font-weight: 500;
+  letter-spacing: var(--tracking-ui);
+  color: var(--text-primary);
+  font-family: var(--font-tight);
+}
+
+/* Toolbar / nav */
+.toolbar-label {
+  font-size: 13px; font-weight: 500;
+  letter-spacing: var(--tracking-ui);
+  color: var(--text-secondary);
+  font-family: var(--font-tight);
+}
+.nav-label {
+  font-size: 13px; font-weight: 500;
+  letter-spacing: var(--tracking-ui);
+  color: var(--text-secondary);
+  font-family: var(--font-tight);
+}
+.btn-label {
+  font-size: 13px; font-weight: 600;
+  letter-spacing: var(--tracking-ui);
+  font-family: var(--font-tight);
+}
+.btn-label-lg {
+  font-size: 14px; font-weight: 600;
+  letter-spacing: var(--tracking-ui);
+  font-family: var(--font-tight);
+}
+
+/* Project title */
+.project-title {
+  font-size: 15px; font-weight: 600;
+  letter-spacing: var(--tracking-ui);
+  color: var(--text-primary);
+  font-family: var(--font-tight);
+  line-height: var(--lh-compact);
+}
+
+/* Overline badge */
+.overline {
+  font-size: 10px; font-weight: 600;
+  letter-spacing: var(--tracking-overline);
+  text-transform: uppercase;
+  font-family: var(--font-tight);
 }

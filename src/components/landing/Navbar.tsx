@@ -52,11 +52,11 @@ export function Navbar() {
 
       <header style={{
         position: 'fixed', top: 0, left: 0, right: 0,
-        zIndex: 9999, padding: '14px 20px', pointerEvents: 'none',
+        zIndex: 9999, padding: 'clamp(10px,1.5vw,16px) clamp(16px,2.5vw,28px)', pointerEvents: 'none',
       }}>
         {/* Glass pill — zooms in on scroll, zooms out on return */}
         <div style={{
-          maxWidth: 1080,
+          maxWidth: 1200,
           margin: '0 auto',
           pointerEvents: 'auto',
           position: 'relative',
@@ -107,12 +107,12 @@ export function Navbar() {
             {navLinks.map(link => (
               <a key={link.label} href={link.href} style={{
                 padding: '7px 15px', fontSize: 14, fontWeight: 500,
-                color: '#999', textDecoration: 'none', borderRadius: 9999,
+                color: '#737D8D', textDecoration: 'none', borderRadius: 9999,
                 transition: 'color 150ms ease, background 150ms ease',
                 whiteSpace: 'nowrap', letterSpacing: '-0.01em',
               }}
                 onMouseEnter={e => { e.currentTarget.style.color = '#FFFFFF'; e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
-                onMouseLeave={e => { e.currentTarget.style.color = '#999'; e.currentTarget.style.background = 'transparent'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#737D8D'; e.currentTarget.style.background = 'transparent'; }}
               >
                 {link.label}
               </a>
@@ -124,13 +124,13 @@ export function Navbar() {
             <Link href="/dashboard" style={{ textDecoration: 'none' }} className="nav-desktop">
               <button style={{
                 padding: '8px 18px', fontSize: 14, fontWeight: 500,
-                color: '#999', background: 'none', border: 'none',
+                color: '#737D8D', background: 'none', border: 'none',
                 cursor: 'pointer', borderRadius: 9999,
                 transition: 'color 150ms ease, background 150ms ease',
                 whiteSpace: 'nowrap', letterSpacing: '-0.01em',
               }}
                 onMouseEnter={e => { e.currentTarget.style.color = '#FFFFFF'; e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
-                onMouseLeave={e => { e.currentTarget.style.color = '#999'; e.currentTarget.style.background = 'none'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#737D8D'; e.currentTarget.style.background = 'none'; }}
               >
                 Log in
               </button>
@@ -168,25 +168,25 @@ export function Navbar() {
         {/* Mobile dropdown */}
         {menuOpen && (
           <div style={{
-            maxWidth: 1080, margin: '8px auto 0', pointerEvents: 'auto',
+            maxWidth: 1200, margin: '8px auto 0', pointerEvents: 'auto',
             background: 'rgba(10,10,10,0.92)', backdropFilter: 'blur(32px) saturate(180%)',
             border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20,
             padding: '12px', display: 'flex', flexDirection: 'column', gap: 2,
           }}>
             {navLinks.map(link => (
               <a key={link.label} href={link.href} onClick={() => setMenuOpen(false)} style={{
-                padding: '11px 14px', fontSize: 15, color: '#888',
+                padding: '11px 14px', fontSize: 15, color: '#737D8D',
                 textDecoration: 'none', borderRadius: 12, transition: 'all 150ms',
               }}
                 onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = '#FFFFFF'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#888'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#737D8D'; }}
               >
                 {link.label}
               </a>
             ))}
             <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '4px 0' }} />
             <Link href="/dashboard" onClick={() => setMenuOpen(false)} style={{ textDecoration: 'none' }}>
-              <div style={{ padding: '11px 14px', fontSize: 15, color: '#888', borderRadius: 12, cursor: 'pointer' }}>Log in</div>
+              <div style={{ padding: '11px 14px', fontSize: 15, color: '#737D8D', borderRadius: 12, cursor: 'pointer' }}>Log in</div>
             </Link>
             <Link href="/upload" onClick={() => setMenuOpen(false)} style={{ textDecoration: 'none' }}>
               <div style={{

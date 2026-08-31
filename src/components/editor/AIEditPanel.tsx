@@ -1,108 +1,140 @@
 'use client';
 import React, { useState } from 'react';
-import { Scissors, Trash2, Zap, Star, Crop, AlignLeft, Sliders, ArrowRight } from 'lucide-react';
+import { Scissors, Trash2, Zap, Star, Crop, AlignLeft, Sliders, ChevronRight, RotateCcw } from 'lucide-react';
 
 const aiActions = [
-  { id: 'tighten', icon: Scissors, label: 'Tighten',          desc: 'Remove unnecessary pauses.',         accent: false },
-  { id: 'cleanup', icon: Trash2,   label: 'Clean up',          desc: 'Remove mistakes and repetitions.',    accent: false },
-  { id: 'faster',  icon: Zap,      label: 'Make faster',       desc: 'Increase pacing throughout.',         accent: false },
-  { id: 'moments', icon: Star,     label: 'Find best moments', desc: 'Identify the strongest sections.',    accent: true  },
-  { id: 'reframe', icon: Crop,     label: 'Reframe',           desc: 'Auto-adjust framing for 9:16.',       accent: false },
-  { id: 'captions',icon: AlignLeft,label: 'Captions',          desc: 'Generate timed captions.',            accent: false },
-  { id: 'custom',  icon: Sliders,  label: 'Custom',            desc: 'Describe your own edit.',             accent: false },
+  { id: 'tighten',  icon: Scissors,  label: 'Tighten edit',      desc: 'Remove unnecessary pauses and dead air.'     },
+  { id: 'cleanup',  icon: Trash2,    label: 'Clean up mistakes',  desc: 'Remove filler words and repetitions.'        },
+  { id: 'faster',   icon: Zap,       label: 'Make faster',        desc: 'Increase overall pacing.'                   },
+  { id: 'moments',  icon: Star,      label: 'Best moments',       desc: 'Keep only the strongest sections.',  highlight: true },
+  { id: 'reframe',  icon: Crop,      label: 'Reframe 9:16',       desc: 'Crop and reframe for vertical.'             },
+  { id: 'captions', icon: AlignLeft, label: 'Add captions',       desc: 'Generate timed, accurate captions.'         },
+  { id: 'custom',   icon: Sliders,   label: 'Custom edit',        desc: 'Type your own instruction.'                 },
+];
+
+const VERSIONS = [
+  { id: 'v3', label: 'v3 — Tightened',   time: 'Now'     },
+  { id: 'v2', label: 'v2 — Cleaned up',  time: '8 min ago' },
+  { id: 'v1', label: 'v1 — Original',    time: '22 min ago' },
 ];
 
 export function AIEditPanel({ onAction }: { onAction: (id: string, prompt?: string) => void }) {
   const [customPrompt, setCustomPrompt] = useState('');
   const [activeAction, setActiveAction] = useState<string | null>(null);
+  const [activeVersion, setActiveVersion] = useState('v3');
+  const [showCustom, setShowCustom] = useState(false);
 
-  const handleAction = (id: string) => {
+  const handle = (id: string) => {
+    if (id === 'custom') { setShowCustom(true); return; }
     setActiveAction(id);
-    onAction(id, id === 'custom' ? customPrompt : undefined);
-    setTimeout(() => setActiveAction(null), 2200);
+    onAction(id);
+    setTimeout(() => setActiveAction(null), 2400);
+  };
+
+  const submitCustom = () => {
+    if (!customPrompt.trim()) return;
+    setActiveAction('custom');
+    onAction('custom', customPrompt);
+    setCustomPrompt('');
+    setShowCustom(false);
+    setTimeout(() => setActiveAction(null), 2400);
   };
 
   return (
     <div style={{
-      width: 200, flexShrink: 0,
-      background: '#0A0A0A', borderRight: '1px solid #242424',
+      width: 220, flexShrink: 0,
+      background: '#070707', borderRight: '1px solid #111',
       display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden',
     }}>
+
       {/* Header */}
-      <div style={{ padding: '10px 16px', borderBottom: '1px solid #242424', display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid #111', display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#4F8CFF' }} />
-        <span style={{ fontSize: 10, color: '#666', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>AI Edit</span>
+        <span style={{ fontSize: 10, color: '#4F8CFF', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>AI Edit</span>
+      </div>
+
+      {/* Version history */}
+      <div style={{ padding: '10px 12px', borderBottom: '1px solid #0e0e0e' }}>
+        <p style={{ fontSize: 10, color: '#2a2a2a', fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', margin: '0 0 6px' }}>Version</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {VERSIONS.map(v => (
+            <button key={v.id} onClick={() => setActiveVersion(v.id)} style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '6px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', textAlign: 'left',
+              background: activeVersion === v.id ? '#111' : 'transparent',
+              transition: 'background 120ms',
+            }}
+              onMouseEnter={e => { if (activeVersion !== v.id) e.currentTarget.style.background = '#0a0a0a'; }}
+              onMouseLeave={e => { if (activeVersion !== v.id) e.currentTarget.style.background = 'transparent'; }}
+            >
+              <span style={{ fontSize: 12, color: activeVersion === v.id ? '#FFFFFF' : '#444', fontWeight: activeVersion === v.id ? 500 : 400 }}>{v.label}</span>
+              <span style={{ fontSize: 10, color: '#2a2a2a' }}>{v.time}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Actions */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 8, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {aiActions.map(action => {
-          const Icon = action.icon;
-          const isActive = activeAction === action.id;
-          return (
-            <button
-              key={action.id}
-              onClick={() => handleAction(action.id)}
-              style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4,
-                padding: '10px 12px', borderRadius: 8, border: 'none', textAlign: 'left', cursor: 'pointer',
-                background: isActive ? 'rgba(79,140,255,0.1)' : action.accent ? 'rgba(79,140,255,0.05)' : 'transparent',
-                outline: isActive ? '1px solid rgba(79,140,255,0.35)' : action.accent ? '1px solid rgba(79,140,255,0.15)' : '1px solid transparent',
+      <div style={{ flex: 1, overflowY: 'auto', padding: '10px 8px' }}>
+        <p style={{ fontSize: 10, color: '#2a2a2a', fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', margin: '0 4px 6px' }}>Actions</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {aiActions.map(action => {
+            const Icon = action.icon;
+            const isActive = activeAction === action.id;
+            return (
+              <button key={action.id} onClick={() => handle(action.id)} style={{
+                display: 'flex', alignItems: 'center', gap: 9,
+                padding: '9px 10px', borderRadius: 8, border: 'none', textAlign: 'left', cursor: 'pointer',
+                background: isActive ? 'rgba(79,140,255,0.1)' : action.highlight ? 'rgba(79,140,255,0.04)' : 'transparent',
+                outline: action.highlight && !isActive ? '1px solid rgba(79,140,255,0.1)' : 'none',
                 transition: 'all 150ms',
               }}
-              onMouseEnter={e => {
-                if (!isActive && !action.accent) {
-                  e.currentTarget.style.background = '#111111';
-                  e.currentTarget.style.outline = '1px solid #242424';
+                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#0e0e0e'; }}
+                onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = action.highlight ? 'rgba(79,140,255,0.04)' : 'transparent'; }}
+              >
+                <Icon size={13} style={{ color: isActive ? '#4F8CFF' : action.highlight ? '#4F8CFF' : '#333', flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 12, fontWeight: 500, color: isActive ? '#4F8CFF' : action.highlight ? '#7AABFF' : '#888', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{action.label}</p>
+                </div>
+                {isActive
+                  ? <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#4F8CFF', animation: 'pulse-dot 1.2s ease-in-out infinite', flexShrink: 0 }} />
+                  : <ChevronRight size={10} style={{ color: '#222', flexShrink: 0 }} />
                 }
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Custom prompt box */}
+        {showCustom && (
+          <div style={{ marginTop: 10, padding: '10px', background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: 10 }}>
+            <textarea
+              value={customPrompt}
+              onChange={e => setCustomPrompt(e.target.value)}
+              placeholder="Describe your edit..."
+              autoFocus
+              rows={3}
+              style={{
+                width: '100%', background: 'transparent', border: 'none', outline: 'none',
+                fontSize: 12, color: '#FFFFFF', fontFamily: "'Inter',sans-serif",
+                resize: 'none', lineHeight: 1.6, boxSizing: 'border-box',
               }}
-              onMouseLeave={e => {
-                if (!isActive && !action.accent) {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.outline = '1px solid transparent';
-                }
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Icon size={13} style={{ color: isActive || action.accent ? '#4F8CFF' : '#666', flexShrink: 0 }} />
-                <span style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 650, fontSize: 12, color: isActive || action.accent ? '#4F8CFF' : '#A1A1A1' }}>
-                  {action.label}
-                </span>
-              </div>
-              <p style={{ fontSize: 11, color: '#666', lineHeight: 1.4, margin: 0, paddingLeft: 21 }}>{action.desc}</p>
-            </button>
-          );
-        })}
+            />
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <button onClick={() => { setShowCustom(false); setCustomPrompt(''); }} style={{ flex: 1, padding: '6px', fontSize: 11, background: 'transparent', border: '1px solid #1e1e1e', borderRadius: 6, color: '#444', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={submitCustom} disabled={!customPrompt.trim()} style={{ flex: 1, padding: '6px', fontSize: 11, fontWeight: 600, background: customPrompt.trim() ? '#4F8CFF' : '#111', border: 'none', borderRadius: 6, color: '#fff', cursor: customPrompt.trim() ? 'pointer' : 'not-allowed' }}>Apply</button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Custom input */}
-      <div style={{ padding: 10, borderTop: '1px solid #242424' }}>
-        <textarea
-          value={customPrompt} onChange={e => setCustomPrompt(e.target.value)}
-          placeholder="Describe your edit..."
-          rows={3}
-          style={{
-            width: '100%', background: '#111111', border: '1px solid #242424',
-            borderRadius: 8, padding: '8px 10px', fontSize: 11,
-            color: '#FFFFFF', outline: 'none', resize: 'none',
-            fontFamily: 'inherit', lineHeight: 1.5, boxSizing: 'border-box',
-          }}
-          onFocus={e => { e.currentTarget.style.borderColor = '#333'; }}
-          onBlur={e => { e.currentTarget.style.borderColor = '#242424'; }}
-        />
-        <button
-          onClick={() => handleAction('custom')}
-          disabled={!customPrompt.trim()}
-          style={{
-            marginTop: 6, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-            padding: '7px', fontSize: 11, fontWeight: 600,
-            background: customPrompt.trim() ? '#4F8CFF' : '#181818',
-            color: customPrompt.trim() ? '#050505' : '#444',
-            border: 'none', borderRadius: 6, cursor: customPrompt.trim() ? 'pointer' : 'not-allowed',
-            transition: 'all 150ms',
-          }}
+      {/* Undo */}
+      <div style={{ padding: '10px 12px', borderTop: '1px solid #0e0e0e' }}>
+        <button style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#333', background: 'none', border: 'none', cursor: 'pointer', padding: '6px 8px', borderRadius: 6, width: '100%', transition: 'all 120ms' }}
+          onMouseEnter={e => { e.currentTarget.style.color = '#666'; e.currentTarget.style.background = '#0e0e0e'; }}
+          onMouseLeave={e => { e.currentTarget.style.color = '#333'; e.currentTarget.style.background = 'none'; }}
         >
-          Apply <ArrowRight size={11} />
+          <RotateCcw size={12} /> Undo last edit
         </button>
       </div>
     </div>

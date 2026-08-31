@@ -100,18 +100,18 @@ export function HeroSection() {
       <div style={{ position:'absolute', top:'-15%', left:'50%', transform:'translateX(-50%)', width:900, height:600, pointerEvents:'none', background:'radial-gradient(ellipse at 50% 0%, rgba(79,140,255,0.11) 0%, transparent 65%)', filter:'blur(60px)', animation:'hero-orb 7s ease-in-out infinite', zIndex:0 }} />
 
       {/* ── HERO CONTENT ── */}
-      <div style={{ position:'relative', zIndex:10, maxWidth:740, margin:'0 auto', padding:'160px 24px 0', textAlign:'center' }}>
+      <div style={{ position:'relative', zIndex:10, maxWidth:'min(860px,90vw)', margin:'0 auto', padding:'clamp(100px,14vw,160px) clamp(14px,4vw,32px) 0', textAlign:'center' }}>
 
         {/* Headline */}
-        <h1 style={{ fontFamily:"'Inter Tight',sans-serif", fontWeight:800, fontSize:'clamp(40px,6.5vw,76px)', letterSpacing:'-0.055em', lineHeight:1.0, color:'#FFFFFF', margin:'0 0 20px', animation:'slide-up 0.6s cubic-bezier(0.22,1,0.36,1) 0.05s both' }}>
+        <h1 style={{ fontFamily:"'Inter Tight',sans-serif", fontWeight:800, fontSize:'clamp(36px,7vw,76px)', letterSpacing:'-0.045em', lineHeight:1.05, color:'#FFFFFF', margin:'0 0 20px', animation:'slide-up 0.6s cubic-bezier(0.22,1,0.36,1) 0.05s both' }}>
           {uploadState === 'empty'
-            ? <>Your videos,<br /><span style={{ color:'rgba(255,255,255,0.3)' }}>edited by AI.</span></>
-            : <>Your footage<br /><span style={{ color:'rgba(255,255,255,0.3)' }}>is ready.</span></>
+            ? <>Your videos,<br /><span style={{ color:'#626B78' }}>edited by AI.</span></>
+            : <>Your footage<br /><span style={{ color:'#626B78' }}>is ready.</span></>
           }
         </h1>
 
         {/* Subline */}
-        <p style={{ fontSize:17, color:'#555', lineHeight:1.65, margin:'0 auto 40px', maxWidth:480, animation:'slide-up 0.6s cubic-bezier(0.22,1,0.36,1) 0.12s both' }}>
+        <p style={{ fontSize:'clamp(15px,1.3vw,18px)', color:'#9AA2AE', lineHeight:1.6, margin:'0 auto 40px', maxWidth:'min(560px,80vw)', animation:'slide-up 0.6s cubic-bezier(0.22,1,0.36,1) 0.12s both' }}>
           {uploadState === 'empty'
             ? 'Upload your footage. Tell Modaya what you want. AI handles the edit.'
             : 'Now tell Modaya what to do with it.'
@@ -131,7 +131,7 @@ export function HeroSection() {
               onDrop={handleDrop}
               style={{
                 border: isDragging ? '1.5px dashed rgba(79,140,255,0.7)' : '1.5px dashed rgba(255,255,255,0.09)',
-                borderRadius: 16, padding: '44px 32px', cursor: 'pointer',
+                borderRadius: 16, padding: 'clamp(24px,5vw,44px) clamp(18px,4vw,32px)', cursor: 'pointer',
                 background: isDragging ? 'rgba(79,140,255,0.05)' : 'rgba(255,255,255,0.025)',
                 backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
                 boxShadow: isDragging ? '0 0 40px rgba(79,140,255,0.12), inset 0 1px 0 rgba(255,255,255,0.08)' : 'inset 0 1px 0 rgba(255,255,255,0.05)',
@@ -145,10 +145,10 @@ export function HeroSection() {
               <p style={{ fontSize:15, fontWeight:600, color:'#FFFFFF', margin:'0 0 6px' }}>
                 {isDragging ? 'Drop it here' : 'Drop your video here'}
               </p>
-              <p style={{ fontSize:13, color:'#333', margin:'0 0 12px' }}>
+              <p style={{ fontSize:13, color:'#737D8D', margin:'0 0 12px' }}>
                 or <span style={{ color:'#4F8CFF', cursor:'pointer' }}>choose a file</span>
               </p>
-              <p style={{ fontSize:11, color:'#252525', margin:0, letterSpacing:'0.06em' }}>MP4 · MOV · WebM</p>
+              <p style={{ fontSize:11, color:'#4D5664', margin:0, letterSpacing:'0.06em' }}>MP4 · MOV · WebM</p>
             </div>
 
             {/* CTA + note */}
@@ -161,7 +161,7 @@ export function HeroSection() {
                   Start editing free <ArrowRight size={15} />
                 </button>
               </Link>
-              <span style={{ fontSize:12, color:'#2e2e2e' }}>7-day free trial · No credit card required</span>
+              <span style={{ fontSize:12, color:'#737D8D' }}>7-day free trial · No credit card required</span>
             </div>
           </div>
         )}
@@ -172,15 +172,15 @@ export function HeroSection() {
             {/* File chip */}
             <div style={{ display:'inline-flex', alignItems:'center', gap:8, background:'#0c0c0c', border:'1px solid #1e1e1e', borderRadius:10, padding:'9px 14px', margin:'0 auto' }}>
               <div style={{ width:7, height:7, borderRadius:'50%', background:'rgba(40,200,80,0.85)', flexShrink:0 }} />
-              <span style={{ fontSize:13, color:'#888' }}>{uploadedFile.name}</span>
-              <span style={{ fontSize:12, color:'#3a3a3a' }}>{uploadedFile.duration}</span>
-              <button onClick={handleReset} style={{ background:'none', border:'none', cursor:'pointer', color:'#333', display:'flex', alignItems:'center', padding:0, marginLeft:4 }}><X size={13} /></button>
+              <span style={{ fontSize:13, color:'#A5ADBA' }}>{uploadedFile.name}</span>
+              <span style={{ fontSize:12, color:'#626B78' }}>{uploadedFile.duration}</span>
+              <button onClick={handleReset} style={{ background:'none', border:'none', cursor:'pointer', color:'#737D8D', display:'flex', alignItems:'center', padding:0, marginLeft:4 }}><X size={13} /></button>
             </div>
 
             {/* AI Prompt box */}
             <div style={{ background:'#0A0A0A', border:`1px solid ${promptPhase !== 'idle' ? 'rgba(79,140,255,0.3)' : '#1e1e1e'}`, borderRadius:14, overflow:'hidden', boxShadow: promptPhase !== 'idle' ? '0 0 40px rgba(79,140,255,0.08)' : 'none', transition:'all 400ms ease', textAlign:'left' }}>
               <div style={{ padding:'16px 18px 12px', minHeight:96 }}>
-                <div style={{ fontSize:10, color:'#2e2e2e', letterSpacing:'0.07em', marginBottom:9, display:'flex', alignItems:'center', gap:5 }}>
+                <div style={{ fontSize:10, color:'#4D5664', letterSpacing:'0.04em', marginBottom:9, display:'flex', alignItems:'center', gap:5 }}>
                   <span style={{ color:'#4F8CFF' }}>✦</span> What should we do with this video?
                 </div>
                 {promptPhase === 'idle' && !prompt && <span style={{ fontSize:14, color:'#222' }}>Describe your edit...</span>}
@@ -188,9 +188,9 @@ export function HeroSection() {
                 {promptPhase === 'idle' && prompt && <span style={{ fontSize:14, color:'#A1A1A1', lineHeight:1.65 }}>{prompt}</span>}
                 {(promptPhase === 'processing' || promptPhase === 'done') && (
                   <div>
-                    <p style={{ fontSize:13, color:'#3a3a3a', margin:'0 0 10px', lineHeight:1.6 }}>{DEMO_PROMPT}</p>
+                    <p style={{ fontSize:13, color:'#626B78', margin:'0 0 10px', lineHeight:1.6 }}>{DEMO_PROMPT}</p>
                     <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
-                      {demoSteps.map((s, i) => <div key={i} style={{ display:'flex', alignItems:'center', gap:7, animation:'step-in 0.28s ease both' }}><span style={{ fontSize:11, color:'#303030', fontFamily:'monospace' }}>{s[0]}</span><span style={{ fontSize:12, color:'#5a5a5a' }}>{s.slice(2)}</span></div>)}
+                      {demoSteps.map((s, i) => <div key={i} style={{ display:'flex', alignItems:'center', gap:7, animation:'step-in 0.28s ease both' }}><span style={{ fontSize:11, color:'#4D5664', fontFamily:"'Inter Tight', sans-serif" }}>{s[0]}</span><span style={{ fontSize:12, color:'#737D8D' }}>{s.slice(2)}</span></div>)}
                       {promptPhase === 'done' && <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:4, animation:'edit-ready 0.4s ease both' }}><span style={{ fontSize:12, fontWeight:700, color:'#FFFFFF' }}>✦ Edit ready</span><span style={{ fontSize:10, color:'#4F8CFF', background:'rgba(79,140,255,0.1)', border:'1px solid rgba(79,140,255,0.22)', padding:'2px 8px', borderRadius:9999, fontWeight:600 }}>3:42 · was 42:18</span></div>}
                     </div>
                   </div>
@@ -210,9 +210,9 @@ export function HeroSection() {
             <div style={{ display:'flex', flexWrap:'wrap', gap:6, justifyContent:'center' }}>
               {PRESETS.map((p, i) => (
                 <button key={i} onClick={() => { setPrompt(p.fill); setPromptPhase('idle'); setDemoTyped(''); setDemoSteps([]); clearTimer(); }}
-                  style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 13px', fontSize:12, color:'#444', background:'transparent', border:'1px solid #1e1e1e', borderRadius:9999, cursor:'pointer', transition:'all 200ms ease' }}
-                  onMouseEnter={e => { e.currentTarget.style.color='#FFFFFF'; e.currentTarget.style.borderColor='#333'; e.currentTarget.style.background='#0f0f0f'; }}
-                  onMouseLeave={e => { e.currentTarget.style.color='#444'; e.currentTarget.style.borderColor='#1e1e1e'; e.currentTarget.style.background='transparent'; }}
+                  style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 13px', fontSize:12, color:'#737D8D', background:'transparent', border:'1px solid #1a1a1a', borderRadius:9999, cursor:'pointer', transition:'all 200ms ease' }}
+                  onMouseEnter={e => { e.currentTarget.style.color='#FFFFFF'; e.currentTarget.style.borderColor='#1a1a1a'; e.currentTarget.style.background='#0f0f0f'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color='#737D8D'; e.currentTarget.style.borderColor='#1a1a1a'; e.currentTarget.style.background='transparent'; }}
                 >
                   <p.Icon size={12} strokeWidth={1.75} /><span>{p.label}</span>
                 </button>
@@ -223,13 +223,13 @@ export function HeroSection() {
       </div>
 
       {/* ── LARGE EDITOR MOCKUP ── */}
-      <div style={{ position:'relative', zIndex:10, maxWidth:1000, margin:'56px auto 0', padding:'0 24px', animation:'slide-up 0.9s cubic-bezier(0.22,1,0.36,1) 0.3s both' }}>
+      <div style={{ position:'relative', zIndex:10, maxWidth:1200, margin:'clamp(32px,5vw,56px) auto 0', padding:'0 clamp(16px,3vw,40px)', animation:'slide-up 0.9s cubic-bezier(0.22,1,0.36,1) 0.3s both' }}>
         <EditorMockup isDone={isDone} />
       </div>
 
       {/* ── LOGO STRIP ── */}
       <div style={{ position:'relative', zIndex:10, borderTop:'1px solid #0f0f0f', background:'#030303', padding:'24px 0 28px', marginTop:60 }}>
-        <p style={{ fontSize:11, color:'#1e1e1e', letterSpacing:'0.12em', textTransform:'uppercase', textAlign:'center', margin:'0 0 18px' }}>Trusted by creators at</p>
+        <p style={{ fontSize:11, color:'#4D5664', letterSpacing:'0.06em', textTransform:'uppercase', textAlign:'center', margin:'0 0 18px' }}>Trusted by creators at</p>
         <div style={{ position:'relative', overflow:'hidden' }}>
           <div style={{ position:'absolute', top:0, left:0, width:100, height:'100%', background:'linear-gradient(to right,#030303,transparent)', zIndex:2, pointerEvents:'none' }} />
           <div style={{ position:'absolute', top:0, right:0, width:100, height:'100%', background:'linear-gradient(to left,#030303,transparent)', zIndex:2, pointerEvents:'none' }} />
@@ -269,7 +269,7 @@ function EditorMockup({ isDone }: { isDone: boolean }) {
             {['rgba(220,60,60,0.65)','rgba(220,160,40,0.65)','rgba(40,180,80,0.65)'].map((bg,i) => <div key={i} style={{ width:10, height:10, borderRadius:'50%', background:bg }} />)}
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <span style={{ fontSize:11, color:'#2e2e2e' }}>podcast_episode_14.mp4</span>
+            <span style={{ fontSize:11, color:'#4D5664' }}>podcast_episode_14.mp4</span>
             {isDone && <span style={{ fontSize:9, color:'#4F8CFF', background:'rgba(79,140,255,0.08)', border:'1px solid rgba(79,140,255,0.2)', padding:'2px 7px', borderRadius:9999, fontWeight:600 }}>✦ AI Edit ready</span>}
           </div>
           <div style={{ display:'flex', gap:6 }}>
@@ -298,7 +298,7 @@ function EditorMockup({ isDone }: { isDone: boolean }) {
               </div>
             ))}
             <div style={{ marginTop:'auto', padding:9, borderRadius:7, background:'rgba(79,140,255,0.04)', border:'1px solid rgba(79,140,255,0.09)' }}>
-              <p style={{ fontSize:9, color:'#444', margin:0, lineHeight:1.5 }}>{isDone ? <>✓ 5 edits applied<br />3:42 final</> : '5 edits queued'}</p>
+              <p style={{ fontSize:9, color:'#737D8D', margin:0, lineHeight:1.5 }}>{isDone ? <>✓ 5 edits applied<br />3:42 final</> : '5 edits queued'}</p>
             </div>
           </div>
 
@@ -342,12 +342,12 @@ function EditorMockup({ isDone }: { isDone: boolean }) {
             {/* Timeline */}
             <div style={{ background:'#0A0A0A', borderTop:'1px solid #141414', padding:'10px 16px 14px' }}>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
-                <span style={{ fontSize:8, color:'#1e1e1e', letterSpacing:'0.08em', textTransform:'uppercase' }}>Timeline</span>
+                <span style={{ fontSize:8, color:'#4D5664', letterSpacing:'0.04em', textTransform:'uppercase' }}>Timeline</span>
                 {isDone && <span style={{ fontSize:8, color:'#4F8CFF', fontWeight:600 }}>✦ 14 AI CUTS APPLIED</span>}
               </div>
               {/* Video track */}
               <div style={{ marginBottom:5 }}>
-                <div style={{ fontSize:7, color:'#1e1e1e', marginBottom:3, letterSpacing:'0.06em' }}>VIDEO</div>
+                <div style={{ fontSize:7, color:'#4D5664', marginBottom:3, letterSpacing:'0.04em' }}>VIDEO</div>
                 <div style={{ display:'flex', gap:2, alignItems:'center', height:18 }}>
                   {[3,0.3,2,0.3,4,0.3,1.5,0.3,3,0.3,2].map((w,i) => {
                     const isCut=i%2===1, isKept=[2,6,8].includes(Math.floor(i/2))&&!isCut;

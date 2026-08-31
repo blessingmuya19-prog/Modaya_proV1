@@ -1,52 +1,64 @@
 'use client';
-import React from 'react';
+import React, { useState } from 'react';
 import { Search, Bell } from 'lucide-react';
+import { useAuth } from '@/lib/useAuth';
 
 export function DashboardHeader() {
+  const [focused, setFocused] = useState(false);
+  const { user } = useAuth();
+  const initials = user?.name
+    ? user.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+    : '?';
+
   return (
     <header style={{
-      height: 56, borderBottom: '1px solid #242424',
+      height: 54, borderBottom: '1px solid #111',
       padding: '0 24px', display: 'flex', alignItems: 'center', gap: 16,
-      background: '#0A0A0A', position: 'sticky', top: 0, zIndex: 20,
+      background: '#070707', position: 'sticky', top: 0, zIndex: 20,
       flexShrink: 0,
     }}>
-      <div style={{ flex: 1, maxWidth: 360, position: 'relative' }}>
-        <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#666' }} />
+      {/* Search */}
+      <div style={{ flex: 1, maxWidth: 340, minWidth: 0, position: 'relative' }}>
+        <Search size={13} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: '#737D8D', pointerEvents: 'none' }} />
         <input
           type="text"
           placeholder="Search projects..."
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           style={{
-            width: '100%', background: '#111111', border: '1px solid #242424',
-            borderRadius: 8, paddingLeft: 36, paddingRight: 16, paddingTop: 8, paddingBottom: 8,
-            fontSize: 13, color: '#FFFFFF', outline: 'none',
+            width: '100%', background: '#0a0a0a',
+            border: `1px solid ${focused ? '#2a2a2a' : '#141414'}`,
+            borderRadius: 8, paddingLeft: 32, paddingRight: 14, paddingTop: 7, paddingBottom: 7,
+            fontSize: 13, color: '#F5F7FA', fontWeight: 400, fontFamily: "'Inter Tight',sans-serif", letterSpacing: '-0.01em', outline: 'none',
+            boxSizing: 'border-box',
+            transition: 'border-color 150ms',
           }}
-          onFocus={e => { e.currentTarget.style.borderColor = '#333'; }}
-          onBlur={e => { e.currentTarget.style.borderColor = '#242424'; }}
         />
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+      <div style={{ flex: 1 }} />
+
+      {/* Actions */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <button style={{
-          width: 36, height: 36, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'none', border: 'none', cursor: 'pointer', color: '#666', position: 'relative',
-          transition: 'all 150ms',
+          width: 34, height: 34, borderRadius: 8,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'none', border: 'none', cursor: 'pointer', color: '#737D8D',
+          position: 'relative', transition: 'all 150ms',
         }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#111111'; e.currentTarget.style.color = '#A1A1A1'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = '#666'; }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#0e0e0e'; e.currentTarget.style.color = '#737D8D'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = '#737D8D'; }}
         >
-          <Bell size={16} />
-          <span style={{
-            position: 'absolute', top: 8, right: 8, width: 6, height: 6,
-            borderRadius: '50%', background: '#4F8CFF',
-          }} />
+          <Bell size={15} />
+          <span style={{ position: 'absolute', top: 7, right: 7, width: 5, height: 5, borderRadius: '50%', background: '#4F8CFF' }} />
         </button>
 
         <div style={{
-          width: 32, height: 32, borderRadius: '50%', cursor: 'pointer',
-          background: 'rgba(79,140,255,0.15)', border: '1px solid rgba(79,140,255,0.3)',
+          width: 30, height: 30, borderRadius: '50%', cursor: 'pointer',
+          background: 'rgba(79,140,255,0.1)', border: '1px solid rgba(79,140,255,0.2)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <span style={{ fontSize: 12, color: '#4F8CFF', fontWeight: 700 }}>M</span>
+          <span style={{ fontSize: 11, color: '#4F8CFF', fontWeight: 700 }}>{initials}</span>
         </div>
       </div>
     </header>
