@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { db, Clip } from '@/lib/db';
 import { v4 as uuid } from 'uuid';
-import { chat, extractJson, detectProvider } from '@/lib/ai/llm';
+import { chatDetailed, explainFailure, extractJson, detectProvider, FailureReason } from '@/lib/ai/llm';
 import { validateOperations, applyOperations, Operation, TimelineClip } from '@/lib/ai/operations';
 
 // ── Intent detection ──────────────────────────────────────────────────────────
@@ -53,7 +53,7 @@ interface EditResult {
  */
 function applyEdit(
   intent: Intent, clips: Clip[], durationS: number,
-  ctx: { silences: [number, number][]; energy: number[] },
+  ctx: { silences: [number, number][]; energy: number[]; modelNote?: string },
 ): EditResult {
 
   const run = (ops: Operation[]) =>
@@ -144,9 +144,10 @@ function applyEdit(
 
     default:
       return nothing(
-        "I'm running without an AI model, so I only understand a few set phrases: cut the dead air, " +
-        'pick the highlights, or add captions. Add a free API key (see the README) and I can follow ' +
-        'instructions in your own words.');
+        ctx.modelNote ??
+        ("I'm running without an AI model, so I only understand a few set phrases: cut the dead air, " +
+         'pick the highlights, or add captions. Add a free API key (see the README) and I can follow ' +
+         'instructions in your own words.'));
   }
 }
 
@@ -188,7 +189,10 @@ async function planWithLlm(opts: {
   silences:  [number, number][];
   style?:    string;
   history:   { role: 'user' | 'ai'; text: string }[];
-}): Promise<{ reply: string; operations: Operation[] } | null> {
+}): Promise<{
+  plan:    { reply: string; operations: Operation[] } | null;
+  failure: { reason: FailureReason; detail: string } | null;
+}> {
 
   const clipSummary = opts.clips.slice(0, 40)
     .map(c => `${c.trackId} "${c.label}" ${c.startS.toFixed(1)}–${c.endS.toFixed(1)}s`)
@@ -210,21 +214,26 @@ async function planWithLlm(opts: {
     content: m.text,
   }));
 
-  const res = await chat([
+  const res = await chatDetailed([
     { role: 'system', content: SYSTEM },
     { role: 'system', content: context },
     ...recent,
     { role: 'user', content: opts.message },
   ], { json: true, timeoutMs: 20_000 });
 
-  if (!res) return null;
+  if (!res.ok) return { plan: null, failure: { reason: res.reason, detail: res.detail } };
 
-  const plan = extractJson<Plan>(res.text);
-  if (!plan || typeof plan.reply !== 'string') return null;
+  const plan = extractJson<Plan>(res.result.text);
+  if (!plan || typeof plan.reply !== 'string') {
+    return { plan: null, failure: { reason: 'empty_response', detail: 'the model did not return usable JSON' } };
+  }
 
   return {
-    reply:      plan.reply.slice(0, 600),
-    operations: validateOperations(plan.operations, { durationS: opts.durationS }),
+    plan: {
+      reply:      plan.reply.slice(0, 600),
+      operations: validateOperations(plan.operations, { durationS: opts.durationS }),
+    },
+    failure: null,
   };
 }
 
@@ -261,11 +270,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   let edit: EditResult | null = null;
   let source: 'llm' | 'rules' = 'rules';
 
+  let failure: { reason: FailureReason; detail: string } | null = null;
+
   if (provider.ready) {
-    const plan = await planWithLlm({
+    const attempt = await planWithLlm({
       message, durationS, clips, silences, style,
       history: (project?.aiHistory ?? []).map(m => ({ role: m.role, text: m.text })),
     });
+    const plan = attempt.plan;
+    failure = attempt.failure;
 
     if (plan) {
       const outcome = applyOperations(clips as TimelineClip[], plan.operations,
@@ -282,10 +295,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
   }
 
-  // No key, or the model failed / timed out — deterministic fallback
+  // No key, or the model failed / timed out — deterministic fallback.
+  // Say which of those it was: "I have no AI model" and "I could not reach the
+  // AI model" call for completely different actions from the user.
   if (!edit) {
     const intent = detectIntent(message);
-    edit = applyEdit(intent, clips, durationS, { silences, energy });
+    const modelNote = failure
+      ? `${explainFailure(failure.reason, provider.name, failure.detail)} ` +
+        'In the meantime I can still cut the dead air, pick the highlights, or add captions ' +
+        'from the measurements taken in your browser.'
+      : undefined;
+    edit = applyEdit(intent, clips, durationS, { silences, energy, modelNote });
   }
 
   const now    = new Date().toISOString();
@@ -310,6 +330,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       intent:      edit.intent,
       newClips:    edit.newClips,
     },
-    engine: { source, provider: provider.name, model: provider.model },
+    engine: {
+      source, provider: provider.name, model: provider.model,
+      ...(failure ? { failure: failure.reason } : {}),
+    },
   });
 }

@@ -92,3 +92,54 @@ describe('no-key fallback', () => {
     expect(d.edit.savedS).toBe(0);
   });
 });
+
+/**
+ * A configured key that cannot be reached is a different situation from having
+ * no key at all, and the chat reply must not confuse the two — telling someone
+ * to "add a free API key" when they already added one is a dead end.
+ */
+describe('configured key, provider unreachable', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const unreachable = () => {
+    process.env.GROQ_API_KEY = 'gsk_configured_but_offline';
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new TypeError('fetch failed', { cause: new Error('ENOTFOUND api.groq.com') });
+    }));
+  };
+
+  it('says it could not reach the provider, and does not blame the key', async () => {
+    unreachable();
+    const d = await ask({ message: 'make this feel like a hype reel' });
+    expect(d.aiMessage.text).toMatch(/could not reach groq/i);
+    expect(d.aiMessage.text).toMatch(/not a problem with your key/i);
+    expect(d.aiMessage.text).not.toMatch(/running without an AI model/i);
+    expect(d.aiMessage.text).not.toMatch(/add a free API key/i);
+  });
+
+  it('still offers the work it can genuinely do', async () => {
+    unreachable();
+    const d = await ask({ message: 'make this feel like a hype reel' });
+    expect(d.aiMessage.text).toMatch(/cut the dead air|highlights|captions/i);
+  });
+
+  it('reports the failure reason to the debug panel', async () => {
+    unreachable();
+    const d = await ask({ message: 'anything at all' });
+    expect(d.engine).toMatchObject({ source: 'rules', provider: 'groq', failure: 'unreachable' });
+  });
+
+  it('a reachable provider that rejects the key says exactly that', async () => {
+    process.env.GROQ_API_KEY = 'gsk_revoked';
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"error":"invalid"}', { status: 401 })));
+    const d = await ask({ message: 'make this feel like a hype reel' });
+    expect(d.aiMessage.text).toMatch(/rejected that key/i);
+    expect(d.engine.failure).toBe('unauthorized');
+  });
+
+  it('with no key at all, the original advice to add one is unchanged', async () => {
+    const d = await ask({ message: 'make this feel like a hype reel' });
+    expect(d.aiMessage.text).toMatch(/running without an AI model/i);
+    expect(d.engine.failure).toBeUndefined();
+  });
+});
