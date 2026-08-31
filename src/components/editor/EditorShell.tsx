@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Logo, LogoMark } from '../ui/Logo';
 import { ExportModal } from './ExportModal';
 import { getMedia, subscribeMedia } from '@/lib/videoStore';
+import DebugHud from './DebugHud';
 import { getProjectFrames } from '@/lib/thumbnailStore';
 
 /* ──────────────── STAGGER FADE-UP ──────────────── */
@@ -1256,7 +1257,7 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
         </div>}
 
         {/* Scrollable track area */}
-        {tracks.length > 0 && <div ref={scrollMounted} style={{ flex:1, overflow:'auto', position:'relative', minWidth:0 }}>
+        {tracks.length > 0 && <div ref={scrollMounted} data-modaya-timeline style={{ flex:1, overflow:'auto', position:'relative', minWidth:0 }}>
           <div style={{ width:Math.max(totalPx+40,400), minWidth:'100%', position:'relative' }}>
 
             {/* ── Ruler (sticky) ── */}
@@ -1291,7 +1292,7 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
             {trackRows}
 
             {/* ── Playhead vertical line + draggable dot ── */}
-            <div style={{ position:'absolute', top:RULER_H, bottom:0,
+            <div data-modaya-playhead style={{ position:'absolute', top:RULER_H, bottom:0,
               left: phPx,
               width:1, background:C.accent, zIndex:25,
               pointerEvents:'none',
@@ -1488,6 +1489,7 @@ export function EditorShell({
       </div>
 
       <ExportModal open={expOpen} onClose={()=>setExpOpen(false)} />
+      <DebugHud projectId={projectId} />
     </div>
   );
 }
