@@ -81,26 +81,42 @@ export interface EditorClipLike {
  * the source at its own timeline position — so sourceIn === timelineIn here.
  * Once trimming/moving exists, only this function needs to change.
  */
+/** Per-clip overrides produced by the AI style pass. */
+export interface StyleLayer {
+  [clipId: string]: {
+    sourceIn?:  number;
+    transform?: Partial<Transform>;
+    effects?:   Partial<Effects>;
+  };
+}
+
 export function buildSequence(
   clips: EditorClipLike[],
-  opts: { durationS: number; width: number; height: number; sourceId: string },
+  opts: { durationS: number; width: number; height: number; sourceId: string;
+          style?: StyleLayer },
 ): Sequence {
   const usable = (clips ?? []).filter(c => c.endS > c.startS);
 
-  const seqClips: SequenceClip[] = usable.map(c => ({
-    id:          c.id,
-    trackId:     c.trackId,
-    kind:        c.type,
-    label:       c.label,
-    timelineIn:  Math.max(0, c.startS),
-    timelineOut: Math.min(opts.durationS || c.endS, c.endS),
-    sourceId:    opts.sourceId,
-    sourceIn:    Math.max(0, c.startS),
-    transform:   { ...DEFAULT_TRANSFORM },
-    effects:     { ...DEFAULT_EFFECTS },
-    z:           Z_BY_TRACK[c.trackId] ?? 5,
-    muted:       c.type === 'text' || c.type === 'subtitle',
-  }));
+  const seqClips: SequenceClip[] = usable.map(c => {
+    const st = opts.style?.[c.id];
+    return {
+      id:          c.id,
+      trackId:     c.trackId,
+      kind:        c.type,
+      label:       c.label,
+      timelineIn:  Math.max(0, c.startS),
+      timelineOut: Math.min(opts.durationS || c.endS, c.endS),
+      sourceId:    opts.sourceId,
+      /* A styled clip reads from wherever the edit says — that's what makes a
+         ripple edit possible: the programme is continuous while the source
+         jumps around the original file. */
+      sourceIn:    st?.sourceIn ?? Math.max(0, c.startS),
+      transform:   { ...DEFAULT_TRANSFORM, ...(st?.transform ?? {}) },
+      effects:     { ...DEFAULT_EFFECTS,   ...(st?.effects   ?? {}) },
+      z:           Z_BY_TRACK[c.trackId] ?? 5,
+      muted:       c.type === 'text' || c.type === 'subtitle',
+    };
+  });
 
   // Nothing analysed yet — play the whole source as one clip so the preview
   // works from the moment the media is available.

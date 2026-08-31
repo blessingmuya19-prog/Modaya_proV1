@@ -6,7 +6,12 @@ import { ExportModal } from './ExportModal';
 import { getMedia, subscribeMedia } from '@/lib/videoStore';
 import DebugHud from './DebugHud';
 import PreviewCanvas from './PreviewCanvas';
-import { buildSequence, Sequence } from '@/lib/render/sequence';
+import { buildSequence, Sequence, StyleLayer } from '@/lib/render/sequence';
+import { analyseReference, analyseAudio, interestCurve } from '@/lib/ai/analyseReference';
+import { StyleProfile, describeStyle } from '@/lib/ai/styleProfile';
+import { generateEditPlan, EditPlan } from '@/lib/ai/styleTransfer';
+import { analyseFile } from '@/lib/videoStore';
+import { loadMediaFile } from '@/lib/mediaDb';
 import { getProjectFrames } from '@/lib/thumbnailStore';
 
 /* ──────────────── STAGGER FADE-UP ──────────────── */
@@ -31,7 +36,7 @@ import {
   SkipBack, Play, Pause, SkipForward, Maximize2, Minus,
   AlignLeft, AlignCenter, AlignRight,
   Bold, Italic, Underline, Scissors, MousePointer,
-  ArrowLeft, Send, RotateCcw, ChevronDown,
+  ArrowLeft, Send, RotateCcw, ChevronDown, Film,
 } from 'lucide-react';
 
 /* ── App palette ── */
@@ -612,6 +617,8 @@ interface Msg {
   summary?: string;          // edit chip shown under AI reply
   savedS?:  number;
   undoable?: boolean;
+  /** A learned reference style the user can apply. */
+  style?:   StyleProfile;
 }
 
 const PropertiesPanel = React.memo(PropertiesPanelBase);
@@ -621,9 +628,10 @@ interface AIChatPanelProps {
   initialHistory?: EditorAIMsg[];
   totalS:         number;
   onEditApplied?: (affectedIds: string[], newClips: EditorClip[]) => void;
+  onStyleApplied?: (plan: EditPlan) => void;
 }
 
-function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied }: AIChatPanelProps) {
+function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onStyleApplied }: AIChatPanelProps) {
   const [msgs,    setMsgs   ] = useState<Msg[]>(() => {
     if (initialHistory && initialHistory.length > 0) {
       return initialHistory.map(m => ({ role: m.role, text: m.text }));
@@ -639,6 +647,78 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied }: A
   useEffect(() => {
     bot.current?.scrollIntoView({ behavior: 'smooth' });
   }, [msgs, loading]);
+
+  /* ── Reference video: learn a style, then replicate it ── */
+  const refInput = useRef<HTMLInputElement>(null);
+  const [refBusy, setRefBusy] = useState(false);
+
+  const say = (m: Msg) => setMsgs(prev => [...prev, m]);
+  const replaceLast = (text: string) =>
+    setMsgs(prev => prev.map((m, i) => (i === prev.length - 1 ? { ...m, text } : m)));
+
+  const learnReference = async (file: File) => {
+    if (refBusy) return;
+    setRefBusy(true);
+    say({ role: 'user', text: `Edit it like this: ${file.name}` });
+    say({ role: 'ai', text: 'Watching the reference…' });
+
+    try {
+      const meta = await analyseFile(file);
+      if (!meta.durationS) {
+        replaceLast("I couldn't read that file — try an mp4 or mov.");
+        return;
+      }
+
+      const res = await analyseReference(
+        file, { name: file.name, durationS: meta.durationS },
+        p => replaceLast(p.message),
+      );
+      if (!res) {
+        replaceLast("I couldn't decode that video. Try a different file or a shorter clip.");
+        return;
+      }
+
+      const { profile } = res;
+      replaceLast(`Got it. ${describeStyle(profile)}`);
+      setMsgs(prev => prev.map((m, i) =>
+        i === prev.length - 1 ? { ...m, style: profile } : m));
+    } catch {
+      replaceLast('Something went wrong reading that reference.');
+    } finally {
+      setRefBusy(false);
+    }
+  };
+
+  const applyStyle = async (profile: StyleProfile) => {
+    if (refBusy) return;
+    setRefBusy(true);
+    say({ role: 'ai', text: 'Re-cutting your footage in that style…' });
+
+    try {
+      // The target's own audio decides which sections survive the cut
+      const stored = await loadMediaFile(projectId);
+      const env    = stored ? await analyseAudio(stored.blob) : null;
+      const dur    = stored?.durationS || totalS;
+
+      const plan = generateEditPlan({
+        profile,
+        durationS: dur,
+        sourceName: stored?.filename,
+        onsets:   env?.onsets ?? [],
+        interest: interestCurve(env, dur),
+      });
+
+      onStyleApplied?.(plan);
+      setMsgs(prev => prev.map((m, i) => (i === prev.length - 1
+        ? { ...m, text: `Done — I cut your video the way "${profile.sourceName}" is cut.`,
+            summary: plan.summary }
+        : m)));
+    } catch {
+      replaceLast("I couldn't apply that style — your media may not be loaded.");
+    } finally {
+      setRefBusy(false);
+    }
+  };
 
   const send = async (text: string) => {
     if (!text.trim() || loading) return;
@@ -744,6 +824,18 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied }: A
               {m.text}
             </div>
 
+            {/* Learned reference style — one tap to replicate it */}
+            {m.style && (
+              <button onClick={() => applyStyle(m.style!)} disabled={refBusy}
+                style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '6px 11px', background: `${C.accent}18`,
+                  border: `1px solid ${C.accent}55`, borderRadius: 9999,
+                  fontFamily: F, fontSize: 11, fontWeight: 600, color: C.accent,
+                  cursor: refBusy ? 'default' : 'pointer', opacity: refBusy ? 0.5 : 1 }}>
+                <Wand2 size={11} /> Edit my video in this style
+              </button>
+            )}
+
             {/* Edit summary chip */}
             {m.summary && (
               <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', gap: 5,
@@ -783,6 +875,19 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied }: A
       {/* Quick pills */}
       <div style={{ padding: '7px 10px', borderTop: `1px solid ${C.b}`,
         display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        <input ref={refInput} type="file" accept="video/*" style={{ display: 'none' }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) void learnReference(f); e.target.value = ''; }} />
+
+        <button onClick={() => refInput.current?.click()} disabled={refBusy || loading}
+          title="Upload a video whose editing style you want copied"
+          style={{ ...ty.pill, display: 'flex', alignItems: 'center', gap: 5,
+            background: `${C.accent}14`, border: `1px solid ${C.accent}44`, color: C.accent,
+            borderRadius: 9999, padding: '4px 9px',
+            cursor: refBusy || loading ? 'not-allowed' : 'pointer',
+            opacity: refBusy || loading ? 0.5 : 1, transition: 'all 120ms' }}>
+          <Film size={11} /> {refBusy ? 'Learning…' : 'Reference video'}
+        </button>
+
         {QUICK.map((q, i) => (
           <button key={i} onClick={() => send(q.prompt)}
             disabled={loading}
@@ -1306,7 +1411,7 @@ export function EditorShell({
   durationS?:   number;
   aiHistory?:   EditorAIMsg[];
 }) {
-  const totalS  = durationS > 0 ? durationS : DEFAULT_DURATION;
+  const baseTotalS = durationS > 0 ? durationS : DEFAULT_DURATION;
 
   /* Real media. It may arrive after this component mounts — the editor page
      rehydrates the file from IndexedDB on a refresh — so subscribe rather than
@@ -1324,6 +1429,25 @@ export function EditorShell({
 
   const [liveClips,    setLiveClips   ] = useState<EditorClip[]>(clips);
   const [highlightIds, setHighlightIds] = useState<string[]>([]);
+  /* Per-clip source/transform/effect overrides produced by the reference pass. */
+  const [styleLayer,   setStyleLayer  ] = useState<StyleLayer>({});
+  const [styledDur,    setStyledDur   ] = useState<number | null>(null);
+
+  const totalS = styledDur ?? baseTotalS;
+
+  const handleStyleApplied = useCallback((plan: EditPlan) => {
+    setLiveClips(plan.clips.map(c => ({
+      id: c.id, trackId: c.trackId, label: c.label,
+      startS: c.startS, endS: c.endS,
+      type: c.type as EditorClip['type'],
+    })));
+    setStyleLayer(Object.fromEntries(plan.clips.map(c => [
+      c.id, { sourceIn: c.sourceIn, transform: c.transform, effects: c.effects },
+    ])));
+    setStyledDur(plan.durationS);
+    setHighlightIds(plan.clips.slice(0, 4).map(c => c.id));
+    setTimeout(() => setHighlightIds([]), 3000);
+  }, []);
   const tracks = useMemo(() => {
     const built = buildTracks(liveClips.length ? liveClips : clips, totalS);
     return built.length ? built : baseTracks(totalS, mediaEntry?.filename ?? 'Video');
@@ -1340,8 +1464,9 @@ export function EditorShell({
       width:     mediaEntry?.width  ?? 1920,
       height:    mediaEntry?.height ?? 1080,
       sourceId:  projectId ?? 'main',
+      style:     styleLayer,
     },
-  ), [liveClips, clips, totalS, mediaEntry?.width, mediaEntry?.height, projectId]);
+  ), [liveClips, clips, totalS, mediaEntry?.width, mediaEntry?.height, projectId, styleLayer]);
 
   // When parent re-fetches clips (e.g. after navigation), sync
   useEffect(() => { setLiveClips(clips); }, [clips]);
@@ -1472,6 +1597,7 @@ export function EditorShell({
               initialHistory={aiHistory}
               totalS={totalS}
               onEditApplied={handleEditApplied}
+              onStyleApplied={handleStyleApplied}
             />
           </div>
         </FadeUp>
