@@ -10,6 +10,7 @@ import { buildSequence, Sequence, StyleLayer } from '@/lib/render/sequence';
 import { analyseReference, analyseAudio, interestCurve } from '@/lib/ai/analyseReference';
 import { StyleProfile, describeStyle } from '@/lib/ai/styleProfile';
 import { generateEditPlan, EditPlan } from '@/lib/ai/styleTransfer';
+import { detectSilences } from '@/lib/ai/operations';
 import { analyseFile } from '@/lib/videoStore';
 import { loadMediaFile } from '@/lib/mediaDb';
 import { getProjectFrames } from '@/lib/thumbnailStore';
@@ -651,6 +652,24 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
   /* ── Reference video: learn a style, then replicate it ── */
   const refInput = useRef<HTMLInputElement>(null);
   const [refBusy, setRefBusy] = useState(false);
+  const [learnedStyle, setLearnedStyle] = useState<string | null>(null);
+
+  /* Measure the project's own audio once so "cut the pauses" can act on real
+     silence rather than a guess. Runs in the background; never blocks typing. */
+  const silences = useRef<[number, number][]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const stored = await loadMediaFile(projectId);
+        if (!stored || cancelled) return;
+        const env = await analyseAudio(stored.blob);
+        if (!env || cancelled) return;
+        silences.current = detectSilences(env.rms, env.hopS);
+      } catch { /* no audio track — silence detection simply stays empty */ }
+    })();
+    return () => { cancelled = true; };
+  }, [projectId]);
 
   const say = (m: Msg) => setMsgs(prev => [...prev, m]);
   const replaceLast = (text: string) =>
@@ -679,7 +698,9 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
       }
 
       const { profile } = res;
-      replaceLast(`Got it. ${describeStyle(profile)}`);
+      const description = describeStyle(profile);
+      setLearnedStyle(`${profile.sourceName} — ${description}`);
+      replaceLast(`Got it. ${description}`);
       setMsgs(prev => prev.map((m, i) =>
         i === prev.length - 1 ? { ...m, style: profile } : m));
     } catch {
@@ -731,7 +752,11 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
       const res  = await fetch(`/api/projects/${projectId}/ai`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ message: text.trim() }),
+        body:    JSON.stringify({
+          message:  text.trim(),
+          silences: silences.current.slice(0, 200),
+          style:    learnedStyle ?? undefined,
+        }),
       });
       const data = await res.json();
 
