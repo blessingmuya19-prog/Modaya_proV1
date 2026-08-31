@@ -45,65 +45,109 @@ interface EditResult {
   intent:       Intent;
 }
 
-function applyEdit(intent: Intent, clips: Clip[], durationS: number): EditResult {
-  const savedS = intent === 'cut_silence' ? Math.round(durationS * 0.12)
-               : intent === 'clean'       ? Math.round(durationS * 0.08)
-               : intent === 'tighten'     ? Math.round(durationS * 0.18)
-               : intent === 'moments'     ? Math.round(durationS * 0.60)
-               : 0;
+/**
+ * Deterministic fallback, used when no LLM key is configured or the model
+ * fails. It performs only edits it can justify from measurements the browser
+ * sent, and says plainly when it cannot do something. It never claims work it
+ * did not do.
+ */
+function applyEdit(
+  intent: Intent, clips: Clip[], durationS: number,
+  ctx: { silences: [number, number][]; energy: number[] },
+): EditResult {
 
-  const newDur  = Math.max(30, durationS - savedS);
-  const newEnd  = fmtS(newDur);
+  const run = (ops: Operation[]) =>
+    applyOperations(clips as TimelineClip[], ops, { durationS, silences: ctx.silences });
 
-  // Simulate updated clips — compress endS proportionally
-  const ratio = newDur / durationS;
-  const newClips: Clip[] = clips.map(c => ({
-    ...c,
-    endS: Math.round(c.endS * ratio),
-    label: c.label,
-  }));
+  const nothing = (reply: string): EditResult => ({
+    reply, summary: 'No change', savedS: 0, affectedIds: [], newClips: clips, intent,
+  });
 
-  // Pick clips to highlight (up to 3 video/audio clips)
-  const affectedIds = clips
-    .filter(c => c.type === 'video' || c.type === 'audio')
-    .slice(0, 3)
-    .map(c => c.id);
+  switch (intent) {
+    case 'cut_silence':
+    case 'tighten': {
+      if (!ctx.silences.length) {
+        return nothing(
+          "I couldn't find any measurable silence in this project — either the audio is " +
+          'continuous, or the media is still loading. Reopen the project so I can analyse ' +
+          'the audio, then ask again.');
+      }
+      const out = run([{ op: 'remove_ranges', ranges: ctx.silences }]);
+      return {
+        reply: `Removed ${ctx.silences.length} silent ${ctx.silences.length === 1 ? 'gap' : 'gaps'} ` +
+               `I measured in your audio — ${Math.round(out.removedS)}s in total. ` +
+               `The programme is now ${fmtS(durationS - out.removedS)}.`,
+        summary:     out.summary,
+        savedS:      Math.round(out.removedS),
+        affectedIds: out.affectedIds,
+        newClips:    out.clips as Clip[],
+        intent,
+      };
+    }
 
-  const cutCount = intent === 'cut_silence' ? Math.round(savedS / 4)
-                 : intent === 'clean'       ? Math.round(savedS / 3)
-                 : intent === 'tighten'     ? Math.round(savedS / 5)
-                 : 0;
+    case 'moments':
+    case 'highlights': {
+      if (!ctx.energy.length) {
+        return nothing(
+          'I need to analyse your audio before I can pick highlights. Reopen the project ' +
+          'so the media loads, then ask again.');
+      }
+      // Keep the loudest ~35% of the runtime, merged into contiguous windows
+      const ranked  = ctx.energy.map((v, i) => ({ v, i })).sort((a, b) => b.v - a.v);
+      const keepSec = Math.max(1, Math.round(ctx.energy.length * 0.35));
+      const chosen  = ranked.slice(0, keepSec).map(r => r.i).sort((a, b) => a - b);
 
-  const replies: Record<Intent, string> = {
-    cut_silence: `Removed ${cutCount} silence sections totalling ${savedS}s. Your video is now ${newEnd} — tighter and easier to watch.`,
-    clean:       `Cleaned ${cutCount} filler moments (ums, uhs, repeated phrases) — saved ${savedS}s. New duration: ${newEnd}.`,
-    tighten:     `Tightened the overall pacing. Cut ${savedS}s of slow sections. Final cut: ${newEnd}. Review the timeline for flagged sections.`,
-    moments:     `Found the strongest ${newEnd} from your footage. Kept your best takes at ${fmtS(durationS*0.15)}, ${fmtS(durationS*0.4)}, and ${fmtS(durationS*0.72)}.`,
-    captions:    `Transcribed ${fmtS(durationS)} of audio — ${Math.round(durationS / 4)} caption segments generated at ~96% accuracy. A few low-confidence spots are flagged in yellow on the timeline.`,
-    vertical:    `Reframed to 9:16. Speaker centred throughout. Tracked ${Math.round(durationS / 30)} scene changes. Ready for Reels and Shorts.`,
-    highlights:  `Highlighted the strongest ${newEnd}. Review and approve in the timeline.`,
-    unknown:     `Analysed your request. Applied ${cutCount > 0 ? cutCount + ' cuts' : 'adjustments'} — saved ${savedS > 0 ? savedS + 's' : 'time'}. New duration: ${newEnd}. Anything else?`,
-  };
+      const ranges: [number, number][] = [];
+      for (const sec of chosen) {
+        const last = ranges[ranges.length - 1];
+        if (last && sec <= last[1] + 1) last[1] = sec + 1;
+        else ranges.push([sec, sec + 1]);
+      }
 
-  const summaries: Record<Intent, string> = {
-    cut_silence: `${cutCount} pauses cut · −${savedS}s`,
-    clean:       `${cutCount} fillers removed · −${savedS}s`,
-    tighten:     `Pacing tightened · −${savedS}s`,
-    moments:     `Best ${newEnd} extracted`,
-    captions:    `${Math.round(durationS / 4)} captions added`,
-    vertical:    `Reframed 16:9 → 9:16`,
-    highlights:  `Highlights extracted · −${savedS}s`,
-    unknown:     `Edit applied · −${savedS}s`,
-  };
+      const out = run([{ op: 'keep_ranges', ranges }]);
+      return {
+        reply: `Kept the ${ranges.length} most active ${ranges.length === 1 ? 'section' : 'sections'} ` +
+               `by audio energy — ${fmtS(durationS - out.removedS)} of the original ${fmtS(durationS)}. ` +
+               'That ranking is loudness, not meaning; with an AI key I can choose on content instead.',
+        summary:     out.summary,
+        savedS:      Math.round(out.removedS),
+        affectedIds: out.affectedIds,
+        newClips:    out.clips as Clip[],
+        intent,
+      };
+    }
 
-  return {
-    reply:       replies[intent],
-    summary:     summaries[intent],
-    savedS,
-    affectedIds,
-    newClips:    savedS > 0 ? newClips : clips,
-    intent,
-  };
+    case 'captions': {
+      const out = run([{ op: 'add_captions', position: 'lower', everyS: 3 }]);
+      const count = out.clips.filter(c => c.type === 'text').length;
+      return {
+        reply: `Added ${count} empty caption slots across the timeline, spaced every 3 seconds. ` +
+               "I can't transcribe the words yet — speech recognition isn't wired up — so the text " +
+               'is blank and ready for you to fill in.',
+        summary:     `${count} caption slots added`,
+        savedS:      0,
+        affectedIds: out.affectedIds,
+        newClips:    out.clips as Clip[],
+        intent,
+      };
+    }
+
+    case 'clean':
+      return nothing(
+        "Removing filler words needs a transcript, and speech recognition isn't available yet. " +
+        'What I can do now is cut the measured pauses — ask me to cut the dead air.');
+
+    case 'vertical':
+      return nothing(
+        "I can't reframe to 9:16 yet — that needs subject tracking so the speaker stays in shot. " +
+        'The preview already renders your footage at its true aspect ratio without cropping.');
+
+    default:
+      return nothing(
+        "I'm running without an AI model, so I only understand a few set phrases: cut the dead air, " +
+        'pick the highlights, or add captions. Add a free API key (see the README) and I can follow ' +
+        'instructions in your own words.');
+  }
 }
 
 /* ── LLM planning ──────────────────────────────────────────────────────────────
@@ -209,6 +253,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     ? body.silences.filter((r: unknown) => Array.isArray(r) && r.length === 2).slice(0, 200)
     : [];
   const style: string | undefined = typeof body.style === 'string' ? body.style : undefined;
+  const energy: number[] = Array.isArray(body.energy)
+    ? body.energy.filter((n: unknown) => typeof n === 'number').slice(0, 7200)
+    : [];
 
   const provider = detectProvider();
   let edit: EditResult | null = null;
@@ -238,7 +285,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // No key, or the model failed / timed out — deterministic fallback
   if (!edit) {
     const intent = detectIntent(message);
-    edit = applyEdit(intent, clips, durationS);
+    edit = applyEdit(intent, clips, durationS, { silences, energy });
   }
 
   const now    = new Date().toISOString();

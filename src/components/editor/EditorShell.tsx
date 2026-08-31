@@ -657,6 +657,7 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
   /* Measure the project's own audio once so "cut the pauses" can act on real
      silence rather than a guess. Runs in the background; never blocks typing. */
   const silences = useRef<[number, number][]>([]);
+  const energy   = useRef<number[]>([]);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -666,6 +667,7 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
         const env = await analyseAudio(stored.blob);
         if (!env || cancelled) return;
         silences.current = detectSilences(env.rms, env.hopS);
+        energy.current   = interestCurve(env, stored.durationS || totalS);
       } catch { /* no audio track — silence detection simply stays empty */ }
     })();
     return () => { cancelled = true; };
@@ -755,6 +757,7 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
         body:    JSON.stringify({
           message:  text.trim(),
           silences: silences.current.slice(0, 200),
+          energy:   energy.current.slice(0, 7200),
           style:    learnedStyle ?? undefined,
         }),
       });
