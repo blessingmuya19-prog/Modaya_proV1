@@ -31,7 +31,7 @@ export async function extractFrames(
   if (!videoUrl || count <= 0) return [];
 
   const frames: string[] = new Array(count).fill('');
-  const WORKERS = Math.min(4, count);          // parallel decoders
+  const WORKERS = Math.min(6, count);          // parallel decoders
   let settled = 0;
 
   const timeFor = (i: number) => (i / Math.max(1, count - 1)) * durationS * 0.92;

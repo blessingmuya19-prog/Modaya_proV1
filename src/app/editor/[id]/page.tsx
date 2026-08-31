@@ -3,8 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { EditorShell, EditorClip, EditorAIMsg } from '@/components/editor/EditorShell';
 import { useToast } from '@/components/ui/Toast';
-import { getMedia } from '@/lib/videoStore';
+import { getMedia, setMedia } from '@/lib/videoStore';
 import { extractFrames, setProjectFrames, capturePoster, savePoster, loadPoster } from '@/lib/thumbnailStore';
+import { loadMediaFile, loadFrames, saveFrames } from '@/lib/mediaDb';
 
 const F = "'Inter Tight', Inter, system-ui, sans-serif";
 const C = { bg: '#050505', muted: '#737D8D', accent: '#4F8CFF' };
@@ -17,6 +18,71 @@ interface ProjectData {
   status:      string;
   clips:       EditorClip[];
   aiHistory:   EditorAIMsg[];
+}
+
+
+/**
+ * Make the project's media available to the editor.
+ *
+ * 1. Use the in-tab blob if the user just uploaded (fastest path).
+ * 2. Otherwise rehydrate the file from IndexedDB — this is what makes a
+ *    refreshed / reopened project play for real instead of falling back to
+ *    the mock preview with no timeline frames.
+ * 3. Paint the timeline strip from the cached frames immediately, and only
+ *    decode new ones when there's no cache.
+ */
+async function prepareMedia(id: string, serverThumb?: string) {
+  let media = getMedia(id);
+
+  if (!media?.objectUrl) {
+    const stored = await loadMediaFile(id);
+    if (stored) {
+      media = {
+        objectUrl:   URL.createObjectURL(stored.blob),
+        mimeType:    stored.mimeType,
+        mediaType:   stored.mediaType,
+        aspectRatio: stored.aspectRatio,
+        width:       stored.width,
+        height:      stored.height,
+        durationS:   stored.durationS,
+        filename:    stored.filename,
+      };
+      setMedia(id, media);          // notifies the editor shell to pick it up
+    }
+  }
+  if (!media?.objectUrl) return;
+
+  // Cached strip first — instant, no decoding at all on a revisit
+  const cached = await loadFrames(id);
+  const wanted = Math.min(40, Math.max(8, Math.ceil(media.durationS / 5)));
+  if (cached.length >= wanted && cached.every(Boolean)) {
+    setProjectFrames(id, cached);
+  } else if (media.durationS > 0) {
+    if (cached.length) setProjectFrames(id, cached);   // show what we have
+    extractFrames(
+      media.objectUrl, media.durationS, wanted, 96, 54,
+      partial => setProjectFrames(id, [...partial]),   // stream as they decode
+    )
+      .then(frames => {
+        if (!frames.length) return;
+        setProjectFrames(id, frames);
+        void saveFrames(id, frames);                   // never decode this again
+      })
+      .catch(() => {});
+  }
+
+  // Back-fill the project poster if the server never got one at upload
+  if (media.mediaType === 'video' && !serverThumb) {
+    const poster = loadPoster(id) || await capturePoster(media.objectUrl).catch(() => '');
+    if (poster) {
+      savePoster(id, poster);
+      fetch(`/api/projects/${id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ thumbnail: poster }),
+      }).catch(() => {});
+    }
+  }
 }
 
 export default function EditorPage() {
@@ -57,33 +123,7 @@ export default function EditorPage() {
             }],
           });
         }
-        // Kick off thumbnail extraction in the background
-        const media = getMedia(id);
-        if (media?.objectUrl && media.durationS > 0) {
-          const frameCount = Math.min(40, Math.max(8, Math.ceil(media.durationS / 5)));
-          // Publish partial results so the strip fills in as frames decode
-          extractFrames(
-            media.objectUrl, media.durationS, frameCount, 96, 54,
-            partial => setProjectFrames(id, [...partial]),
-          )
-            .then(frames => setProjectFrames(id, frames))
-            .catch(() => {});
-        }
-
-        // Back-fill the project poster if the server never got one at upload
-        if (media?.objectUrl && media.mediaType === 'video' && !data?.project?.thumbnail) {
-          const cached = loadPoster(id);
-          const work = cached ? Promise.resolve(cached) : capturePoster(media.objectUrl);
-          work.then(url => {
-            if (!url) return;
-            savePoster(id, url);
-            fetch(`/api/projects/${id}`, {
-              method:  'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body:    JSON.stringify({ thumbnail: url }),
-            }).catch(() => {});
-          }).catch(() => {});
-        }
+        void prepareMedia(id, data?.project?.thumbnail);
         setLoading(false);
       })
       .catch(() => {

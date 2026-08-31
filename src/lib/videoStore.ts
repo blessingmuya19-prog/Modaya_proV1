@@ -20,10 +20,21 @@ export interface MediaEntry {
 
 const store = new Map<string, MediaEntry>();
 
+/* Components that read the store need to know when media arrives late — e.g.
+   after being rehydrated from IndexedDB on a fresh page load. */
+type Listener = (projectId: string) => void;
+const listeners = new Set<Listener>();
+
+export function subscribeMedia(fn: Listener): () => void {
+  listeners.add(fn);
+  return () => { listeners.delete(fn); };
+}
+
 export function setMedia(projectId: string, entry: MediaEntry) {
   const prev = store.get(projectId);
-  if (prev) URL.revokeObjectURL(prev.objectUrl);
+  if (prev && prev.objectUrl !== entry.objectUrl) URL.revokeObjectURL(prev.objectUrl);
   store.set(projectId, entry);
+  listeners.forEach(fn => { try { fn(projectId); } catch { /* ignore */ } });
 }
 
 export function getMedia(projectId: string): MediaEntry | null {

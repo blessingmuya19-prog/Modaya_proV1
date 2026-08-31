@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { setMedia, analyseFile, MediaEntry } from '@/lib/videoStore';
 import { capturePoster, savePoster } from '@/lib/thumbnailStore';
+import { saveMediaFile } from '@/lib/mediaDb';
 
 const PRESETS = [
   { Icon: Zap,        label: 'Make it faster',  fill: 'Make this video faster and remove all unnecessary pauses and dead air.' },
@@ -67,6 +68,17 @@ export default function UploadPage() {
         const objUrl = previewUrl ?? URL.createObjectURL(file);
         setMedia(data.projectId, { ...meta, objectUrl: objUrl });
         if (thumbnail) savePoster(data.projectId, thumbnail);
+        // Keep the actual bytes so the project still plays after a refresh or
+        // when it's reopened from the dashboard in a new session.
+        void saveMediaFile(data.projectId, file, {
+          mimeType:    meta.mimeType,
+          mediaType:   meta.mediaType,
+          aspectRatio: meta.aspectRatio,
+          width:       meta.width,
+          height:      meta.height,
+          durationS:   meta.durationS,
+          filename:    meta.filename,
+        });
         setProjectId(data.projectId);
         setStage('processing');
       } else if (res.status === 401) {

@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link';
 import { Logo, LogoMark } from '../ui/Logo';
 import { ExportModal } from './ExportModal';
-import { getMedia } from '@/lib/videoStore';
+import { getMedia, subscribeMedia } from '@/lib/videoStore';
 import { getProjectFrames } from '@/lib/thumbnailStore';
 
 /* ──────────────── STAGGER FADE-UP ──────────────── */
@@ -872,9 +872,12 @@ function VideoPreview({ playheadS, playing, onToggle, onSeek, onStop, totalS, vi
   }, [playing, onSeek]);
 
   // Derive CSS aspect ratio from the stored ratio string
-  const cssAspect = aspectRatio === '9:16' ? '9/16'
-                  : aspectRatio === '1:1'  ? '1/1'
-                  : '16/9';
+  // Any detected ratio, not just the three we happened to hard-code
+  const cssAspect = (() => {
+    const m = /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(aspectRatio ?? '');
+    if (m && Number(m[1]) > 0 && Number(m[2]) > 0) return `${m[1]}/${m[2]}`;
+    return '16/9';
+  })();
 
   return (
     <div style={{ flex:1, display:'flex', flexDirection:'column', background:'#000',
@@ -970,9 +973,12 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
   useEffect(() => {
     if (!projectId) return;
     // Poll while frames stream in from the parallel extractor, then stop
+    let sig = '';
     const check = () => {
       const f = getProjectFrames(projectId);
-      if (f.length > 0) setFrames([...f]);
+      // Only re-render when the strip actually gained frames
+      const next = `${f.length}:${f.reduce((n, x) => n + (x ? 1 : 0), 0)}`;
+      if (f.length > 0 && next !== sig) { sig = next; setFrames([...f]); }
       if (f.length > 0 && f.every(Boolean)) clearInterval(id);
     };
     check();
@@ -1064,32 +1070,130 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
 
   const phPx = playheadS * zoom;
 
+  /* The track rows — clips, frame tiles, waveform bars — are by far the
+     heaviest part of the timeline (hundreds of nodes). They depend on the
+     media, not on the playhead, so they must NOT be rebuilt on every frame of
+     playback; that rebuild was the remaining source of stutter. */
+  const trackRows = useMemo(() => (
+    <div style={{ display:'flex', flexDirection:'column', gap:0 }}>
+      {tracks.map(tr=>{
+        return (
+          <div key={tr.id} style={{ height:tr.h+3, position:'relative',
+            borderBottom:`1px solid ${C.b}`,
+            background: tr.id==='text' ?'rgba(124,58,237,0.04)'
+                      : tr.id==='video'?'rgba(55,65,81,0.08)'
+                      : tr.id.startsWith('aud')?'rgba(5,150,105,0.04)'
+                      : 'rgba(8,145,178,0.04)' }}>
+            {Array.from({length:Math.ceil(totalS/60)},(_,i)=>(
+              <div key={i} style={{ position:'absolute',top:0,bottom:0,
+                left:i*60*zoom,width:1,background:'rgba(255,255,255,0.02)',pointerEvents:'none' }} />
+            ))}
+
+            {tr.clips.map((clip,ci)=>{
+              const left = clip.s * zoom;
+              const w = (clip.e - clip.s) * zoom;
+              return (
+                <div key={ci} style={{ position:'absolute', left, top:3,
+                  height:`calc(100% - 6px)`, width:w,
+                  background:tr.bg, borderRadius:5,
+                  border:`1px solid ${highlightIds && highlightIds.length > 0 && (tr.id==='video'||tr.id==='aud1') ? tr.color+'cc' : tr.color+'55'}`,
+                  overflow:'hidden', cursor:'grab',
+                  boxShadow: highlightIds && highlightIds.length > 0 && (tr.id==='video'||tr.id==='aud1') ? `0 0 10px ${tr.color}66` : 'none',
+                  transition:'box-shadow 400ms ease, border-color 400ms ease' }}>
+
+                  {(tr as any).thumb && (
+                    <div style={{ position:'absolute',inset:0,display:'flex',overflow:'hidden',borderRadius:4 }}>
+                      {Array.from({length: Math.max(1, Math.ceil(w / 80))}, (_, i) => {
+                        const frameIdx = frames.length > 0
+                          ? Math.min(frames.length - 1, Math.floor((i / Math.ceil(w / 80)) * frames.length))
+                          : -1;
+                        const frame = frameIdx >= 0 ? frames[frameIdx] : '';
+                        return (
+                          <div key={i} style={{
+                            flexShrink: 0, width: 80, height: '100%',
+                            borderRight: '1px solid rgba(0,0,0,0.3)',
+                            background: frame
+                              ? `url(${frame}) center/cover no-repeat`
+                              : 'linear-gradient(135deg,#0d1a2e,#1a2a40)',
+                            position: 'relative',
+                          }}>
+                            {frame && <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.12)' }} />}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {(tr as any).wave && (
+                    <div style={{ position:'absolute',inset:'3px 0',display:'flex',alignItems:'center',overflow:'hidden' }}>
+                      {WAVE.slice(0,Math.floor(w/1.5)).map((h,i)=>(
+                        <div key={i} style={{ flex:1,minWidth:1,height:`${h*85}%`,
+                          background:'#34D399',borderRadius:1,opacity:0.65 }} />
+                      ))}
+                    </div>
+                  )}
+
+                  <div style={{ position:'absolute',inset:0,display:'flex',alignItems:'center',
+                    padding:'0 6px',gap:3,pointerEvents:'none',zIndex:2 }}>
+                    {w > 60 && <span style={{ ...ty.clip, whiteSpace:'nowrap' as const, overflow:'hidden', textOverflow:'ellipsis' }}>{clip.label}</span>}
+                  </div>
+
+                  <div style={{ position:'absolute',top:0,right:0,width:5,bottom:0,
+                    cursor:'ew-resize',background:`${tr.color}55`,borderRadius:'0 4px 4px 0' }} />
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  ), [tracks, zoom, frames, highlightIds, totalS]);
+
   /* ── Keep the playhead in view ──
      When the playhead moves past either edge of the visible window — during
      playback or after a jump — scroll the timeline so it stays on screen.
      Skipped while the user is dragging, so scrubbing never fights the scroll. */
   const lastFollow = useRef(0);
+  const followTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el || dragging.current) return;
+    if (!el) return;
 
-    // Reading scroll geometry forces layout — cap it to ~8×/sec instead of 60
-    const now = performance.now();
-    if (now - lastFollow.current < 120) return;
-    lastFollow.current = now;
+    const follow = () => {
+      const node = scrollRef.current;
+      if (!node || dragging.current) return;
 
-    const viewW  = el.clientWidth - LABEL_W;
-    const left   = el.scrollLeft;
-    const margin = Math.min(80, viewW * 0.12);       // comfort gap at the edges
+      // The label column is a sibling, so clientWidth is already the view width
+      const viewW = node.clientWidth;
+      const maxScroll = node.scrollWidth - viewW;
+      if (maxScroll <= 1) return;                    // nothing to scroll
 
-    if (phPx < left + margin) {
-      // Jumped backwards / off the left edge — put it a little in from the left
-      el.scrollTo({ left: Math.max(0, phPx - margin), behavior: 'smooth' });
-    } else if (phPx > left + viewW - margin) {
-      // Ran off the right edge — bring it to ~a third from the left and play on
-      el.scrollTo({ left: Math.max(0, phPx - viewW / 3), behavior: 'auto' });
+      const left   = node.scrollLeft;
+      const margin = Math.min(80, viewW * 0.12);     // comfort gap at the edges
+      const target =
+        phPx < left + margin              ? phPx - margin          // off the left
+      : phPx > left + viewW - margin      ? phPx - viewW / 3       // off the right
+      : null;
+
+      if (target === null) return;
+      const clamped = Math.max(0, Math.min(maxScroll, target));
+      if (Math.abs(clamped - left) < 2) return;
+      // 'auto' during playback: smooth scrolling can't keep up with a moving
+      // playhead and ends up lagging behind it.
+      node.scrollTo({ left: clamped, behavior: playing ? 'auto' : 'smooth' });
+      lastFollow.current = performance.now();
+    };
+
+    // Throttle the layout reads, but always run a trailing pass so a single
+    // jump (click, skip, seek) is never swallowed by the throttle window.
+    if (performance.now() - lastFollow.current >= 100) {
+      follow();
+    } else {
+      if (followTimer.current) clearTimeout(followTimer.current);
+      followTimer.current = setTimeout(follow, 100);
     }
-  }, [phPx]);
+    return () => { if (followTimer.current) clearTimeout(followTimer.current); };
+  }, [phPx, playing]);
 
   return (
     <div style={{ height:'clamp(220px,30vh,480px)', background:C.surface, borderTop:`1px solid ${C.b}`,
@@ -1184,78 +1288,7 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
             </div>
 
             {/* ── Track rows ── */}
-            <div style={{ display:'flex', flexDirection:'column', gap:0 }}>
-              {tracks.map(tr=>{
-                return (
-                  <div key={tr.id} style={{ height:tr.h+3, position:'relative',
-                    borderBottom:`1px solid ${C.b}`,
-                    background: tr.id==='text' ?'rgba(124,58,237,0.04)'
-                              : tr.id==='video'?'rgba(55,65,81,0.08)'
-                              : tr.id.startsWith('aud')?'rgba(5,150,105,0.04)'
-                              : 'rgba(8,145,178,0.04)' }}>
-                    {Array.from({length:Math.ceil(totalS/60)},(_,i)=>(
-                      <div key={i} style={{ position:'absolute',top:0,bottom:0,
-                        left:i*60*zoom,width:1,background:'rgba(255,255,255,0.02)',pointerEvents:'none' }} />
-                    ))}
-
-                    {tr.clips.map((clip,ci)=>{
-                      const left = clip.s * zoom;
-                      const w = (clip.e - clip.s) * zoom;
-                      return (
-                        <div key={ci} style={{ position:'absolute', left, top:3,
-                          height:`calc(100% - 6px)`, width:w,
-                          background:tr.bg, borderRadius:5,
-                          border:`1px solid ${highlightIds && highlightIds.length > 0 && (tr.id==='video'||tr.id==='aud1') ? tr.color+'cc' : tr.color+'55'}`,
-                          overflow:'hidden', cursor:'grab',
-                          boxShadow: highlightIds && highlightIds.length > 0 && (tr.id==='video'||tr.id==='aud1') ? `0 0 10px ${tr.color}66` : 'none',
-                          transition:'box-shadow 400ms ease, border-color 400ms ease' }}>
-
-                          {(tr as any).thumb && (
-                            <div style={{ position:'absolute',inset:0,display:'flex',overflow:'hidden',borderRadius:4 }}>
-                              {Array.from({length: Math.max(1, Math.ceil(w / 80))}, (_, i) => {
-                                const frameIdx = frames.length > 0
-                                  ? Math.min(frames.length - 1, Math.floor((i / Math.ceil(w / 80)) * frames.length))
-                                  : -1;
-                                const frame = frameIdx >= 0 ? frames[frameIdx] : '';
-                                return (
-                                  <div key={i} style={{
-                                    flexShrink: 0, width: 80, height: '100%',
-                                    borderRight: '1px solid rgba(0,0,0,0.3)',
-                                    background: frame
-                                      ? `url(${frame}) center/cover no-repeat`
-                                      : 'linear-gradient(135deg,#0d1a2e,#1a2a40)',
-                                    position: 'relative',
-                                  }}>
-                                    {frame && <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.12)' }} />}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-
-                          {(tr as any).wave && (
-                            <div style={{ position:'absolute',inset:'3px 0',display:'flex',alignItems:'center',overflow:'hidden' }}>
-                              {WAVE.slice(0,Math.floor(w/1.5)).map((h,i)=>(
-                                <div key={i} style={{ flex:1,minWidth:1,height:`${h*85}%`,
-                                  background:'#34D399',borderRadius:1,opacity:0.65 }} />
-                              ))}
-                            </div>
-                          )}
-
-                          <div style={{ position:'absolute',inset:0,display:'flex',alignItems:'center',
-                            padding:'0 6px',gap:3,pointerEvents:'none',zIndex:2 }}>
-                            {w > 60 && <span style={{ ...ty.clip, whiteSpace:'nowrap' as const, overflow:'hidden', textOverflow:'ellipsis' }}>{clip.label}</span>}
-                          </div>
-
-                          <div style={{ position:'absolute',top:0,right:0,width:5,bottom:0,
-                            cursor:'ew-resize',background:`${tr.color}55`,borderRadius:'0 4px 4px 0' }} />
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })}
-            </div>
+            {trackRows}
 
             {/* ── Playhead vertical line + draggable dot ── */}
             <div style={{ position:'absolute', top:RULER_H, bottom:0,
@@ -1302,8 +1335,17 @@ export function EditorShell({
 }) {
   const totalS  = durationS > 0 ? durationS : DEFAULT_DURATION;
 
-  // Load real media from in-memory store (set by upload page)
-  const mediaEntry  = projectId ? getMedia(projectId) : null;
+  /* Real media. It may arrive after this component mounts — the editor page
+     rehydrates the file from IndexedDB on a refresh — so subscribe rather than
+     reading the store once. */
+  const [mediaEntry, setMediaEntry] = useState(() => projectId ? getMedia(projectId) : null);
+  useEffect(() => {
+    if (!projectId) return;
+    setMediaEntry(getMedia(projectId));
+    return subscribeMedia(changedId => {
+      if (changedId === projectId) setMediaEntry(getMedia(projectId));
+    });
+  }, [projectId]);
   const videoUrl    = mediaEntry?.objectUrl ?? null;
   const videoAspect = mediaEntry?.aspectRatio ?? '16:9';
 
@@ -1326,7 +1368,7 @@ export function EditorShell({
   const stopPlay   = useCallback(() => setPlaying(false), []);
   const [expOpen,setExpOpen] = useState(false);
   const [playing,setPlaying] = useState(false);
-  const [phS,    setPhS   ] = useState(Math.min(420, totalS * 0.25));
+  const [phS,    setPhS   ] = useState(0);
   const raf = useRef<number|null>(null);
 
   // Synthetic clock for the mockup only. With a real video loaded the <video>
