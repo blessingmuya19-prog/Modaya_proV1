@@ -53,6 +53,7 @@ function diagnostics() {
     // Production only — the single most common mistake.
     vercelEnv: process.env.VERCEL_ENV ?? null,
     onVercel:  !!process.env.VERCEL,
+    commit:    (process.env.VERCEL_GIT_COMMIT_SHA ?? '').slice(0, 7) || null,
   };
 }
 

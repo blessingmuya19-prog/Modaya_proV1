@@ -182,6 +182,17 @@ Rules:
 
 interface Plan { reply: string; operations: unknown }
 
+/**
+ * Which build is answering. When someone is looking at a stale deployment,
+ * every other explanation is a red herring, so the fallback says so out loud.
+ */
+function buildTag(): string {
+  const sha = (process.env.VERCEL_GIT_COMMIT_SHA ?? '').slice(0, 7);
+  const env = process.env.VERCEL_ENV ?? '';
+  if (!sha && !env) return 'local dev server';
+  return [sha && `build ${sha}`, env].filter(Boolean).join(', ');
+}
+
 async function planWithLlm(opts: {
   message:   string;
   durationS: number;
@@ -304,7 +315,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       ? `${explainFailure(failure.reason, provider.name, failure.detail)} ` +
         'In the meantime I can still cut the dead air, pick the highlights, or add captions ' +
         'from the measurements taken in your browser.'
-      : undefined;
+      : "I'm running without an AI model, so I only understand a few set phrases: cut the dead air, " +
+        'pick the highlights, or add captions. No provider key reached this deployment ' +
+        `(${buildTag()}) — if you have just added one, it only takes effect on a build made afterwards.`;
     edit = applyEdit(intent, clips, durationS, { silences, energy, modelNote });
   }
 
@@ -333,6 +346,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     engine: {
       source, provider: provider.name, model: provider.model,
       ...(failure ? { failure: failure.reason } : {}),
+      build: buildTag(),
     },
   });
 }

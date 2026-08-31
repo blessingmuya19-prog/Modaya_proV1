@@ -166,7 +166,7 @@ export default function SettingsPage() {
     configured: boolean; provider: string; model: string; keyHint: string; persisted: boolean;
     diagnostics?: {
       present: string[]; lookalike: string[];
-      vercelEnv: string | null; onVercel: boolean;
+      vercelEnv: string | null; onVercel: boolean; commit: string | null;
     };
   } | null>(null);
 
@@ -328,7 +328,10 @@ export default function SettingsPage() {
             <div style={{ marginTop: 6, color: C.dim }}>
               This build is the{' '}
               <span style={{ color: C.text }}>{aiStatus.diagnostics.vercelEnv ?? 'unknown'}</span>{' '}
-              environment.{' '}
+              environment
+              {aiStatus.diagnostics.commit && (
+                <> , commit <code style={{ color: C.text }}>{aiStatus.diagnostics.commit}</code></>
+              )}.{' '}
               {aiStatus.diagnostics.vercelEnv === 'preview' &&
                 'In Vercel, a variable saved for Production only is invisible here — tick Preview as well, then redeploy.'}
               {aiStatus.diagnostics.vercelEnv === 'production' &&
