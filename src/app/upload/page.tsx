@@ -6,7 +6,7 @@ import { ArrowLeft, ArrowRight, Upload, X, Zap, Scissors, Flame, Captions, Spark
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { setMedia, analyseFile, MediaEntry } from '@/lib/videoStore';
-import { capturePoster } from '@/lib/thumbnailStore';
+import { capturePoster, savePoster } from '@/lib/thumbnailStore';
 
 const PRESETS = [
   { Icon: Zap,        label: 'Make it faster',  fill: 'Make this video faster and remove all unnecessary pauses and dead air.' },
@@ -66,6 +66,7 @@ export default function UploadPage() {
         // Success — store blob URL and move to processing screen
         const objUrl = previewUrl ?? URL.createObjectURL(file);
         setMedia(data.projectId, { ...meta, objectUrl: objUrl });
+        if (thumbnail) savePoster(data.projectId, thumbnail);
         setProjectId(data.projectId);
         setStage('processing');
       } else if (res.status === 401) {

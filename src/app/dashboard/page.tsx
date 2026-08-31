@@ -3,6 +3,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Grid3x3, List, Plus, SlidersHorizontal, Pencil, Trash2, Check, X, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { useProjects, fmtDuration, fmtRelative, ProjectSummary } from '@/lib/useProjects';
+import { capturePoster, savePoster, loadPoster } from '@/lib/thumbnailStore';
+import { getMedia } from '@/lib/videoStore';
 
 const F = "'Inter Tight', Inter, system-ui, sans-serif";
 const C = {
@@ -183,6 +185,33 @@ function ProjectCard({ project, viewMode, onRequestDelete, onRename }: {
 }) {
   const [hovered,  setHovered ] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  const [poster,   setPoster  ] = useState(project.thumbnail || '');
+
+  // Poster resolution: server record → local cache → capture from in-tab media.
+  // A freshly captured frame is cached and pushed back to the server so the
+  // card keeps its thumbnail on every future visit and device.
+  useEffect(() => {
+    if (poster) return;
+
+    const cached = loadPoster(project.id);
+    if (cached) { setPoster(cached); return; }
+
+    const media = getMedia(project.id);
+    if (!media?.objectUrl || media.mediaType !== 'video') return;
+
+    let cancelled = false;
+    capturePoster(media.objectUrl).then(url => {
+      if (!url || cancelled) return;
+      setPoster(url);
+      savePoster(project.id, url);
+      fetch(`/api/projects/${project.id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ thumbnail: url }),
+      }).catch(() => { /* card still shows the local poster */ });
+    });
+    return () => { cancelled = true; };
+  }, [project.id, poster]);
   const badge   = STATUS_BADGE[project.status] ?? STATUS_BADGE.draft;
   const isReady = project.status === 'ready';
 
@@ -206,11 +235,11 @@ function ProjectCard({ project, viewMode, onRequestDelete, onRename }: {
         display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
         overflow: 'hidden',
       }}>
-        {project.thumbnail ? (
+        {poster ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={project.thumbnail}
+              src={poster}
               alt=""
               style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
             />
@@ -231,9 +260,9 @@ function ProjectCard({ project, viewMode, onRequestDelete, onRename }: {
           position: 'absolute', bottom: 6, right: 6,
           fontFamily: F, fontSize: viewMode === 'list' ? 8 : 9, fontWeight: 600,
           letterSpacing: '0.04em',
-          color: project.thumbnail ? 'rgba(255,255,255,0.92)' : C.dim,
-          background: project.thumbnail ? 'rgba(0,0,0,0.6)' : 'transparent',
-          padding: project.thumbnail ? '2px 6px' : 0,
+          color: poster ? 'rgba(255,255,255,0.92)' : C.dim,
+          background: poster ? 'rgba(0,0,0,0.6)' : 'transparent',
+          padding: poster ? '2px 6px' : 0,
           borderRadius: 5,
         }}>
           {project.aspectRatio}

@@ -27,7 +27,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const body = await req.json();
   // Only allow safe fields to be patched
-  const allowed = ['title', 'prompt', 'clips', 'status', 'aspectRatio', 'exportedAt'] as const;
+  const allowed = ['title', 'prompt', 'clips', 'status', 'aspectRatio', 'exportedAt', 'thumbnail'] as const;
   const patch: Record<string, unknown> = {};
   for (const key of allowed) {
     if (key in body) patch[key] = body[key];
