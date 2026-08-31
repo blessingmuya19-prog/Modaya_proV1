@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowRight, Upload, X, Zap, Scissors, Flame, Captions, Spark
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { setMedia, analyseFile, MediaEntry } from '@/lib/videoStore';
+import { capturePoster } from '@/lib/thumbnailStore';
 
 const PRESETS = [
   { Icon: Zap,        label: 'Make it faster',  fill: 'Make this video faster and remove all unnecessary pauses and dead air.' },
@@ -38,6 +39,10 @@ export default function UploadPage() {
       // Use already-analysed meta (or re-analyse if needed)
       const meta = detectedMeta ?? await analyseFile(file);
 
+      // Capture a poster frame so the project has a real thumbnail everywhere
+      const posterUrl = previewUrl ?? URL.createObjectURL(file);
+      const thumbnail = await capturePoster(posterUrl).catch(() => '');
+
       // Send only metadata — no file bytes (Vercel 4.5MB limit + read-only FS)
       // The blob URL stays in-browser for playback.
       const res = await fetch('/api/upload', {
@@ -51,6 +56,7 @@ export default function UploadPage() {
           durationS:   meta.durationS,
           width:       meta.width,
           height:      meta.height,
+          thumbnail,
         }),
       });
       let data: Record<string, string> = {};

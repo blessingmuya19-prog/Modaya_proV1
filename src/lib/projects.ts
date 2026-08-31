@@ -46,6 +46,7 @@ export function createProject(opts: {
   durationS?:  number;
   width?:      number;
   height?:     number;
+  thumbnail?:  string;
 }): Project {
   const now = new Date().toISOString();
   const dur = opts.durationS ?? 0;
@@ -57,6 +58,7 @@ export function createProject(opts: {
     status:      'uploading',
     durationS:   dur,
     aspectRatio: opts.aspectRatio,
+    thumbnail:   opts.thumbnail ?? '',
     prompt:      opts.prompt,
     clips:       [],
     aiHistory:   [{
@@ -101,6 +103,7 @@ export function summariseProject(p: Project) {
     status:      p.status,
     durationS:   p.durationS,
     aspectRatio: p.aspectRatio,
+    thumbnail:   p.thumbnail ?? '',
     sizeMb:      p.sizeMb,
     createdAt:   p.createdAt,
     updatedAt:   p.updatedAt,

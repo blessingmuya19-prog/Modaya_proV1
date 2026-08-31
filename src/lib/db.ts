@@ -54,6 +54,8 @@ export interface Project {
   updatedAt:   string;
   exportedAt:  string | null;
   sizeMb:      number;
+  /** Poster frame captured at upload, stored as a small JPEG data URL */
+  thumbnail:   string;
 }
 
 // ── Filesystem helpers — dev-only ─────────────────────────────────────────────

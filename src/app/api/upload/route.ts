@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
       height      = 0,
       sizeMb      = 0,
       prompt      = '',
+      thumbnail   = '',
     } = body as Record<string, string | number>;
 
     if (!filename) {
@@ -42,6 +43,12 @@ export async function POST(req: NextRequest) {
 
     const title = String(filename).replace(/\.[^.]+$/, '');
     const ar    = String(aspectRatio);
+
+    // Only accept a reasonably sized JPEG/PNG data URL as the poster frame
+    const rawThumb = String(thumbnail);
+    const thumb = /^data:image\/(jpeg|png);base64,/.test(rawThumb) && rawThumb.length < 400_000
+      ? rawThumb
+      : '';
 
     const project = createProject({
       userId:      user.id,
@@ -53,6 +60,7 @@ export async function POST(req: NextRequest) {
       durationS:   Number(durationS),
       width:       Number(width),
       height:      Number(height),
+      thumbnail:   thumb,
     });
 
     simulateProcessing(project.id, String(filename), Number(durationS), ar);

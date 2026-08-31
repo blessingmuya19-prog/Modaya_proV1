@@ -8,6 +8,7 @@ export interface ProjectSummary {
   status:      'uploading' | 'processing' | 'ready' | 'draft' | 'failed';
   durationS:   number;
   aspectRatio: string;
+  thumbnail:   string;
   sizeMb:      number;
   createdAt:   string;
   updatedAt:   string;

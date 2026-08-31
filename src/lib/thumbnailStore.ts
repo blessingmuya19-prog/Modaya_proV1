@@ -69,3 +69,50 @@ export function setProjectFrames(projectId: string, frames: string[]) {
 export function getProjectFrames(projectId: string): string[] {
   return projectFrames.get(projectId) ?? [];
 }
+
+/**
+ * Capture a single poster frame from a video, sized to preserve its real
+ * aspect ratio. Returns a JPEG data URL small enough to persist alongside
+ * the project record (~15–30 KB), or '' if the frame can't be read.
+ */
+export async function capturePoster(
+  videoUrl: string,
+  atS = 1,
+  maxW = 480,
+): Promise<string> {
+  return new Promise(resolve => {
+    const video = document.createElement('video');
+    video.src         = videoUrl;
+    video.muted       = true;
+    video.preload     = 'metadata';
+    video.crossOrigin = 'anonymous';
+
+    // Never hang the upload flow on a stubborn file
+    const bail = setTimeout(() => resolve(''), 6000);
+    const finish = (out: string) => { clearTimeout(bail); resolve(out); };
+
+    video.onloadedmetadata = () => {
+      // Grab a frame slightly in, so we skip black/fade-in first frames
+      video.currentTime = Math.min(atS, (video.duration || 2) * 0.25);
+    };
+
+    video.onseeked = () => {
+      try {
+        const vw = video.videoWidth  || 16;
+        const vh = video.videoHeight || 9;
+        const w  = Math.min(maxW, vw);
+        const h  = Math.round((w / vw) * vh);   // keep true aspect ratio
+
+        const canvas  = document.createElement('canvas');
+        canvas.width  = w;
+        canvas.height = h;
+        canvas.getContext('2d')!.drawImage(video, 0, 0, w, h);
+        finish(canvas.toDataURL('image/jpeg', 0.62));
+      } catch {
+        finish('');
+      }
+    };
+
+    video.onerror = () => finish('');
+  });
+}

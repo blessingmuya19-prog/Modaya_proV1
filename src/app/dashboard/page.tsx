@@ -200,14 +200,42 @@ function ProjectCard({ project, viewMode, onRequestDelete, onRename }: {
     >
       {/* Thumbnail */}
       <div style={{
-        background: 'linear-gradient(135deg, #0d1520, #1a1a25)', flexShrink: 0,
+        background: '#0A0E14', flexShrink: 0,
         height: viewMode === 'list' ? 52 : 120,
         width:  viewMode === 'list' ? 88 : '100%',
         display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
+        overflow: 'hidden',
       }}>
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, rgba(79,140,255,0.06), transparent)' }} />
-        <span style={{ fontFamily: F, fontSize: viewMode === 'list' ? 9 : 10, fontWeight: 600,
-          letterSpacing: '0.04em', color: C.dim }}>
+        {project.thumbnail ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={project.thumbnail}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            />
+            <div style={{ position: 'absolute', inset: 0,
+              background: 'linear-gradient(to top, rgba(0,0,0,0.45), transparent 55%)' }} />
+          </>
+        ) : (
+          <>
+            <div style={{ position: 'absolute', inset: 0,
+              background: 'linear-gradient(135deg, #0d1520, #1a1a25)' }} />
+            <div style={{ position: 'absolute', inset: 0,
+              background: 'linear-gradient(135deg, rgba(79,140,255,0.06), transparent)' }} />
+          </>
+        )}
+
+        {/* Format badge */}
+        <span style={{
+          position: 'absolute', bottom: 6, right: 6,
+          fontFamily: F, fontSize: viewMode === 'list' ? 8 : 9, fontWeight: 600,
+          letterSpacing: '0.04em',
+          color: project.thumbnail ? 'rgba(255,255,255,0.92)' : C.dim,
+          background: project.thumbnail ? 'rgba(0,0,0,0.6)' : 'transparent',
+          padding: project.thumbnail ? '2px 6px' : 0,
+          borderRadius: 5,
+        }}>
           {project.aspectRatio}
         </span>
       </div>
