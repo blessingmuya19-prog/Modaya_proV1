@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation';
 import { EditorShell, EditorClip, EditorAIMsg } from '@/components/editor/EditorShell';
 import { useToast } from '@/components/ui/Toast';
 import { getMedia } from '@/lib/videoStore';
-import { extractFrames, setProjectFrames } from '@/lib/thumbnailStore';
+import { extractFrames, setProjectFrames, capturePoster, savePoster, loadPoster } from '@/lib/thumbnailStore';
 
 const F = "'Inter Tight', Inter, system-ui, sans-serif";
 const C = { bg: '#050505', muted: '#737D8D', accent: '#4F8CFF' };
@@ -64,6 +64,21 @@ export default function EditorPage() {
           extractFrames(media.objectUrl, media.durationS, frameCount)
             .then(frames => setProjectFrames(id, frames))
             .catch(() => {});
+        }
+
+        // Back-fill the project poster if the server never got one at upload
+        if (media?.objectUrl && media.mediaType === 'video' && !data?.project?.thumbnail) {
+          const cached = loadPoster(id);
+          const work = cached ? Promise.resolve(cached) : capturePoster(media.objectUrl);
+          work.then(url => {
+            if (!url) return;
+            savePoster(id, url);
+            fetch(`/api/projects/${id}`, {
+              method:  'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body:    JSON.stringify({ thumbnail: url }),
+            }).catch(() => {});
+          }).catch(() => {});
         }
         setLoading(false);
       })

@@ -175,6 +175,13 @@ function RenameInput({ value, onSave, onCancel }: {
   );
 }
 
+/** Stable per-project gradient so a thumbnail-less card still looks intentional. */
+function placeholderBg(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360;
+  return `linear-gradient(135deg, hsl(${h} 42% 12%), hsl(${(h + 40) % 360} 38% 7%))`;
+}
+
 // ── Project card ──────────────────────────────────────────────────────────────
 
 function ProjectCard({ project, viewMode, onRequestDelete, onRename }: {
@@ -186,6 +193,7 @@ function ProjectCard({ project, viewMode, onRequestDelete, onRename }: {
   const [hovered,  setHovered ] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [poster,   setPoster  ] = useState(project.thumbnail || '');
+  const [mediaUrl, setMediaUrl] = useState('');
 
   // Poster resolution: server record → local cache → capture from in-tab media.
   // A freshly captured frame is cached and pushed back to the server so the
@@ -198,6 +206,9 @@ function ProjectCard({ project, viewMode, onRequestDelete, onRename }: {
 
     const media = getMedia(project.id);
     if (!media?.objectUrl || media.mediaType !== 'video') return;
+
+    // Show the video element immediately; canvas capture may still be running
+    setMediaUrl(media.objectUrl);
 
     let cancelled = false;
     capturePoster(media.objectUrl).then(url => {
@@ -246,12 +257,26 @@ function ProjectCard({ project, viewMode, onRequestDelete, onRename }: {
             <div style={{ position: 'absolute', inset: 0,
               background: 'linear-gradient(to top, rgba(0,0,0,0.45), transparent 55%)' }} />
           </>
+        ) : mediaUrl ? (
+          // Canvas capture unavailable (e.g. HEVC) — let the browser paint the frame
+          <video
+            src={`${mediaUrl}#t=0.5`}
+            muted
+            playsInline
+            preload="metadata"
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
         ) : (
+          // Nothing decodable available — deterministic placeholder, never a blank box
           <>
-            <div style={{ position: 'absolute', inset: 0,
-              background: 'linear-gradient(135deg, #0d1520, #1a1a25)' }} />
-            <div style={{ position: 'absolute', inset: 0,
-              background: 'linear-gradient(135deg, rgba(79,140,255,0.06), transparent)' }} />
+            <div style={{ position: 'absolute', inset: 0, background: placeholderBg(project.id) }} />
+            <span style={{
+              fontFamily: F, fontWeight: 700,
+              fontSize: viewMode === 'list' ? 18 : 30,
+              color: 'rgba(255,255,255,0.16)', letterSpacing: '-0.03em', userSelect: 'none',
+            }}>
+              {(project.title || '?').trim().charAt(0).toUpperCase()}
+            </span>
           </>
         )}
 
@@ -260,9 +285,9 @@ function ProjectCard({ project, viewMode, onRequestDelete, onRename }: {
           position: 'absolute', bottom: 6, right: 6,
           fontFamily: F, fontSize: viewMode === 'list' ? 8 : 9, fontWeight: 600,
           letterSpacing: '0.04em',
-          color: poster ? 'rgba(255,255,255,0.92)' : C.dim,
-          background: poster ? 'rgba(0,0,0,0.6)' : 'transparent',
-          padding: poster ? '2px 6px' : 0,
+          color: 'rgba(255,255,255,0.92)',
+          background: 'rgba(0,0,0,0.6)',
+          padding: '2px 6px',
           borderRadius: 5,
         }}>
           {project.aspectRatio}
