@@ -2,7 +2,7 @@
 import React, { useState, useEffect, FormEvent } from 'react';
 import { useAuth } from '@/lib/useAuth';
 import { useToast } from '@/components/ui/Toast';
-import { Check, ChevronRight, Eye, EyeOff, HardDrive, Zap, Shield } from 'lucide-react';
+import { Check, ChevronRight, Eye, EyeOff, HardDrive, Zap, Shield, Sparkles, X } from 'lucide-react';
 
 const F = "'Inter Tight', Inter, system-ui, sans-serif";
 const C = {
@@ -155,6 +155,54 @@ export default function SettingsPage() {
   const strengthLabel = ['', 'Weak', 'Fair', 'Strong'][strength];
   const strengthColor = ['', '#f87171', '#fbbf24', '#4ade80'][strength];
 
+  /* ── AI provider key ── */
+  const [aiProvider, setAiProvider] = useState('groq');
+  const [aiKey,      setAiKey     ] = useState('');
+  const [showKey,    setShowKey   ] = useState(false);
+  const [aiBusy,     setAiBusy    ] = useState(false);
+  const [aiStatus,   setAiStatus  ] = useState<{
+    configured: boolean; provider: string; model: string; keyHint: string; persisted: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    fetch('/api/settings/ai')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (d) setAiStatus(d); })
+      .catch(() => {});
+  }, []);
+
+  const saveAiKey = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!aiKey.trim()) { addToast('Paste your API key first.', 'error'); return; }
+    setAiBusy(true);
+    try {
+      const res  = await fetch('/api/settings/ai', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ provider: aiProvider, key: aiKey.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) { addToast(data.error ?? 'Could not verify that key.', 'error'); return; }
+      setAiStatus(data);
+      setAiKey('');
+      addToast(`Connected to ${data.provider}. The AI editor is live.`, 'success');
+    } catch {
+      addToast('Could not reach the server.', 'error');
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  const removeAiKey = async () => {
+    setAiBusy(true);
+    try {
+      const res = await fetch('/api/settings/ai', { method: 'DELETE' });
+      if (res.ok) { setAiStatus(await res.json()); addToast('Key removed.', 'success'); }
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
   const saveProfile = async (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim()) { addToast('Name cannot be empty.', 'error'); return; }
@@ -248,6 +296,84 @@ export default function SettingsPage() {
             <SaveBtn loading={savingPw} saved={savedPw} />
           </div>
         </form>
+      </Section>
+
+      {/* ── AI provider ── */}
+      <Section title="AI editor"
+        description="Connect a free AI provider so the editor understands requests in your own words. Without one it still works, using measurement-based rules.">
+
+        {aiStatus?.configured ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(74,222,128,0.1)',
+              border: '1px solid rgba(74,222,128,0.25)', display: 'flex',
+              alignItems: 'center', justifyContent: 'center' }}>
+              <Sparkles size={16} color={C.success} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: F, fontSize: 13, fontWeight: 600, color: C.text }}>
+                Connected to {aiStatus.provider}
+              </div>
+              <div style={{ fontFamily: F, fontSize: 12, color: C.muted }}>
+                {aiStatus.model}{aiStatus.keyHint ? ` · key ${aiStatus.keyHint}` : ''}
+                {aiStatus.persisted ? ' · saved locally' : ' · this session only'}
+              </div>
+            </div>
+            <button onClick={removeAiKey} disabled={aiBusy}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 11px',
+                background: 'none', border: `1px solid ${C.b3}`, borderRadius: 8,
+                fontFamily: F, fontSize: 12, color: C.muted, cursor: 'pointer' }}>
+              <X size={12} /> Remove
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={saveAiKey} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <Field label="Provider">
+              <select value={aiProvider} onChange={e => setAiProvider(e.target.value)}
+                style={{ width: '100%', padding: '9px 12px', background: C.s2,
+                  border: `1px solid ${C.b3}`, borderRadius: 9, color: C.text,
+                  fontFamily: F, fontSize: 13, outline: 'none' }}>
+                <option value="groq">Groq — free, fastest</option>
+                <option value="gemini">Google Gemini — free tier</option>
+                <option value="openrouter">OpenRouter — free models</option>
+              </select>
+            </Field>
+
+            <Field label="API key">
+              <TInput type={showKey ? 'text' : 'password'} value={aiKey} onChange={setAiKey}
+                placeholder={aiProvider === 'groq' ? 'gsk_…' : 'Paste your key'}
+                suffix={
+                  <button type="button" onClick={() => setShowKey(s => !s)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer',
+                      color: C.muted, display: 'flex', padding: 0 }}>
+                    {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                }
+              />
+            </Field>
+
+            <p style={{ fontFamily: F, fontSize: 12, color: C.dim, margin: 0, paddingLeft: 156, lineHeight: 1.6 }}>
+              Get a free key at{' '}
+              <a href={
+                aiProvider === 'groq'   ? 'https://console.groq.com/keys'
+              : aiProvider === 'gemini' ? 'https://aistudio.google.com/apikey'
+              :                           'https://openrouter.ai/keys'}
+                target="_blank" rel="noreferrer" style={{ color: C.accent }}>
+                {aiProvider === 'groq'   ? 'console.groq.com/keys'
+               : aiProvider === 'gemini' ? 'aistudio.google.com/apikey'
+               :                           'openrouter.ai/keys'}
+              </a>. It is verified before saving, kept on the server, and never shown again.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+              <button type="submit" disabled={aiBusy}
+                style={{ padding: '8px 18px', background: C.accent, border: 'none', borderRadius: 9,
+                  fontFamily: F, fontSize: 13, fontWeight: 600, color: '#fff',
+                  cursor: aiBusy ? 'default' : 'pointer', opacity: aiBusy ? 0.6 : 1 }}>
+                {aiBusy ? 'Verifying…' : 'Connect'}
+              </button>
+            </div>
+          </form>
+        )}
       </Section>
 
       {/* ── Plan ── */}

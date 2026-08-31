@@ -189,11 +189,13 @@ export async function chat(
   const call = (): Promise<string | null> => {
     switch (cfg.name) {
       case 'groq':
-        return openAiCompatible('https://api.groq.com/openai/v1', env('GROQ_API_KEY'), cfg.model, messages, json);
+        return openAiCompatible(env('GROQ_BASE_URL') || 'https://api.groq.com/openai/v1',
+          env('GROQ_API_KEY'), cfg.model, messages, json);
       case 'gemini':
         return gemini(env('GEMINI_API_KEY') || env('GOOGLE_API_KEY'), cfg.model, messages, json);
       case 'openrouter':
-        return openAiCompatible('https://openrouter.ai/api/v1', env('OPENROUTER_API_KEY'), cfg.model, messages, json, {
+        return openAiCompatible(env('OPENROUTER_BASE_URL') || 'https://openrouter.ai/api/v1',
+          env('OPENROUTER_API_KEY'), cfg.model, messages, json, {
           'HTTP-Referer': env('APP_URL') || 'https://modaya.app',
           'X-Title':      'Modaya',
         });
