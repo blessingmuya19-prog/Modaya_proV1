@@ -142,9 +142,21 @@ const TRACK_ORDER = ['text','video','aud1','aud2','subs'];
 
 const DEFAULT_DURATION = 60;
 
+/* A single video track covering the whole clip.
+   Used until the server's analysis returns real clips, so the ruler, playhead,
+   scrubbing and the frame strip all work from the moment the editor opens
+   instead of being replaced by a spinner. */
+function baseTracks(totalS: number, label: string) {
+  return [{
+    id: 'video',
+    ...TRACK_META.video,
+    clips: [{ s: 0, e: totalS, label }],
+  }];
+}
+
 /* ── build track rows from real API clips — no fake fallback ── */
 function buildTracks(clips: EditorClip[], totalS: number) {
-  if (!clips || clips.length === 0) return []; // empty = show waiting state
+  if (!clips || clips.length === 0) return []; // empty = caller substitutes baseTracks
 
   // Group clips by trackId
   const byTrack: Record<string, EditorClip[]> = {};
@@ -966,9 +978,10 @@ const vB:React.CSSProperties = { width:30,height:30,display:'flex',alignItems:'c
   background:'none',border:'none',cursor:'pointer',color:C.muted,borderRadius:7,transition:'all 100ms' };
 
 /* ──────────────── TIMELINE ──────────────── */
-function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, tracks, highlightIds, projectId }:
+function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, tracks, highlightIds, projectId, analysing }:
   { playheadS:number; setPlayheadS:(s:number)=>void; playing:boolean; setPlaying:(b:boolean)=>void;
-    totalS:number; tracks: ReturnType<typeof buildTracks>; highlightIds?: string[]; projectId?: string }) {
+    totalS:number; tracks: ReturnType<typeof buildTracks>; highlightIds?: string[]; projectId?: string;
+    analysing?: boolean }) {
 
   const [frames, setFrames] = useState<string[]>([]);
   useEffect(() => {
@@ -1225,20 +1238,20 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
             setZoom(Math.max(0.5, (w * 0.92) / totalS));
           }
         }} style={tB} title="Fit to window"><Maximize2 size={12}/></button>
+
+        {analysing && (
+          <div style={{ marginLeft:8, display:'flex', alignItems:'center', gap:6 }}>
+            <div style={{ width:11,height:11,borderRadius:'50%',
+              border:`2px solid ${C.accent}`,borderTopColor:'transparent',
+              animation:'spin-ai 1s linear infinite' }} />
+            <span style={{ fontFamily:F, fontSize:10, color:C.muted }}>Analysing…</span>
+          </div>
+        )}
       </div>
 
       {/* ── Two-column layout ── */}
       <div style={{ flex:1, display:'flex', overflow:'hidden', minHeight:0 }}>
 
-        {tracks.length === 0 && (
-          <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center',
-            flexDirection:'column', gap:8 }}>
-            <div style={{ width:32,height:32,borderRadius:'50%',
-              border:`2px solid ${C.accent}`,borderTopColor:'transparent',
-              animation:'spin-ai 1s linear infinite' }} />
-            <span style={{ fontFamily:F, fontSize:13, color:C.muted }}>Analysing your media…</span>
-          </div>
-        )}
 
         {/* Fixed label column */}
         {tracks.length > 0 && <div style={{ width:LABEL_W, flexShrink:0, background:C.s2,
@@ -1352,7 +1365,11 @@ export function EditorShell({
 
   const [liveClips,    setLiveClips   ] = useState<EditorClip[]>(clips);
   const [highlightIds, setHighlightIds] = useState<string[]>([]);
-  const tracks  = buildTracks(liveClips.length ? liveClips : clips, totalS);
+  const tracks = useMemo(() => {
+    const built = buildTracks(liveClips.length ? liveClips : clips, totalS);
+    return built.length ? built : baseTracks(totalS, mediaEntry?.filename ?? 'Video');
+  }, [liveClips, clips, totalS, mediaEntry?.filename]);
+  const analysing = !(liveClips.length || clips.length);
 
   // When parent re-fetches clips (e.g. after navigation), sync
   useEffect(() => { setLiveClips(clips); }, [clips]);
@@ -1470,7 +1487,7 @@ export function EditorShell({
           {/* Timeline — zone 5, delay 480ms */}
           <FadeUp delay={480} style={{ flexShrink:0 }}>
             <div className="editor-timeline">
-              <TimelinePanel playheadS={phS} setPlayheadS={setPhS} playing={playing} setPlaying={setPlaying} totalS={totalS} tracks={tracks} highlightIds={highlightIds} projectId={projectId} />
+              <TimelinePanel playheadS={phS} setPlayheadS={setPhS} playing={playing} setPlaying={setPlaying} totalS={totalS} tracks={tracks} highlightIds={highlightIds} projectId={projectId} analysing={analysing} />
             </div>
           </FadeUp>
         </div>

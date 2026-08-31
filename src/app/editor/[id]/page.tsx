@@ -144,6 +144,30 @@ export default function EditorPage() {
       });
   }, [id]);
 
+  /* The server generates the clip list a few seconds after upload. The editor
+     used to fetch once, so a project opened before analysis finished showed an
+     empty timeline until a manual refresh. Poll until the clips land. */
+  useEffect(() => {
+    if (!id || !project) return;
+    if (project.status !== 'processing' && project.clips.length > 0) return;
+
+    let tries = 0;
+    const iv = setInterval(async () => {
+      tries++;
+      try {
+        const r = await fetch(`/api/projects/${id}`);
+        const d = r.ok ? await r.json() : null;
+        const p = d?.project;
+        if (p && (p.clips?.length || p.status === 'ready')) {
+          setProject(prev => prev ? { ...prev, status: p.status, clips: p.clips ?? [] } : prev);
+          if (p.clips?.length) clearInterval(iv);
+        }
+      } catch { /* keep trying */ }
+      if (tries >= 30) clearInterval(iv);      // give up after ~60s
+    }, 2000);
+    return () => clearInterval(iv);
+  }, [id, project?.status, project?.clips.length]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   // onAIAction is kept for compatibility but the panel now handles its own API call
   const handleAIAction = (_msg: string) => { void _msg; };
 
