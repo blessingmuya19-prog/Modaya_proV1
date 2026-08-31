@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { Logo, LogoMark } from '../ui/Logo';
 import { ExportModal } from './ExportModal';
@@ -177,7 +177,7 @@ const ICON_NAV = [
   { icon: SubIcon,            label: 'Subtitles'   },
 ];
 
-function IconNav({ active, setActive }: { active:string; setActive:(s:string)=>void }) {
+function IconNavBase({ active, setActive }: { active:string; setActive:(s:string)=>void }) {
   return (
     <div style={{ width:64, flexShrink:0, background:C.surface, borderRight:`1px solid ${C.b}`,
       display:'flex', flexDirection:'column', alignItems:'center', paddingTop:10, gap:1, overflowY:'auto' }}>
@@ -207,6 +207,8 @@ function IconNav({ active, setActive }: { active:string; setActive:(s:string)=>v
 }
 
 /* ──────────────── PROPERTIES PANEL ──────────────── */
+const IconNav = React.memo(IconNavBase);
+
 function NI({ label, val }: { label:string; val:number }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:3, background:C.s3,
@@ -461,7 +463,7 @@ function UploadsPanel() {
   );
 }
 
-function PropertiesPanel({ tab }:{ tab:string }) {
+function PropertiesPanelBase({ tab }:{ tab:string }) {
   const [fs,  setFs ] = useState(20);
   const [bld, setBld] = useState(false);
   const [itl, setItl] = useState(false);
@@ -597,6 +599,8 @@ interface Msg {
   undoable?: boolean;
 }
 
+const PropertiesPanel = React.memo(PropertiesPanelBase);
+
 interface AIChatPanelProps {
   projectId:      string;
   initialHistory?: EditorAIMsg[];
@@ -604,7 +608,7 @@ interface AIChatPanelProps {
   onEditApplied?: (affectedIds: string[], newClips: EditorClip[]) => void;
 }
 
-function AIChatPanel({ projectId, initialHistory, totalS, onEditApplied }: AIChatPanelProps) {
+function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied }: AIChatPanelProps) {
   const [msgs,    setMsgs   ] = useState<Msg[]>(() => {
     if (initialHistory && initialHistory.length > 0) {
       return initialHistory.map(m => ({ role: m.role, text: m.text }));
@@ -816,6 +820,8 @@ function AIChatPanel({ projectId, initialHistory, totalS, onEditApplied }: AICha
 }
 
 /* ──────────────── VIDEO PREVIEW ──────────────── */
+const AIChatPanel = React.memo(AIChatPanelBase);
+
 function VideoPreview({ playheadS, playing, onToggle, onSeek, onStop, totalS, videoUrl, aspectRatio }:
   { playheadS:number; playing:boolean; onToggle:()=>void; onSeek:(s:number)=>void; onStop:()=>void;
     totalS:number; videoUrl?:string|null; aspectRatio?:string }) {
@@ -848,10 +854,16 @@ function VideoPreview({ playheadS, playing, onToggle, onSeek, onStop, totalS, vi
     const v = videoRef.current;
     if (!v || !playing) return;
     let raf = 0;
+    let lastReport = -1;
     const tick = () => {
       if (!v.paused && !v.seeking) {
-        echoedS.current = v.currentTime;
-        onSeek(v.currentTime);
+        const t = v.currentTime;
+        // ~30 updates/sec is smooth on screen but halves the React work
+        if (Math.abs(t - lastReport) >= 0.033) {
+          lastReport      = t;
+          echoedS.current = t;
+          onSeek(t);
+        }
       }
       raf = requestAnimationFrame(tick);
     };
@@ -995,6 +1007,19 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
   const ticks: {s:number;major:boolean}[] = [];
   for (let s = 0; s <= totalS; s += interval/5) ticks.push({s, major: s%interval===0});
 
+  /* Ruler marks rebuild only on zoom / duration change — not on every frame of
+     playback, which is what made the whole timeline re-render at 60fps. */
+  const tickMarks = useMemo(() => ticks.map((t,i)=>(
+    <div key={i} style={{ position:'absolute', left:t.s*zoom, top:0, bottom:0 }}>
+      <div style={{ position:'absolute', bottom:0, width:1,
+        height:t.major?10:5, background:t.major?C.b3:C.b2 }} />
+      {t.major && t.s>0 && (
+        <span style={{ position:'absolute', bottom:2, left:2,
+          ...ty.tick, whiteSpace:'nowrap' as const }}>{fmt(t.s)}</span>
+      )}
+    </div>
+  )), [zoom, totalS]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   /* Convert a clientX to seconds, accounting for scroll */
   const clientXToS = useCallback((clientX: number): number => {
     if (!rulerRef.current) return 0;
@@ -1043,9 +1068,15 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
      When the playhead moves past either edge of the visible window — during
      playback or after a jump — scroll the timeline so it stays on screen.
      Skipped while the user is dragging, so scrubbing never fights the scroll. */
+  const lastFollow = useRef(0);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || dragging.current) return;
+
+    // Reading scroll geometry forces layout — cap it to ~8×/sec instead of 60
+    const now = performance.now();
+    if (now - lastFollow.current < 120) return;
+    lastFollow.current = now;
 
     const viewW  = el.clientWidth - LABEL_W;
     const left   = el.scrollLeft;
@@ -1129,16 +1160,7 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
               style={{ height:RULER_H, position:'sticky', top:0, background:C.s2,
                 borderBottom:`1px solid ${C.b}`, zIndex:20, cursor:'col-resize', width:'100%' }}>
 
-              {ticks.map((t,i)=>(
-                <div key={i} style={{ position:'absolute', left:t.s*zoom, top:0, bottom:0 }}>
-                  <div style={{ position:'absolute', bottom:0, width:1,
-                    height:t.major?10:5, background:t.major?C.b3:C.b2 }} />
-                  {t.major && t.s>0 && (
-                    <span style={{ position:'absolute', bottom:2, left:2,
-                      ...ty.tick, whiteSpace:'nowrap' as const }}>{fmt(t.s)}</span>
-                  )}
-                </div>
-              ))}
+              {tickMarks}
 
               {/* ── Ruler playhead triangle — draggable ── */}
               <div
@@ -1300,6 +1322,8 @@ export function EditorShell({
   }, []);
 
   const [tab,    setTab   ] = useState('Text');
+  const togglePlay = useCallback(() => setPlaying(p => !p), []);
+  const stopPlay   = useCallback(() => setPlaying(false), []);
   const [expOpen,setExpOpen] = useState(false);
   const [playing,setPlaying] = useState(false);
   const [phS,    setPhS   ] = useState(Math.min(420, totalS * 0.25));
@@ -1396,7 +1420,7 @@ export function EditorShell({
               </div>
             </FadeUp>
             <FadeUp delay={360} style={{ flex:1, minWidth:0, display:'flex' }}>
-              <VideoPreview playheadS={phS} playing={playing} onToggle={()=>setPlaying(p=>!p)} onStop={()=>setPlaying(false)} onSeek={setPhS} totalS={totalS} videoUrl={videoUrl} aspectRatio={videoAspect} />
+              <VideoPreview playheadS={phS} playing={playing} onToggle={togglePlay} onStop={stopPlay} onSeek={setPhS} totalS={totalS} videoUrl={videoUrl} aspectRatio={videoAspect} />
             </FadeUp>
           </div>
 
