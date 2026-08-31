@@ -61,7 +61,11 @@ export default function EditorPage() {
         const media = getMedia(id);
         if (media?.objectUrl && media.durationS > 0) {
           const frameCount = Math.min(40, Math.max(8, Math.ceil(media.durationS / 5)));
-          extractFrames(media.objectUrl, media.durationS, frameCount)
+          // Publish partial results so the strip fills in as frames decode
+          extractFrames(
+            media.objectUrl, media.durationS, frameCount, 96, 54,
+            partial => setProjectFrames(id, [...partial]),
+          )
             .then(frames => setProjectFrames(id, frames))
             .catch(() => {});
         }

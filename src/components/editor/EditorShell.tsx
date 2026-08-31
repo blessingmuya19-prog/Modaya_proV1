@@ -830,14 +830,34 @@ function VideoPreview({ playheadS, playing, onToggle, onSeek, onStop, totalS, vi
     else         { v.pause(); }
   }, [playing]);
 
-  // Sync seek from timeline (only when paused or big jump)
+  // Seek the element only when the change came from OUTSIDE playback (a scrub,
+  // a jump, a click on the timeline). While playing, the video owns the clock —
+  // writing currentTime from our own time reports is what caused the stutter.
+  const echoedS = useRef(-1);
   useEffect(() => {
     const v = videoRef.current;
     if (!v || !isFinite(playheadS)) return;
-    if (Math.abs(v.currentTime - playheadS) > 0.5) {
+    if (Math.abs(playheadS - echoedS.current) < 0.05) return;   // our own echo
+    if (Math.abs(v.currentTime - playheadS) > 0.25) {
       v.currentTime = playheadS;
     }
   }, [playheadS]);
+
+  // Smooth 60fps position reporting without touching currentTime
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || !playing) return;
+    let raf = 0;
+    const tick = () => {
+      if (!v.paused && !v.seeking) {
+        echoedS.current = v.currentTime;
+        onSeek(v.currentTime);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [playing, onSeek]);
 
   // Derive CSS aspect ratio from the stored ratio string
   const cssAspect = aspectRatio === '9:16' ? '9/16'
@@ -869,10 +889,6 @@ function VideoPreview({ playheadS, playing, onToggle, onSeek, onStop, totalS, vi
               style={{ width:'100%', height:'100%', objectFit:'contain', display:'block' }}
               playsInline
               preload="metadata"
-              onTimeUpdate={e => {
-                // Feed current time back to timeline when playing
-                if (playing) onSeek(e.currentTarget.currentTime);
-              }}
               onEnded={() => { onStop(); onSeek(0); /* stop + reset to start */ }}
             />
           ) : (
@@ -941,9 +957,14 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
   const [frames, setFrames] = useState<string[]>([]);
   useEffect(() => {
     if (!projectId) return;
-    const check = () => { const f = getProjectFrames(projectId); if (f.length > 0) setFrames(f); };
+    // Poll while frames stream in from the parallel extractor, then stop
+    const check = () => {
+      const f = getProjectFrames(projectId);
+      if (f.length > 0) setFrames([...f]);
+      if (f.length > 0 && f.every(Boolean)) clearInterval(id);
+    };
     check();
-    const id = setInterval(check, 800);
+    const id = setInterval(check, 250);
     return () => clearInterval(id);
   }, [projectId]);
 
@@ -1017,6 +1038,27 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
   }, [playing, setPlaying, setPlayheadS, clientXToS]);
 
   const phPx = playheadS * zoom;
+
+  /* ── Keep the playhead in view ──
+     When the playhead moves past either edge of the visible window — during
+     playback or after a jump — scroll the timeline so it stays on screen.
+     Skipped while the user is dragging, so scrubbing never fights the scroll. */
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || dragging.current) return;
+
+    const viewW  = el.clientWidth - LABEL_W;
+    const left   = el.scrollLeft;
+    const margin = Math.min(80, viewW * 0.12);       // comfort gap at the edges
+
+    if (phPx < left + margin) {
+      // Jumped backwards / off the left edge — put it a little in from the left
+      el.scrollTo({ left: Math.max(0, phPx - margin), behavior: 'smooth' });
+    } else if (phPx > left + viewW - margin) {
+      // Ran off the right edge — bring it to ~a third from the left and play on
+      el.scrollTo({ left: Math.max(0, phPx - viewW / 3), behavior: 'auto' });
+    }
+  }, [phPx]);
 
   return (
     <div style={{ height:'clamp(220px,30vh,480px)', background:C.surface, borderTop:`1px solid ${C.b}`,
@@ -1263,8 +1305,11 @@ export function EditorShell({
   const [phS,    setPhS   ] = useState(Math.min(420, totalS * 0.25));
   const raf = useRef<number|null>(null);
 
+  // Synthetic clock for the mockup only. With a real video loaded the <video>
+  // element drives the playhead, so running this too made the two clocks drift
+  // and forced corrective seeks mid-playback.
   useEffect(()=>{
-    if (!playing) { if (raf.current) cancelAnimationFrame(raf.current); return; }
+    if (!playing || videoUrl) { if (raf.current) cancelAnimationFrame(raf.current); return; }
     let last = performance.now();
     const tick = (now:number) => {
       const dt = (now-last)/1000; last=now;
@@ -1273,7 +1318,7 @@ export function EditorShell({
     };
     raf.current = requestAnimationFrame(tick);
     return ()=>{ if(raf.current) cancelAnimationFrame(raf.current); };
-  },[playing, totalS]);
+  },[playing, totalS, videoUrl]);
 
   return (
     <div style={{ height:'100vh', minHeight:'700px', display:'flex', flexDirection:'column',

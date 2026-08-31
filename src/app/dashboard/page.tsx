@@ -248,14 +248,26 @@ function ProjectCard({ project, viewMode, onRequestDelete, onRename }: {
       }}>
         {poster ? (
           <>
+            {/* Blurred fill so a vertical clip keeps its shape instead of being cropped */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={poster}
               alt=""
-              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              aria-hidden
+              style={{
+                position: 'absolute', inset: 0, width: '100%', height: '100%',
+                objectFit: 'cover', filter: 'blur(14px) brightness(0.45)', transform: 'scale(1.15)',
+              }}
             />
-            <div style={{ position: 'absolute', inset: 0,
-              background: 'linear-gradient(to top, rgba(0,0,0,0.45), transparent 55%)' }} />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={poster}
+              alt=""
+              style={{
+                position: 'relative', maxWidth: '100%', maxHeight: '100%',
+                width: 'auto', height: '100%', objectFit: 'contain', display: 'block',
+              }}
+            />
           </>
         ) : mediaUrl ? (
           // Canvas capture unavailable (e.g. HEVC) — let the browser paint the frame
@@ -264,7 +276,8 @@ function ProjectCard({ project, viewMode, onRequestDelete, onRename }: {
             muted
             playsInline
             preload="metadata"
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            style={{ maxWidth: '100%', maxHeight: '100%', height: '100%', width: 'auto',
+              objectFit: 'contain', display: 'block' }}
           />
         ) : (
           // Nothing decodable available — deterministic placeholder, never a blank box

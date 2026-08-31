@@ -12,51 +12,70 @@ export interface ThumbnailSet {
   height:  number;
 }
 
-/** Extract `count` evenly-spaced frames from a video URL */
+/**
+ * Extract `count` evenly-spaced frames from a video.
+ *
+ * Runs several decoders in parallel and reports frames as they arrive, so the
+ * timeline can paint a partial strip immediately instead of waiting for the
+ * whole pass. Sequential extraction of a long clip took many seconds; this
+ * cuts wall-clock time by roughly the worker count.
+ */
 export async function extractFrames(
   videoUrl: string,
   durationS: number,
   count: number,
-  thumbW = 120,
-  thumbH = 68,
+  thumbW = 96,
+  thumbH = 54,
+  onProgress?: (frames: string[]) => void,
 ): Promise<string[]> {
-  return new Promise(resolve => {
+  if (!videoUrl || count <= 0) return [];
+
+  const frames: string[] = new Array(count).fill('');
+  const WORKERS = Math.min(4, count);          // parallel decoders
+  let settled = 0;
+
+  const timeFor = (i: number) => (i / Math.max(1, count - 1)) * durationS * 0.92;
+
+  const runWorker = (startIdx: number) => new Promise<void>(resolve => {
     const video = document.createElement('video');
-    video.src      = videoUrl;
-    video.muted    = true;
-    video.preload  = 'metadata';
-    video.crossOrigin = 'anonymous';
+    video.src         = videoUrl;
+    video.muted       = true;
+    video.playsInline = true;
+    video.preload     = 'auto';
 
     const canvas  = document.createElement('canvas');
     canvas.width  = thumbW;
     canvas.height = thumbH;
-    const ctx     = canvas.getContext('2d')!;
+    const ctx = canvas.getContext('2d')!;
 
-    const frames: string[] = [];
-    let idx = 0;
+    let idx = startIdx;
+    const finish = () => { video.src = ''; video.removeAttribute('src'); resolve(); };
+    const guard  = setTimeout(finish, 20000);   // never hang the editor
 
-    const seekNext = () => {
-      if (idx >= count) { resolve(frames); return; }
-      // Spread frames across 90% of the duration so we don't hit black frames at the end
-      const t = (idx / Math.max(1, count - 1)) * durationS * 0.9;
-      video.currentTime = t;
+    const next = () => {
+      if (idx >= count) { clearTimeout(guard); finish(); return; }
+      video.currentTime = Math.min(timeFor(idx), Math.max(0, durationS - 0.05));
     };
 
     video.onseeked = () => {
       try {
         ctx.drawImage(video, 0, 0, thumbW, thumbH);
-        frames.push(canvas.toDataURL('image/jpeg', 0.6));
-      } catch {
-        frames.push(''); // cross-origin or decode error — blank
-      }
-      idx++;
-      seekNext();
+        frames[idx] = canvas.toDataURL('image/jpeg', 0.5);
+      } catch { /* leave blank */ }
+      settled++;
+      onProgress?.(frames);                      // stream partial results
+      idx += WORKERS;                            // interleave across workers
+      next();
     };
 
-    video.onerror = () => resolve(frames);
-
-    video.onloadedmetadata = () => seekNext();
+    video.onerror         = () => { clearTimeout(guard); finish(); };
+    video.onloadeddata    = () => next();
+    video.load();
   });
+
+  await Promise.all(Array.from({ length: WORKERS }, (_, w) => runWorker(w)));
+  if (settled === 0) return [];
+  return frames;
 }
 
 /** Store pre-extracted thumbnails for a project */
