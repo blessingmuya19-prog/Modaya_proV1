@@ -912,18 +912,7 @@ function VideoPreview({ playheadS, playing, onToggle, onSeek, onStop, totalS, vi
 
       {/* Transport bar */}
       <div style={{ borderTop:`1px solid ${C.b}`, background:C.surface, flexShrink:0 }}>
-        {/* Scrub bar */}
-        <div
-          style={{ height:3, background:C.b2, cursor:'col-resize', position:'relative' }}
-          onClick={e => {
-            const r = e.currentTarget.getBoundingClientRect();
-            onSeek(((e.clientX - r.left) / r.width) * totalS);
-          }}
-        >
-          <div style={{ position:'absolute', inset:0, width:`${(playheadS/totalS)*100}%`,
-            background:C.accent, borderRadius:9999, transition:'width 80ms linear' }} />
-        </div>
-        {/* Controls row */}
+        {/* Controls row — scrubbing happens on the timeline below */}
         <div style={{ height:44, display:'flex', alignItems:'center', padding:'0 16px', gap:8 }}>
           <span style={{ ...ty.playTime, minWidth:44 }}>{fmt(playheadS)}</span>
           <div style={{ flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:10 }}>
