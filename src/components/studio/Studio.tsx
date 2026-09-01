@@ -27,6 +27,7 @@ import {
   stagesForRun, markActive, markDone, pipelineProgress, referenceMatch, resultHeadline,
   type StageState, type StageId,
 } from '@/lib/studio/pipeline';
+import { refineProfile } from '@/lib/studio/refine';
 import type { EditorClip } from '../editor/EditorShell';
 
 const F = "'Inter Tight', Inter, system-ui, sans-serif";
@@ -83,7 +84,6 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
   const [refName, setRefName] = useState<string | null>(null);
   const [match, setMatch] = useState(0);
   const [headline, setHeadline] = useState('');
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [plan, setPlan] = useState<EditPlan | null>(null);
@@ -99,6 +99,54 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
   const [chatBusy, setChatBusy] = useState(false);
   const refInput = useRef<HTMLInputElement>(null);
   const cancelRef = useRef(false);
+  /** Everything a regeneration needs, captured on the first run. */
+  const ctxRef = useRef<{
+    blob: Blob; durationS: number; onsets: number[]; interest: number[];
+    baseProfile: StyleProfile; hasRef: boolean; captionsWanted: boolean;
+    sourceName?: string;
+  } | null>(null);
+  /** The profile currently driving the edit (reference/default, then refined). */
+  const profileRef = useRef<StyleProfile | null>(null);
+  const seedRef = useRef(1);
+  const matchRef = useRef(0);
+
+  /** Build the EditPlan from the current profile and push it to the preview.
+   *  Shared by the first run, Regenerate and every chat refinement. Returns
+   *  the plan plus the grounded reference-match score. */
+  const applyPlan = useCallback((profile: StyleProfile, seed: number): { plan: EditPlan; match: number } | null => {
+    const ctx = ctxRef.current;
+    if (!ctx) return null;
+    const editPlan = generateEditPlan({
+      profile, durationS: ctx.durationS, sourceName: ctx.sourceName,
+      onsets: ctx.onsets, interest: ctx.interest, seed,
+    });
+    setPlan(editPlan);
+    const mapped = editPlan.clips.map(clipToEditor);
+    const layer: StyleLayer = {};
+    for (const c of editPlan.clips) {
+      layer[c.id] = { sourceIn: c.sourceIn, transform: c.transform, effects: c.effects };
+    }
+    setClips(mapped);
+    setStyleLayer(layer);
+    setTotalS(editPlan.durationS);
+
+    const captionClips = editPlan.clips.filter(c => c.type === 'text');
+    const cutCount = Math.max(1, editPlan.cutCount || editPlan.clips.filter(c => c.type === 'video').length);
+    const editCpm = (cutCount / Math.max(1, editPlan.durationS)) * 60;
+    const m = referenceMatch({
+      hasReference: ctx.hasRef,
+      editCutsPerMin: editCpm,
+      refCutsPerMin: ctx.baseProfile.cutsPerMin || editCpm,
+      beatSnapRate: ctx.hasRef ? 0.7 : 0,
+      refPunchInRate: ctx.baseProfile.punchInRate,
+      editPunchInRate: profile.punchInRate,
+      captionsWanted: ctx.captionsWanted,
+      captionsPresent: !ctx.captionsWanted || captionClips.length > 0,
+    });
+    matchRef.current = m;
+    setMatch(m);
+    return { plan: editPlan, match: m };
+  }, []);
 
   const sourceUrl = media?.objectUrl ?? null;
 
@@ -148,7 +196,7 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
       let profile: StyleProfile | null = null as StyleProfile | null;
 
       // 1 — understand the source footage (audio / energy)
-      let env: Awaited<ReturnType<typeof analyseAudio>> = null;
+      let env: Awaited<ReturnType<typeof analyseAudio>> = null as Awaited<ReturnType<typeof analyseAudio>>;
       await tick('understand-source', async () => {
         env = await analyseAudio(blob).catch(() => null);
       });
@@ -166,63 +214,39 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
 
       const durationS = stored.durationS || entry?.durationS || 60;
       const interest = interestCurve(env, durationS);
+      const baseProfile: StyleProfile = profile ?? defaultPunchyProfile(durationS);
+
+      // Capture everything a later regeneration/refinement needs.
+      ctxRef.current = {
+        blob, durationS,
+        onsets: env?.onsets ?? [], interest,
+        baseProfile, hasRef: withRef && !!profile,
+        captionsWanted: baseProfile.captions.present,
+        sourceName: stored.filename || entry?.filename,
+      };
+      profileRef.current = baseProfile;
+      seedRef.current = 1;
 
       // 3 — find the strongest moments (drives which footage the plan keeps)
       await tick('find-moments', () => {});
 
-      // 4 — match pacing & cuts
-      let editPlan: EditPlan | null = null as EditPlan | null;
-      await tick('match-pacing', async () => {
-        const base: StyleProfile = profile ?? defaultPunchyProfile(durationS);
-        editPlan = generateEditPlan({
-          profile: base,
-          durationS,
-          sourceName: stored.filename || entry?.filename,
-          onsets: env?.onsets ?? [],
-          interest,
-        });
-      });
-
-      // 5 — captions are part of the plan when the reference (or our default) wants them
+      // 4+5 — match pacing/cuts and captions (the plan encodes both)
+      let built: { plan: EditPlan; match: number } | null = null as { plan: EditPlan; match: number } | null;
+      await tick('match-pacing', () => { built = applyPlan(baseProfile, 1); });
       await tick('captions', () => {});
-      const captionsWanted = !!(profile ? profile.captions.present : true);
-      const captionClips = (editPlan?.clips ?? []).filter(c => c.type === 'text');
 
-      // 6 — build the edit: mapped clips + a style layer that carries each
-      // clip's source range (the cuts/punch-ins) into the renderer.
-      await tick('build-edit', () => {
-        if (!editPlan) return;
-        setPlan(editPlan);
-        const mapped = editPlan.clips.map(clipToEditor);
-        const layer: StyleLayer = {};
-        for (const c of editPlan.clips) {
-          layer[c.id] = { sourceIn: c.sourceIn, transform: c.transform, effects: c.effects };
-        }
-        setClips(mapped);
-        setStyleLayer(layer);
-        setTotalS(editPlan.durationS);
-      });
+      // 6 — the edit is already in state (applyPlan); just mark it.
+      await tick('build-edit', () => {});
 
-      // reference match — grounded in the generated cut rhythm
-      const editCuts = Math.max(0, (editPlan?.cutCount ?? editPlan?.clips.filter(c => c.type === 'video').length ?? 1));
-      const editCpm = totalS > 0 ? (editCuts / Math.max(1, editPlan?.durationS ?? totalS)) * 60 : 0;
-      const m = referenceMatch({
-        hasReference: withRef && !!profile,
-        editCutsPerMin: editCpm,
-        refCutsPerMin: profile?.cutsPerMin ?? editCpm,
-        beatSnapRate: withRef ? 0.7 : 0,
-        refPunchInRate: profile?.punchInRate ?? 0.3,
-        editPunchInRate: profile?.punchInRate ?? 0.3,
-        captionsWanted,
-        captionsPresent: !captionsWanted || captionClips.length > 0,
-      });
-      setMatch(m);
-
-      // 7 — render (the first composited frame; full render happens on export)
+      // 7 — render the first frame; full render happens on export.
       await tick('render', () => {});
 
       if (cancelRef.current) return;
-      setHeadline(resultHeadline({ hasReference: withRef && !!profile, match: m, durationS: editPlan?.durationS ?? durationS }));
+      setHeadline(resultHeadline({
+        hasReference: ctxRef.current?.hasRef ?? false,
+        match: built?.match ?? 0,
+        durationS: built?.plan.durationS ?? durationS,
+      }));
       setPhase('result');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong building the edit.');
@@ -260,29 +284,55 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
     }).catch(() => {});
   }, [projectId, setMediaEntry]);
 
-  const sendRefinement = async () => {
+  /**
+   * "Tell Modaya what to change." The phrase is mapped onto the style profile
+   * (pacing, punch-ins, captions, grade, length) and the EditPlan is
+   * regenerated — the same brain as the first pass, so the change is real and
+   * previewed immediately. No model call is needed for the common intents.
+   */
+  const sendRefinement = () => {
     const text = input.trim();
-    if (!text || chatBusy || !projectId) return;
+    if (!text || chatBusy) return;
     setChats(c => [...c, { role: 'user', text }]);
     setInput('');
     setChatBusy(true);
     try {
-      const res = await fetch(`/api/projects/${projectId}/ai`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text }),
-      });
-      const d = await res.json().catch(() => null);
-      const reply = d?.aiMessage?.text ?? 'Done — I adjusted the edit.';
-      setChats(c => [...c, { role: 'ai', text: reply }]);
-      if (Array.isArray(d?.edit?.newClips) && d.edit.newClips.length) {
-        const nc = d.edit.newClips as Array<{ id: string; trackId?: string; label: string; startS: number; endS: number; type?: string; textPosition?: string; textAlign?: string }>;
-        setClips(nc.map(clipToEditor));
+      const current = profileRef.current ?? ctxRef.current?.baseProfile;
+      if (!current || !ctxRef.current) {
+        setChats(c => [...c, { role: 'ai', text: 'Create an edit first, then tell me what to change.' }]);
+        return;
       }
+      const { profile: next, changed, reply } = refineProfile(current, text);
+      if (changed) {
+        profileRef.current = next;
+        const built = applyPlan(next, ++seedRef.current);
+        if (built) {
+          setHeadline(resultHeadline({
+            hasReference: ctxRef.current.hasRef, match: built.match, durationS: built.plan.durationS,
+          }));
+        }
+      }
+      setChats(c => [...c, { role: 'ai', text: reply }]);
     } catch {
-      setChats(c => [...c, { role: 'ai', text: 'I could not apply that change — try rephrasing.' }]);
+      setChats(c => [...c, { role: 'ai', text: 'I could not apply that change — try phrasing it as pacing, punch-ins, captions, colour or length.' }]);
     } finally {
       setChatBusy(false);
     }
+  };
+
+  /** Regenerate: same creative direction, fresh cut from a new seed. */
+  const regenerate = () => {
+    const current = profileRef.current ?? ctxRef.current?.baseProfile;
+    if (!current || !ctxRef.current) { void run(); return; }
+    setChatBusy(true);
+    const built = applyPlan(current, ++seedRef.current);
+    if (built) {
+      setHeadline(resultHeadline({
+        hasReference: ctxRef.current.hasRef, match: built.match, durationS: built.plan.durationS,
+      }));
+      setChats(c => [...c, { role: 'ai', text: 'Done — I recut it with fresh timing choices.' }]);
+    }
+    setChatBusy(false);
   };
 
   /* ─────────── drop phase ─────────── */
@@ -351,8 +401,8 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
         {/* Primary actions */}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
           <button onClick={() => setExpOpen(true)} style={primaryBtn}><Download size={15} /> Export video</button>
-          <button onClick={() => { setBusy(true); void run().finally(() => setBusy(false)); }} disabled={busy} style={ghostBtn}>
-            {busy ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />} Regenerate
+          <button onClick={regenerate} disabled={chatBusy} style={ghostBtn}>
+            {chatBusy ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />} Regenerate
           </button>
         </div>
 
@@ -370,11 +420,11 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
             <Sparkles size={16} color={C.accent} style={{ flexShrink: 0, marginTop: 6 }} />
             <textarea
               value={input} onChange={e => setInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendRefinement(); } }}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendRefinement(); } }}
               rows={1} placeholder='Tell Modaya what to change…  e.g. "Make the start faster and use more punch-ins."'
               style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', resize: 'none', color: C.text, fontFamily: F, fontSize: 14, lineHeight: 1.5, maxHeight: 90 }}
             />
-            <button onClick={() => void sendRefinement()} disabled={!input.trim() || chatBusy} style={{ width: 34, height: 34, borderRadius: 9, border: 'none', background: input.trim() && !chatBusy ? C.accent : C.b3, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: input.trim() ? 'pointer' : 'default', flexShrink: 0 }}>
+            <button onClick={() => sendRefinement()} disabled={!input.trim() || chatBusy} style={{ width: 34, height: 34, borderRadius: 9, border: 'none', background: input.trim() && !chatBusy ? C.accent : C.b3, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: input.trim() ? 'pointer' : 'default', flexShrink: 0 }}>
               <Send size={15} />
             </button>
           </div>
