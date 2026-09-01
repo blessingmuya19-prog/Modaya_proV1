@@ -563,6 +563,254 @@ function dedupe(clips: ClipSuggestion[]): ClipSuggestion[] {
   return kept;
 }
 
+/* ───────────────────────── viral detection (LLM, OpenShorts-style) ─────────────────────────
+   With a key and a transcript, clip finding stops being "loudest window" and
+   becomes viral-moment detection: we build grounded candidate windows from the
+   real sentences, the model scores each for shareability against an explicit
+   rubric, and we blend that judgement with the measured energy. The model only
+   scores and titles windows we give it — it never invents a timestamp. */
+
+export interface ViralCandidate {
+  id:      string;
+  startS:  number;
+  endS:    number;
+  /** Measured energy/motion score 0–100, before the model weighs in. */
+  measured: number;
+  /** The words spoken in this window, for the model to judge. */
+  text:    string;
+}
+
+/** Text of the transcript segments that fall inside a window. */
+function textIn(segments: TranscriptSegment[], fromS: number, toS: number): string {
+  return segments
+    .filter(s => s.endS > fromS && s.startS < toS)
+    .map(s => s.text.trim())
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Grounded candidate windows. With a transcript these follow the sentences —
+ * accumulated to roughly the target length and started at a sentence that
+ * follows a gap, so windows are self-contained and never overlap. Without one
+ * they fall back to the measured grid.
+ */
+export function buildViralCandidates(req: ClipRequest): ViralCandidate[] {
+  const durationS = Math.max(0, req.durationS || 0);
+  const target    = clamp(Math.round(req.targetLenS ?? 45), 10, 120);
+  const segments  = req.transcript?.segments ?? [];
+  const out: ViralCandidate[] = [];
+
+  if (segments.length) {
+    let winStart: number | null = null;
+    let winEnd = 0;
+    let n = 0;
+    const push = (s: number, e: number) => {
+      if (e - s < 8) return;
+      out.push({
+        id: `c${n++}`,
+        startS: Number(s.toFixed(2)),
+        endS:   Number(Math.min(e, durationS).toFixed(2)),
+        measured: scoreWindow(s, e, req.energy, durationS, req.visual),
+        text:    textIn(segments, s, e),
+      });
+    };
+
+    for (const seg of segments) {
+      if (winStart === null) { winStart = seg.startS; winEnd = seg.endS; continue; }
+      const gap = seg.startS - winEnd;
+      const len = seg.endS - winStart;
+      // Close the window when it is long enough AND this sentence starts after
+      // a pause (a natural boundary), or it has reached the max length.
+      if ((len >= target && gap > 0.6) || len >= target * 1.6) {
+        push(winStart, winEnd);
+        winStart = seg.startS;
+      }
+      winEnd = seg.endS;
+    }
+    if (winStart !== null) push(winStart, winEnd);
+  } else {
+    const step = Math.max(1, target);
+    for (let s = 0; s + target <= durationS + 1e-6; s += step) {
+      out.push({
+        id: `c${out.length}`,
+        startS: Number(s.toFixed(2)),
+        endS:   Number((s + target).toFixed(2)),
+        measured: scoreWindow(s, s + target, req.energy, durationS, req.visual),
+        text: '',
+      });
+    }
+  }
+
+  return out.filter(c => c.endS - c.startS >= 8);
+}
+
+/** System prompt with the virality rubric — the "viral moment detection". */
+export function viralSystemPrompt(opts: { minLenS: number; maxLenS: number; targetLenS: number }): string {
+  return `You are a viral-clip editor (like OpusClip / OpenShorts). You are given
+candidate moments from a long video, each with an id, its time range, the words
+spoken in it, and a measured energy score. Judge each moment for how well it
+would perform as a short vertical clip on TikTok, Reels or Shorts.
+
+Score virality 0-100 against this rubric:
+- Hook: the first line must grab attention in under 3 seconds (a bold claim, a
+  question, a surprising fact, conflict or a promise).
+- Self-contained: a stranger who never saw the full video understands it. No
+  "as I was saying", no references to earlier context.
+- Payoff: a story, punchline, strong emotion, useful tip or surprising result.
+- No filler: small talk, intros and rambling score low.
+- Give complete, well-paced moments ${opts.minLenS}-${opts.maxLenS}s (aim ~${opts.targetLenS}s).
+
+Reply with JSON ONLY:
+{
+  "scores": [
+    { "id": "c0", "virality": 0-100, "title": "punchy hook title under 60 chars",
+      "hook": "the first spoken line", "reason": "one short sentence why it spreads",
+      "tags": ["topic"] }
+  ]
+}
+
+Score EVERY candidate you are given. Use its exact id. Judge the words, not the
+file name. JSON only — no prose.`;
+}
+
+/** The user message listing each candidate for the model to score. */
+export function viralPrompt(cands: ViralCandidate[]): string {
+  const lines = cands.map(c =>
+    `${c.id} [${c.startS.toFixed(0)}-${c.endS.toFixed(0)}s] energy ${c.measured}${c.text ? ` — "${c.text.slice(0, 600)}"` : ' (no transcript)'}`,
+  );
+  return `Here are ${cands.length} candidate moments. Score every one for virality:\n\n${lines.join('\n')}`;
+}
+
+/**
+ * Turn the model's per-candidate scores into final clips. Our timestamps are
+ * kept (the model only judged content); the LLM virality score is blended with
+ * the measured energy, then the best non-overlapping moments are taken, spread
+ * across the video.
+ */
+export function clipsFromVirality(
+  raw: unknown, cands: ViralCandidate[], req: ClipRequest,
+): ClipSuggestion[] {
+  const count = clamp(Math.round(req.count ?? 5), 1, 10);
+  const segments = req.transcript?.segments ?? [];
+  const silences = req.silences ?? [];
+  const durationS = Math.max(0, req.durationS || 0);
+
+  const byId = new Map(cands.map(c => [c.id, c]));
+  const rows = (raw as { scores?: unknown })?.scores;
+  type Scored = ViralCandidate & { virality: number; title: string; reason: string; hook?: string; tags: string[]; modelScored: boolean };
+  const scored: Scored[] = [];
+
+  const list = Array.isArray(rows) ? rows : [];
+  for (const r of list.slice(0, 200)) {
+    if (!r || typeof r !== 'object') continue;
+    const o = r as Record<string, unknown>;
+    const cand = byId.get(String(o.id ?? ''));
+    if (!cand) continue;
+    const virality = clamp(Math.round(Number(o.virality)), 0, 100);
+    if (!Number.isFinite(virality)) continue;
+    scored.push({
+      ...cand,
+      virality,
+      modelScored: true,
+      title: String(o.title ?? '').trim().slice(0, 80) || measuredTitle(cand.startS, cand.endS, segments),
+      reason: String(o.reason ?? '').trim().slice(0, 200) || 'Chosen for its viral potential.',
+      hook: String(o.hook ?? '').trim().slice(0, 140) || hookFor(cand.startS, cand.endS, segments),
+      tags: Array.isArray(o.tags)
+        ? o.tags.map(t => String(t).toLowerCase().replace(/[^a-z0-9 ]+/g, '').trim()).filter(Boolean).slice(0, 4)
+        : [],
+    });
+  }
+  // Any candidate the model did not score keeps its measured energy only.
+  for (const c of cands) {
+    if (!scored.some(s => s.id === c.id)) {
+      scored.push({ ...c, virality: c.measured, modelScored: false,
+        title: measuredTitle(c.startS, c.endS, segments),
+        reason: 'Picked from measured energy.', tags: [],
+        hook: hookFor(c.startS, c.endS, segments) });
+    }
+  }
+
+  // Blend: meaning dominates when the model judged, but measured energy still
+  // breaks ties and lifts genuinely loud, exciting moments.
+  const blended = scored.map(s => ({
+    ...s,
+    final: Math.round(0.72 * s.virality + 0.28 * s.measured),
+  })).sort((a, b) => b.final - a.final);
+
+  // Take the best non-overlapping. Spread (the default) takes one per zone
+  // first so the clips cover the whole video; "at the start" instead picks the
+  // strongest non-overlapping moments from the opening of the video.
+  const target = clamp(Math.round(req.targetLenS ?? 45), 10, 120);
+  const picked: (typeof blended[number])[] = [];
+  const clash = (s: number, e: number) =>
+    picked.some(p => Math.min(e, p.endS) - Math.max(s, p.startS) > 0.5);
+
+  if (req.bias === 'start') {
+    // Only moments that can fit inside the opening region are eligible; within
+    // it, highest shareability first, earliest wins a tie.
+    const region = Math.min(durationS, count * target * 1.6 + target);
+    const early = blended
+      .filter(s => s.startS < region)
+      .sort((a, b) => (b.final - a.final) || (a.startS - b.startS));
+    for (const s of early) {
+      if (picked.length >= count) break;
+      if (!clash(s.startS, s.endS)) picked.push(s);
+    }
+  } else {
+    const zoneLen = durationS / count;
+    for (let z = 0; z < count; z++) {
+      const inZone = blended.filter(s => s.startS >= z * zoneLen - 1 && s.startS < (z + 1) * zoneLen);
+      const pick = inZone.find(s => !clash(s.startS, s.endS));
+      if (pick) picked.push(pick);
+    }
+  }
+  for (const s of blended) {
+    if (picked.length >= count) break;
+    if (!clash(s.startS, s.endS)) picked.push(s);
+  }
+
+  const viralClips: ClipSuggestion[] = picked
+    .slice(0, count)
+    .sort((a, b) => a.startS - b.startS)
+    .map((s) => ({
+      id:      '',
+      startS:  snapBound(s.startS, durationS, silences, segments, 'start'),
+      endS:    snapBound(s.endS,   durationS, silences, segments, 'end'),
+      score:   s.final,
+      title:   s.title,
+      reason:  s.modelScored
+        ? `${s.reason} Scored for shareability (${s.virality}/100) and measured energy.`
+        : s.reason,
+      hook:    s.hook,
+      tags:    s.tags,
+      // Honest provenance: a window the model actually judged is 'ai'; one it
+      // never scored is still a measurement clip, even though it rode the viral
+      // pipeline.
+      source:  (s.modelScored ? 'ai' : 'measurement') as ClipSource,
+    }));
+
+  // The sentence-based windows can be fewer than the count asked (a short
+  // video, or windows that merged). Top up from the free measurement engine
+  // so the user always gets the number of clips they requested.
+  const finalClips = [...viralClips];
+  if (finalClips.length < count) {
+    const measured = findClipsByMeasurement({ ...req, count: count + 4 });
+    for (const m of measured) {
+      if (finalClips.length >= count) break;
+      const clash = finalClips.some(k =>
+        Math.min(m.endS, k.endS) - Math.max(m.startS, k.startS) > 0.5);
+      if (!clash) finalClips.push({ ...m, source: 'hybrid' as const });
+    }
+  }
+
+  finalClips
+    .sort((a, b) => a.startS - b.startS)
+    .forEach((c, i) => { c.id = `clip-${i + 1}`; });
+  return finalClips;
+}
+
 /* ───────────────────────── merge ───────────────────────── */
 
 /**

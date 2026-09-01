@@ -292,3 +292,146 @@ describe('prompt building', () => {
     expect(brief).toContain('no transcript');
   });
 });
+
+/* ───────────────── viral detection (OpenShorts-style) ───────────────── */
+import {
+  buildViralCandidates, viralSystemPrompt, viralPrompt, clipsFromVirality,
+} from '@/lib/ai/clips';
+
+/** A dense, evenly-spaced transcript long enough to form several windows. */
+function longTranscript(durationS = 300, gapEvery = 6): Transcript {
+  const segments = [];
+  const hookLines = [
+    'The one mistake that cost me my first million was waiting to invest.',
+    'Nobody tells you this, but your savings rate beats your salary every time.',
+    'Here is the exact system I used to pay off ninety thousand dollars of debt.',
+    'Stop buying coffee and watch what happens to your bank account in one year.',
+    'This three minute habit changed my entire relationship with money.',
+    'The truth about passive income that gurus never mention on stage.',
+  ];
+  const filler = 'Uh, yeah, so, you know, like, anyway, moving on, ahem.';
+  let t = 0;
+  let i = 0;
+  while (t < durationS - 12) {
+    const isGap = i % gapEvery === 0;
+    const start = t + (isGap ? 1.5 : 0.05);
+    const len = 6 + (i % 3);
+    const end = start + len;
+    segments.push({ startS: start, endS: end, text: i % 5 === gapEvery ? filler : hookLines[i % hookLines.length] });
+    t = end;
+    i++;
+  }
+  return { language: 'en', model: 'test', madeAt: new Date().toISOString(), segments };
+}
+
+describe('buildViralCandidates', () => {
+  it('builds grounded, non-overlapping windows from the transcript', () => {
+    const tr = longTranscript(300);
+    const cands = buildViralCandidates({ durationS: 300, count: 5, targetLenS: 45, transcript: tr });
+    expect(cands.length).toBeGreaterThanOrEqual(3);
+    const sorted = [...cands].sort((a, b) => a.startS - b.startS);
+    for (let i = 1; i < sorted.length; i++) {
+      // windows may touch but never meaningfully overlap
+      expect(sorted[i].startS).toBeGreaterThan(sorted[i - 1].endS - 0.6);
+    }
+    for (const c of cands) {
+      expect(c.endS - c.startS).toBeGreaterThanOrEqual(8);
+      expect(c.endS).toBeLessThanOrEqual(300.001);
+      expect(c.measured).toBeGreaterThanOrEqual(0);
+      expect(typeof c.text).toBe('string');
+    }
+  });
+
+  it('falls back to a measured grid with no transcript', () => {
+    const energy = energyWithBursts([[10, 60]], 120);
+    const cands = buildViralCandidates({ durationS: 120, count: 3, targetLenS: 30, energy });
+    expect(cands.length).toBeGreaterThanOrEqual(2);
+    expect(cands.every(c => c.text === '')).toBe(true);
+  });
+
+  it('carries the real words into the model prompt', () => {
+    const tr = longTranscript(300);
+    const cands = buildViralCandidates({ durationS: 300, count: 5, targetLenS: 45, transcript: tr });
+    const prompt = viralPrompt(cands);
+    expect(prompt).toContain('c0');
+    expect(prompt).toContain('candidate');
+    expect(prompt).toContain('million'); // real transcript content
+  });
+});
+
+describe('viralSystemPrompt', () => {
+  it('states the rubric and the length bounds', () => {
+    const sys = viralSystemPrompt({ minLenS: 22, maxLenS: 81, targetLenS: 45 });
+    expect(sys).toContain('22-81');
+    expect(sys).toContain('Hook');
+    expect(sys).toContain('JSON');
+    expect(sys).toContain('virality');
+  });
+});
+
+describe('clipsFromVirality', () => {
+  const req = { durationS: 300, count: 4, targetLenS: 45, transcript: longTranscript(300) };
+
+  it('uses our timestamps, never the model\'s, and blends the scores', () => {
+    const cands = buildViralCandidates(req);
+    expect(cands.length).toBeGreaterThanOrEqual(4);
+    // Model "loves" c0; gives everyone else a middling score.
+    const scores = { scores: cands.map((c, i) => ({
+      id: c.id, virality: i === 0 ? 100 : 40,
+      title: i === 0 ? 'The million-dollar mistake' : 'A decent moment',
+      reason: 'strong hook and clear payoff', tags: ['money'],
+    })) };
+    const clips = clipsFromVirality(scores, cands, req);
+    expect(clips.length).toBeGreaterThanOrEqual(1);
+    // Every bound must be one of our candidate bounds (snapped), in range.
+    for (const c of clips) {
+      expect(c.startS).toBeGreaterThanOrEqual(0);
+      expect(c.endS).toBeLessThanOrEqual(300.001);
+      expect(c.endS - c.startS).toBeGreaterThan(0);
+      const cand = cands.find(k => Math.abs(k.startS - c.startS) < 6 || Math.abs(k.endS - c.endS) < 6);
+      expect(cand).toBeTruthy();
+    }
+    // The top-virality clip should outrank the rest.
+    const top = [...clips].sort((a, b) => b.score - a.score)[0];
+    expect(top.title).toContain('million');
+    // Blend check: 0.72*100 + 0.28*measured ≈ in the 70-100 band.
+    expect(top.score).toBeGreaterThan(60);
+  });
+
+  it('never produces overlapping clips and respects the count', () => {
+    const cands = buildViralCandidates(req);
+    // Model scores everything highly — the selector must still de-overlap.
+    const scores = { scores: cands.map(c => ({ id: c.id, virality: 90, title: 'Great moment', reason: 'viral', tags: [] })) };
+    const clips = clipsFromVirality(scores, cands, req);
+    expect(clips.length).toBeLessThanOrEqual(4);
+    const sorted = [...clips].sort((a, b) => a.startS - b.startS);
+    for (let i = 1; i < sorted.length; i++) {
+      expect(sorted[i].startS).toBeGreaterThanOrEqual(sorted[i - 1].endS - 0.5);
+    }
+  });
+
+  it('clusters at the start when bias is start', () => {
+    const cands = buildViralCandidates({ ...req, bias: 'start' });
+    const scores = { scores: cands.map((c, i) => ({
+      id: c.id, virality: c.startS < 60 ? 95 : 50, title: 'Moment', reason: 'x', tags: [],
+    })) };
+    const clips = clipsFromVirality(scores, cands, { ...req, bias: 'start' });
+    expect(clips.length).toBeGreaterThan(0);
+    // No clip should come from the back half when asked for the start.
+    for (const c of clips) expect(c.startS).toBeLessThan(300 * 0.6);
+  });
+
+  it('falls back to measured scores when the model scores nothing', () => {
+    const cands = buildViralCandidates(req);
+    const clips = clipsFromVirality({ scores: [] }, cands, req);
+    expect(clips.length).toBeGreaterThanOrEqual(1);
+    for (const c of clips) expect(c.score).toBeGreaterThanOrEqual(0);
+  });
+
+  it('ignores model rows that reference a candidate id we never sent', () => {
+    const cands = buildViralCandidates(req);
+    const scores = { scores: [{ id: 'c999', virality: 100, title: 'hallucinated', reason: 'fake', tags: [] }] };
+    const clips = clipsFromVirality(scores, cands, req);
+    expect(clips.every(c => c.title !== 'hallucinated')).toBe(true);
+  });
+});

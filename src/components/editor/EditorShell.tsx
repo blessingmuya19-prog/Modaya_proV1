@@ -19,6 +19,7 @@ import { StyleProfile, describeStyle } from '@/lib/ai/styleProfile';
 import { generateEditPlan, EditPlan } from '@/lib/ai/styleTransfer';
 import { detectSilences } from '@/lib/ai/operations';
 import type { ClipSuggestion } from '@/lib/ai/clips';
+import { parseClipRequest } from '@/lib/ai/clips';
 import { scanVideo, compactScan, type VisualScan, type Keyframe } from '@/lib/ai/visualScan';
 import { analyseFile } from '@/lib/videoStore';
 import { loadMediaFile } from '@/lib/mediaDb';
@@ -1005,37 +1006,66 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
       // provider is actually configured: transcription needs a Groq key, and
       // with no key the measurement engine answers fine on its own — there is
       // no point failing a Whisper call that was never going to work.
+      const clipReq = wantsClips(text) ? parseClipRequest(text) : null;
       const needWords = needsTranscript(text) ||
         (wantsClips(text) && aiReady.current !== false);
       if (needWords && asr !== 'done' && !asrTried.current) {
         await transcribe();
       }
 
-      const res  = await fetch(`/api/projects/${projectId}/ai`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          message:  text.trim(),
-          silences: silences.current.slice(0, 200),
-          energy:   energy.current.slice(0, 7200),
-          audio:    audioState.current,
-          transcript: transcript.current ?? undefined,
-          style:    learnedStyle ?? undefined,
-          visual:   visual.current ?? undefined,
-          // Frames are heavy. They travel only when the question needs eyes.
-          frames:   needsVision(text) ? keyframes.current.map(k => k.dataUrl).slice(0, 6) : undefined,
-        }),
-      });
-      const data = await res.json();
+      // Clip-hunting ("find me 5 clips", "90 second short", "viral moments")
+      // goes to the dedicated clipping engine: free browser measurements, an
+      // OpenShorts-style virality score from the transcript LLM, and the
+      // optional TwelveLabs Pegasus visual ranker. Everything else is a normal
+      // edit question for the general AI route.
+      let data: any = null;
+      if (clipReq) {
+        const res = await fetch(`/api/projects/${projectId}/clips`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            message:  text.trim(),
+            count:    clipReq.count,
+            targetLenS: clipReq.targetLenS,
+            bias:     clipReq.bias,
+            silences: silences.current.slice(0, 200),
+            energy:   energy.current.slice(0, 7200),
+            visual:   visual.current ?? undefined,
+            transcript: transcript.current ?? undefined,
+          }),
+        });
+        data = await res.json().catch(() => null);
+      }
+      if (!clipReq || !Array.isArray(data?.clips) || data.clips.length === 0) {
+        const res  = await fetch(`/api/projects/${projectId}/ai`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            message:  text.trim(),
+            silences: silences.current.slice(0, 200),
+            energy:   energy.current.slice(0, 7200),
+            audio:    audioState.current,
+            transcript: transcript.current ?? undefined,
+            style:    learnedStyle ?? undefined,
+            visual:   visual.current ?? undefined,
+            // Frames are heavy. They travel only when the question needs eyes.
+            frames:   needsVision(text) ? keyframes.current.map(k => k.dataUrl).slice(0, 6) : undefined,
+          }),
+        });
+        data = await res.json();
+      }
+
+      const clipsOut: ClipSuggestion[] | undefined = clipReq
+        ? (Array.isArray(data?.clips) ? data.clips : undefined)
+        : (Array.isArray(data?.edit?.clips) ? data.edit.clips : undefined);
 
       const aiReply: Msg = {
         role:     'ai',
-        text:     data.aiMessage?.text ?? 'Edit applied.',
+        text:     data?.reply ?? data.aiMessage?.text ?? 'Edit applied.',
         summary:  data.edit?.summary,
         savedS:   data.edit?.savedS,
         undoable: true,
-        ...(Array.isArray(data.edit?.clips) && data.edit.clips.length
-          ? { clips: data.edit.clips as ClipSuggestion[] } : {}),
+        ...(clipsOut && clipsOut.length ? { clips: clipsOut } : {}),
       };
 
       // Save undo snapshot before applying

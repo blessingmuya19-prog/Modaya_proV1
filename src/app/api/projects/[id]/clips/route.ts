@@ -20,9 +20,11 @@ import { sanitiseSegments, Transcript } from '@/lib/ai/transcript';
 import { chatDetailed, extractJson, detectProvider, explainFailure, type FailureReason } from '@/lib/ai/llm';
 import type { VisualScan } from '@/lib/ai/visualScan';
 import {
-  ClipSuggestion, clipBriefForPrompt, clipSystemPrompt,
-  findClipsByMeasurement, mergeClips, parseClipRequest, sanitiseClips,
+  ClipSuggestion,
+  buildViralCandidates, viralPrompt, viralSystemPrompt, clipsFromVirality,
+  findClipsByMeasurement, parseClipRequest,
 } from '@/lib/ai/clips';
+import { twelveLabsReady, rankHighlights, applyRanking } from '@/lib/ai/twelvelabs';
 
 export const maxDuration = 60;
 
@@ -111,52 +113,84 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   let source: 'ai' | 'measurement' = 'measurement';
   let failure: { reason: FailureReason; detail: string } | null = null;
   let modelUsed: string | null = null;
+  let rankedBy: string | null = null;
 
-  // ── AI upgrade: meaning-aware picks, titles and scores ───────────────────
   const provider = detectProvider();
+
+  // ── Viral detection (OpenShorts-style): grounded candidates scored for
+  //    shareability by the free text LLM. The windows come from us (built
+  //    from the real sentences), the model only judges and titles them. ─────
   const canUseAi = provider.ready && !!transcript?.segments?.length;
-
   if (canUseAi) {
-    const brief = clipBriefForPrompt({ durationS, count, targetLenS, minLenS, maxLenS, energy, transcript });
-    const res = await chatDetailed([
-      { role: 'system', content: clipSystemPrompt({ minLenS, maxLenS, targetLenS }) },
-      {
-        role: 'user',
-        content: `${brief}\n\nReturn the ${count} best clips as JSON.`,
-      },
-    ], { json: true, timeoutMs: 45_000 });
+    const cands = buildViralCandidates(clipReq);
+    if (cands.length) {
+      const res = await chatDetailed([
+        { role: 'system', content: viralSystemPrompt({ minLenS, maxLenS, targetLenS }) },
+        { role: 'user',   content: viralPrompt(cands) },
+      ], { json: true, timeoutMs: 45_000 });
 
-    if (res.ok) {
-      const parsed = extractJson<{ clips?: unknown }>(res.result.text);
-      const aiClips = sanitiseClips(parsed, clipReq);
-      if (aiClips.length) {
-        clips = mergeClips(aiClips, clipReq);
-        source = aiClips.every(c => c.source === 'measurement') ? 'measurement' : 'ai';
-        modelUsed = res.result.model;
+      if (res.ok) {
+        const parsed = extractJson<{ scores?: unknown }>(res.result.text);
+        const viral = clipsFromVirality(parsed, cands, clipReq);
+        // Only claim the AI engine if the model actually judged at least one
+        // moment; an unparseable/empty score sheet falls through to measurement
+        // (which clipsFromVirality already topped the list up with).
+        const judged = viral.filter(c => c.source === 'ai' || c.source === 'hybrid').length;
+        if (viral.length && judged > 0) {
+          clips = viral;
+          source = 'ai';
+          modelUsed = res.result.model;
+        } else if (viral.length) {
+          clips = viral;
+          failure = { reason: 'empty_response', detail: 'the model returned no usable scores' };
+        } else {
+          failure = { reason: 'empty_response', detail: 'the model returned no usable scores' };
+        }
       } else {
-        failure = { reason: 'empty_response', detail: 'the model returned no usable clips' };
+        failure = { reason: res.reason, detail: res.detail };
       }
-    } else {
-      failure = { reason: res.reason, detail: res.detail };
     }
   } else if (provider.ready && !transcript?.segments?.length) {
-    // Key present but nothing transcribed — the model would be guessing at
-    // timestamps, which is exactly what this app never does.
+    // Key present but nothing transcribed — without words the text model would
+    // be guessing, which this app never does. Measurement clips stand.
     failure = {
       reason: 'not_configured',
-      detail: 'transcribe first: clip titles and picks need the words, and no transcript has run yet',
+      detail: 'transcribe first: viral scoring judges what is said, and no transcript has run yet',
     };
   }
 
-  // Re-rank by score for display (best first) but keep stable ids.
+  // ── TwelveLabs Pegasus visual ranker (optional). Understands the frames
+  //    and audio together, so it can lift action-heavy moments the text model
+  //    misses. Needs TWELVELABS_API_KEY and a reachable video URL; degrades to
+  //    nothing when absent. ──────────────────────────────────────────────────
+  const videoUrl = typeof body.videoUrl === 'string' ? body.videoUrl : null;
+  if (twelveLabsReady()) {
+    const r = await rankHighlights(videoUrl, durationS);
+    if (r.ok && r.segments?.length) {
+      clips = applyRanking(clips, r.segments, durationS || clips[clips.length - 1]?.endS || 0);
+      rankedBy = 'twelvelabs-pegasus';
+    }
+  }
+
+  // Best first for display; ids are reassigned in score order by the ranker or
+  // kept in time order by the engines.
   const ranked = [...clips].sort((a, b) => b.score - a.score);
+
+  const eachS = targetLenS ? `about ${targetLenS}s each` : 'short';
+  const where  = bias === 'start' ? ' from the beginning' : '';
+  const reply = source === 'ai'
+    ? `I found ${ranked.length} viral-ready ${eachS} clips${where} by reading what is said and scoring each moment for shareability${rankedBy ? ', then ranking the visuals with TwelveLabs Pegasus' : ''}. Tap "Cut to this clip" to isolate any of them.`
+    : `I found ${ranked.length} ${eachS} clips${where} from the audio energy I measured. Tap "Cut to this clip" to isolate one${provider.ready ? '' : ' — add a free AI key to rank moments by what is actually said'}.`;
 
   return NextResponse.json({
     clips: ranked,
+    reply,
     engine: {
       source,
       provider: provider.name,
       model: modelUsed ?? provider.model,
+      ranker: rankedBy,
+      twelvelabs: twelveLabsReady(),
       ...(failure ? { failure: failure.reason, failureDetail: failure.detail,
         note: source === 'measurement' && provider.ready
           ? `${explainFailure(failure.reason, provider.name, failure.detail)} Showing clips found from the audio measurements instead.`
