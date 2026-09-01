@@ -165,7 +165,7 @@ export default function SettingsPage() {
   const [aiStatus,   setAiStatus  ] = useState<{
     configured: boolean; provider: string; model: string; keyHint: string; persisted: boolean;
     diagnostics?: {
-      present: string[]; lookalike: string[];
+      present: string[]; lookalike: string[]; keyShapedName: string[];
       vercelEnv: string | null; onVercel: boolean; commit: string | null;
     };
   } | null>(null);
@@ -337,6 +337,16 @@ export default function SettingsPage() {
               {aiStatus.diagnostics.vercelEnv === 'production' &&
                 'Check the variable is saved for Production, then redeploy — env vars are read at build time.'}
             </div>
+            {aiStatus.diagnostics.keyShapedName.length > 0 && (
+              <div style={{ marginTop: 8, color: C.text }}>
+                An API key appears to have been typed into the <em>name</em> field:{' '}
+                <code>{aiStatus.diagnostics.keyShapedName.join(', ')}</code>.
+                {' '}On Vercel the field labelled &ldquo;Key&rdquo; means the variable&rsquo;s name.
+                {' '}Delete that entry and add one with the name{' '}
+                <code>GROQ_API_KEY</code> and your key as the <em>value</em>.
+              </div>
+            )}
+
             {aiStatus.diagnostics.lookalike.length > 0 && (
               <div style={{ marginTop: 8, color: C.dim }}>
                 Similar names the app does not read:{' '}

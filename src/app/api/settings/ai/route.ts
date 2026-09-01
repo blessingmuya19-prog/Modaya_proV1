@@ -40,15 +40,25 @@ function diagnostics() {
   const present = KNOWN.filter(k => (process.env[k] ?? '').trim() !== '');
 
   // Anything key-shaped the app does not read — catches GROK_API_KEY,
-  // GROQ_KEY, a trailing space in the name, or the value pasted as the name.
+  // GROQ_KEY, or a trailing space in the name.
   const lookalike = Object.keys(process.env)
     .filter(k => !KNOWN.includes(k))
     .filter(k => /GROQ|GROK|GEMINI|OPENROUTER|OPEN_ROUTER|CLAUDE|OPENAI|LLM|AI_KEY|API_KEY/i.test(k))
+    .map(k => (k !== k.trim() ? `"${k}" (has whitespace in the name)` : k))
     .slice(0, 12);
+
+  // Vercel labels the name field "Key", so the API key itself gets typed there
+  // with the value left blank. The variable name is then the secret, which is
+  // why only its shape is reported, never the text.
+  const keyShapedName = Object.keys(process.env)
+    .filter(k => /^(gsk_|sk-|sk_or_|AIza|hf_|xai-|csk-)/i.test(k))
+    .map(k => `${k.slice(0, 4)}… (${k.length} chars)`)
+    .slice(0, 4);
 
   return {
     present,
     lookalike,
+    keyShapedName,
     // 'preview' here with an empty `present` means the variable was saved for
     // Production only — the single most common mistake.
     vercelEnv: process.env.VERCEL_ENV ?? null,

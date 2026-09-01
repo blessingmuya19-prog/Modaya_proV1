@@ -189,6 +189,21 @@ describe('settings diagnostics', () => {
     expect(d.configured).toBe(false);
   });
 
+  it('spots an API key typed into the variable NAME, without printing it', async () => {
+    process.env['gsk_TTNRD4SGrElnpvphYv08WGdyb3FY'] = '';
+    const d = await load();
+    expect(d.diagnostics.keyShapedName.join(' ')).toMatch(/^gsk_… \(\d+ chars\)$/);
+    expect(JSON.stringify(d)).not.toContain('TTNRD4SGrElnpvphYv08WGdyb3FY');
+    delete process.env['gsk_TTNRD4SGrElnpvphYv08WGdyb3FY'];
+  });
+
+  it('flags whitespace in a variable name', async () => {
+    process.env['GROQ_API_KEY '] = 'x';
+    const d = await load();
+    expect(d.diagnostics.lookalike.join(' ')).toMatch(/whitespace in the name/);
+    delete process.env['GROQ_API_KEY '];
+  });
+
   it('reports which Vercel environment the build is', async () => {
     process.env.VERCEL = '1';
     process.env.VERCEL_ENV = 'preview';
