@@ -13,6 +13,7 @@ import { transcriptForPrompt, fillerRanges, sanitiseSegments, Transcript } from 
 import { chatDetailed, explainFailure, extractJson, detectProvider, FailureReason } from '@/lib/ai/llm';
 import { summariseVisual, keyframeTimes, motionBetween, type VisualScan } from '@/lib/ai/visualScan';
 import { groundOperations, validateOperations, applyOperations, parseStyle, parsePlacement, Operation, TimelineClip } from '@/lib/ai/operations';
+import { findClipsByMeasurement, sanitiseClips, mergeClips, parseClipRequest, ClipSuggestion } from '@/lib/ai/clips';
 
 // ── Intent detection ──────────────────────────────────────────────────────────
 
@@ -20,7 +21,7 @@ type Intent =
   | 'describe'
   | 'tighten' | 'clean' | 'moments' | 'captions' | 'text_overlay' | 'restyle'
   | 'move_text' | 'remove_text'
-  | 'vertical' | 'highlights' | 'cut_silence' | 'unknown';
+  | 'vertical' | 'highlights' | 'cut_silence' | 'clips' | 'unknown';
 
 /** Capitalise a summary and end it properly, leaving a question mark be. */
 function sentence(s: string): string {
@@ -57,9 +58,24 @@ function detectIntent(text: string): Intent {
                                                                    return 'text_overlay';
   if (p.match(/what (?:can you |do you )?see|what.?s (?:in|happening|going on)|describe|look at|analyse the (?:video|picture|footage)|how many (?:cuts|shots)|what happens/))
                                                                    return 'describe';
+  /* Reframing to a vertical canvas is about the frame, not about finding
+     clips — "make it vertical for tiktok" must reach the 9:16 handler even
+     though it names a platform. Clipping (below) is about carving several
+     standalone posts out of the long video. */
+  if (p.match(/vertical|reframe|9.?:?.?16|portrait/))              return 'vertical';
+  /* Clipping = carve several short standalone clips out of the long video,
+     a la OpusClip. Distinct from a single "highlight reel": this keeps each
+     moment as its own post, so it matches on the plural/social vocabulary
+     before the singular "best moment" rule below. A bare length with no
+     other verb ("30 seconds pls", "1 minute clips") is a clipping request —
+     it is following one up — unless the words say trim/shorten instead. */
+  const saysLength = /\b(\d{1,3})\s*(sec(?:ond)?s?|s|min(?:ute)?s?|m)\b/.test(p);
+  const trimsVideo = /\b(trim|shorter|shorten|tighten|cut (?:it|this|the video|down)|make it \d)/.test(p);
+  if (p.match(/\bclips?\b|\bshorts?\b|tiktok|reels?|viral|carve|long.?form|podcast clips|give me \d+|find \d+|\d+ best|30 ?sec|60 ?sec/) ||
+      (saysLength && !trimsVideo))
+                                                                   return 'clips';
   if (p.match(/highlight|best moment|standout|top (?:moment|part|bit|clip|section)|\bmoments?\b/))
                                                                    return 'moments';
-  if (p.match(/vertical|9.?:?.?16|portrait|tiktok|reels|shorts/)) return 'vertical';
   if (p.match(/tighten|shorter|concise|trim|cut/))                 return 'tighten';
   return 'unknown';
 }
@@ -107,6 +123,9 @@ interface EditResult {
   affectedIds:  string[];         // clip ids visually highlighted
   newClips:     Clip[];           // updated clips after edit (simulated)
   intent:       Intent;
+  /** Clipping result: standalone short clips the user can cut to, without
+      touching the timeline until one is chosen. */
+  clipSuggestions?: ClipSuggestion[];
 }
 
 /**
@@ -368,6 +387,57 @@ function applyEdit(
       };
     }
 
+    case 'clips': {
+      /* The clipping engine never edits the timeline itself — it surfaces
+         standalone clips the person can cut to in one tap. With no key it
+         finds them from loudness, movement and the measured pauses, spread
+         across the whole video (or from the start if asked); the reply says
+         plainly that this ranks excitement rather than meaning. It never
+         needs a transcript — that only upgrades the titles and picks. */
+      const want = parseClipRequest(ctx.message ?? '', { count: 5 });
+      const targetLenS = want.targetLenS ?? 45;
+      const suggestions = findClipsByMeasurement({
+        durationS,
+        count:    want.count,
+        targetLenS,
+        energy:   ctx.energy,
+        silences: ctx.silences,
+        visual:   ctx.visual ?? null,
+        transcript: ctx.transcript ?? null,
+        bias:     want.bias,
+      });
+
+      if (!suggestions.length || durationS <= 0) {
+        return nothing(
+          'I need to analyse the video before I can find clips. Reopen the project so the media ' +
+          'loads, then ask again.');
+      }
+
+      const list = suggestions
+        .map((c, i) => `${i + 1}. ${fmtS(c.startS)}–${fmtS(c.endS)} — ${c.title}`)
+        .join('\n');
+      const lengthNote = want.targetLenS ? `about ${want.targetLenS}s each` : 'short';
+      const whereNote  = want.bias === 'start' ? ' from the beginning of the video' : '';
+      const aiNote =
+        ` I picked these${whereNote} from the loudness and movement I measured — that tracks energy, not meaning. ` +
+        (ctx.modelNote
+          ? ctx.modelNote
+          : 'Add a free AI key (and transcribe) and I will choose the best moments by what is actually said.');
+
+      return {
+        reply:
+          `I found ${suggestions.length} ${lengthNote} ${suggestions.length === 1 ? 'clip' : 'clips'}${whereNote} ready for TikTok, Reels or Shorts:\n\n` +
+          `${list}\n\n` +
+          'Tap "Cut to this clip" under any of them and I will isolate it on the timeline.' + aiNote,
+        summary: `found ${suggestions.length} clips`,
+        savedS: 0,
+        affectedIds: [],
+        newClips: clips,
+        clipSuggestions: suggestions,
+        intent,
+      };
+    }
+
     case 'vertical':
       return nothing(
         "I can't reframe to 9:16 yet — that needs subject tracking so the speaker stays in shot. " +
@@ -393,8 +463,24 @@ with a short spoken response plus the operations needed to carry it out.
 Reply with JSON only, in exactly this shape:
 {
   "reply": "one or two sentences, conversational, first person, no markdown",
-  "operations": [ ... ]
+  "operations": [ ... ],
+  "clips": [ ... ]
 }
+
+"clips" is used ONLY when the user asks to find/create multiple short clips
+for TikTok, Reels, Shorts or social (e.g. "give me 5 clips", "find viral
+shorts"). For that request leave "operations" empty and return clips:
+  {"startS":number, "endS":number, "title":"punchy hook title under 60 chars",
+   "hook":"the first sentence spoken", "reason":"why it is worth clipping",
+   "tags":["topic"], "score":0-100}
+Rules for clips:
+- Timestamps MUST come from the TRANSCRIPT brackets; never invent times.
+- Each clip is 20-90s, starts at a sentence start, ends at a sentence end, and
+  stands alone with no reference to the surrounding video. Pick clips from
+  DIFFERENT parts of the video, best first. The title must be based on what is
+  actually said. When there is no transcript, do not return clips — say the
+  video needs transcribing first.
+For every OTHER kind of request, leave "clips" out and use operations:
 
 Available operations:
   {"op":"remove_ranges","ranges":[[startS,endS], ...]}   remove these spans
@@ -482,7 +568,7 @@ What you cannot do — say so plainly instead of pretending:
   three sizes. Never say you cannot add text or cannot change the font.
 - Do not infer content from the file name. A title is not evidence.`;
 
-interface Plan { reply: string; operations: unknown }
+interface Plan { reply: string; operations: unknown; clips?: unknown }
 
 /**
  * Which build is answering. When someone is looking at a stale deployment,
@@ -510,7 +596,7 @@ async function planWithLlm(opts: {
   /** A few frames, as data URLs, for a model that can actually see. */
   frames?:   string[];
 }): Promise<{
-  plan:    { reply: string; operations: Operation[] } | null;
+  plan:    { reply: string; operations: Operation[]; clips?: ClipSuggestion[] } | null;
   failure: { reason: FailureReason; detail: string } | null;
   /** True when frames were sent but no model available could look at them. */
   blind?:  boolean;
@@ -572,10 +658,29 @@ async function planWithLlm(opts: {
     return { plan: null, failure: { reason: 'empty_response', detail: 'the model did not return usable JSON' } };
   }
 
+  /* Clips are suggestions, not edits: every timestamp the model returns is
+     clamped, snapped to sentence edges and topped up from the measurement
+     engine before it can reach the UI. Count, length and start-bias are read
+     from what the person asked ("give me 5", "30 seconds", "at the start"). */
+  const clipWant = parseClipRequest(opts.message, { count: 5 });
+  const clipReq = {
+    durationS: opts.durationS,
+    count:    clipWant.count,
+    targetLenS: clipWant.targetLenS ?? 45,
+    energy:   opts.energy,
+    silences: opts.silences,
+    visual:   opts.visual ?? null,
+    transcript: opts.transcript,
+    bias:     clipWant.bias,
+  };
+  const aiClips = Array.isArray(plan.clips) ? sanitiseClips({ clips: plan.clips }, clipReq) : [];
+  const clipsOut = aiClips.length ? mergeClips(aiClips, clipReq) : undefined;
+
   return {
     plan: {
       reply:      plan.reply.slice(0, 600),
       operations: validateOperations(plan.operations, { durationS: opts.durationS }),
+      ...(clipsOut?.length ? { clips: clipsOut } : {}),
     },
     failure: null,
     blind,
@@ -760,6 +865,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         affectedIds: outcome.affectedIds,
         newClips:    outcome.clips as Clip[],
         intent:      'unknown',
+        ...(plan.clips?.length ? { clipSuggestions: plan.clips } : {}),
       };
     }
   }
@@ -767,7 +873,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // No key, or the model failed / timed out — deterministic fallback.
   // Say which of those it was: "I have no AI model" and "I could not reach the
   // AI model" call for completely different actions from the user.
-  if (!edit) {
+  // A clipping request always deserves the measurement engine when the model
+  // produced no clips — and when clips were asked for "at the start", the
+  // measurement engine with start-bias is the correct answer regardless, since
+  // the model is told to spread its picks across the video.
+  const clipWant = detectIntent(message) === 'clips'
+    ? parseClipRequest(message, { count: 5 }) : null;
+  const wantsClips = detectIntent(message) === 'clips' &&
+    (!edit?.clipSuggestions?.length || clipWant?.bias === 'start');
+  if (!edit || wantsClips) {
     const intent = detectIntent(message);
     const modelNote = failure
       ? `${explainFailure(failure.reason, provider.name, failure.detail)} ` +
@@ -811,6 +925,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       affectedIds: edit.affectedIds,
       intent:      edit.intent,
       newClips:    edit.newClips,
+      ...(edit.clipSuggestions?.length ? { clips: edit.clipSuggestions } : {}),
     },
     engine: {
       source, provider: provider.name, model: modelUsed ?? provider.model,

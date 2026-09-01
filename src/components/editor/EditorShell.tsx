@@ -18,6 +18,7 @@ import { saveTranscript, loadTranscript, StoredTranscript } from '@/lib/mediaDb'
 import { StyleProfile, describeStyle } from '@/lib/ai/styleProfile';
 import { generateEditPlan, EditPlan } from '@/lib/ai/styleTransfer';
 import { detectSilences } from '@/lib/ai/operations';
+import type { ClipSuggestion } from '@/lib/ai/clips';
 import { scanVideo, compactScan, type VisualScan, type Keyframe } from '@/lib/ai/visualScan';
 import { analyseFile } from '@/lib/videoStore';
 import { loadMediaFile } from '@/lib/mediaDb';
@@ -628,10 +629,10 @@ function PropertiesPanelBase({ tab }:{ tab:string }) {
 
 const QUICK = [
   { label: 'Cut silences',   prompt: 'Remove all pauses and dead air.'           },
+  { label: 'Find clips',     prompt: 'Find me 5 short clips for TikTok and Reels.', highlight: true },
   { label: 'Clean fillers',  prompt: 'Remove filler words and repeated phrases.' },
   { label: 'Best moments',   prompt: 'Find the strongest 90 seconds.'            },
   { label: 'Add captions',   prompt: 'Transcribe and add accurate captions.'     },
-  { label: 'Make vertical',  prompt: 'Reframe for 9:16 vertical format.'         },
 ];
 
 interface Msg {
@@ -642,9 +643,62 @@ interface Msg {
   undoable?: boolean;
   /** A learned reference style the user can apply. */
   style?:   StyleProfile;
+  /** Clipping engine results — standalone short clips, each cuttable in one tap. */
+  clips?:   ClipSuggestion[];
 }
 
 const PropertiesPanel = React.memo(PropertiesPanelBase);
+
+/* ── A single clipping-engine suggestion ── */
+const clipFmt = (s: number) =>
+  `${String(Math.floor(s / 60)).padStart(1, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+function ClipCard({ clip, onCut }: { clip: ClipSuggestion; onCut: () => void }) {
+  const scoreColor = clip.score >= 80 ? '#34D399' : clip.score >= 55 ? '#FBBF24' : '#737D8D';
+  const isAi = clip.source !== 'measurement';
+  return (
+    <div style={{
+      background: C.s2, border: `1px solid ${C.b3}`, borderRadius: 10, padding: '9px 11px',
+      animation: 'msg-in 260ms cubic-bezier(0.22,1,0.36,1)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+        <span style={{ ...ty.badge, color: C.accent, background: `${C.accent}18`,
+          border: `1px solid ${C.accent}33`, borderRadius: 5, padding: '1px 6px' }}>
+          {clipFmt(clip.startS)}–{clipFmt(clip.endS)}
+        </span>
+        <span style={{ flex: 1, ...ty.meta, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: scoreColor }} />
+          {clip.score}
+        </span>
+        <span style={{ ...ty.meta, color: isAi ? C.accent : C.dim }}>
+          {isAi ? 'AI pick' : 'measured'}
+        </span>
+      </div>
+      <p style={{ ...ty.aiMsg, fontSize: 12.5, color: C.text, fontWeight: 600, margin: '0 0 3px',
+        lineHeight: 1.35 }}>{clip.title}</p>
+      {clip.reason && (
+        <p style={{ ...ty.meta, color: C.muted, margin: '0 0 8px', lineHeight: 1.4 }}>{clip.reason}</p>
+      )}
+      {clip.tags.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+          {clip.tags.map(t => (
+            <span key={t} style={{ ...ty.meta, color: C.sec, background: C.s3,
+              border: `1px solid ${C.b2}`, borderRadius: 9999, padding: '1px 7px' }}>#{t}</span>
+          ))}
+        </div>
+      )}
+      <button onClick={onCut}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          width: '100%', padding: '6px', background: C.accent, border: 'none', borderRadius: 7,
+          fontFamily: F, fontSize: 12, fontWeight: 600, color: '#fff', cursor: 'pointer',
+          transition: 'background 120ms' }}
+        onMouseEnter={e => { e.currentTarget.style.background = C.accentH; }}
+        onMouseLeave={e => { e.currentTarget.style.background = C.accent; }}>
+        <Scissors size={11} /> Cut to this clip
+      </button>
+    </div>
+  );
+}
 
 interface AIChatPanelProps {
   projectId:      string;
@@ -652,9 +706,11 @@ interface AIChatPanelProps {
   totalS:         number;
   onEditApplied?: (affectedIds: string[], newClips: EditorClip[]) => void;
   onStyleApplied?: (plan: EditPlan) => void;
+  /** Isolate a suggested clip on the timeline (keep only that range). */
+  onCutToClip?:   (clip: ClipSuggestion) => void;
 }
 
-function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onStyleApplied }: AIChatPanelProps) {
+function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onStyleApplied, onCutToClip }: AIChatPanelProps) {
   const [msgs,    setMsgs   ] = useState<Msg[]>(() => {
     if (initialHistory && initialHistory.length > 0) {
       return initialHistory.map(m => ({ role: m.role, text: m.text }));
@@ -689,12 +745,28 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
   const audioState = useRef<'pending' | 'ready' | 'failed'>('pending');
   const [asr, setAsr] = useState<'idle' | 'running' | 'done' | 'failed'>('idle');
   /**
+   * Whether a key-free provider can actually answer. Discovered once; gates
+   * auto-transcription for clipping so a user with no key gets measured clips
+   * straight away instead of a doomed Whisper call (speech recognition needs
+   * a Groq key; the measurement engine does not).
+   */
+  const aiReady = useRef<boolean | null>(null);
+  /**
    * The transcript lives in the browser and travels with every AI request.
    * The server keeps a copy, but on a serverless host the next request can
    * land on an instance that has never seen it — so the browser is the source
    * of truth.
    */
   const transcript = useRef<StoredTranscript | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/settings/ai')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (!cancelled) aiReady.current = !!d?.configured; })
+      .catch(() => { if (!cancelled) aiReady.current = false; });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -904,6 +976,16 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
     /caption|subtitle|filler|\bums?\b|\buhs?\b|transcri|what (did|do|does|is)\s+(they|he|she|it|the)|what.*(say|said|talk|about)|quote|word/i
       .test(text);
 
+  /**
+   * Finding clips on meaning rather than loudness needs the words too — with
+   * a Groq key the transcript is what lets the model pick moments, write hook
+   * titles and score shareability instead of just ranking energy. Asking for
+   * clips is consent for speech recognition, exactly as captions are.
+   */
+  const wantsClips = (text: string) =>
+    /\bclips?\b|\bshorts?\b|tiktok|reels?|viral|\b(?:give|find|make)(?: me)?\s*\d+\b/i
+      .test(text);
+
   /** Questions that are only answerable by looking at the picture. */
   const needsVision = (text: string) =>
     /what (?:can |do )?you see|what.?s (?:in|happening|going on)|describe|look at|watch|see the|visual|colour|color|wearing|who is|what is (?:he|she|it|this|that)|jersey|logo|scene|shot|background/i
@@ -919,7 +1001,13 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
     try {
       // Transcribe first rather than refusing. The request itself is consent —
       // nobody asks for captions and then objects to speech recognition.
-      if (needsTranscript(text) && asr !== 'done' && !asrTried.current) {
+      // Captions/filler always need words. Clips only auto-transcribe when a
+      // provider is actually configured: transcription needs a Groq key, and
+      // with no key the measurement engine answers fine on its own — there is
+      // no point failing a Whisper call that was never going to work.
+      const needWords = needsTranscript(text) ||
+        (wantsClips(text) && aiReady.current !== false);
+      if (needWords && asr !== 'done' && !asrTried.current) {
         await transcribe();
       }
 
@@ -946,6 +1034,8 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
         summary:  data.edit?.summary,
         savedS:   data.edit?.savedS,
         undoable: true,
+        ...(Array.isArray(data.edit?.clips) && data.edit.clips.length
+          ? { clips: data.edit.clips as ClipSuggestion[] } : {}),
       };
 
       // Save undo snapshot before applying
@@ -1041,6 +1131,15 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
               </button>
             )}
 
+            {/* Clipping engine results — one tap to isolate a clip */}
+            {m.clips && m.clips.length > 0 && (
+              <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6, width: '100%', maxWidth: 340 }}>
+                {m.clips.map((c) => (
+                  <ClipCard key={c.id} clip={c} onCut={() => onCutToClip?.(c)} />
+                ))}
+              </div>
+            )}
+
             {/* Edit summary chip */}
             {m.summary && (
               <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', gap: 5,
@@ -1096,11 +1195,14 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
         {QUICK.map((q, i) => (
           <button key={i} onClick={() => send(q.prompt)}
             disabled={loading}
-            style={{ ...ty.pill, background: 'transparent', border: `1px solid ${C.b2}`,
+            style={{ ...ty.pill,
+              background: (q as { highlight?: boolean }).highlight ? `${C.accent}14` : 'transparent',
+              border: `1px solid ${(q as { highlight?: boolean }).highlight ? C.accent + '44' : C.b2}`,
+              color: (q as { highlight?: boolean }).highlight ? C.accent : undefined,
               borderRadius: 9999, padding: '4px 8px', cursor: loading ? 'not-allowed' : 'pointer',
               transition: 'all 120ms', opacity: loading ? 0.5 : 1 }}
             onMouseEnter={e => { if (!loading) { e.currentTarget.style.color = '#A1A1A1'; e.currentTarget.style.borderColor = C.b3; } }}
-            onMouseLeave={e => { e.currentTarget.style.color = C.muted; e.currentTarget.style.borderColor = C.b2; }}
+            onMouseLeave={e => { e.currentTarget.style.color = (q as { highlight?: boolean }).highlight ? C.accent : C.muted; e.currentTarget.style.borderColor = (q as { highlight?: boolean }).highlight ? C.accent + '44' : C.b2; }}
           >{q.label}</button>
         ))}
       </div>
@@ -1789,6 +1891,27 @@ export function EditorShell({
     setTimeout(() => setHighlightIds([]), 3000);
   }, []);
 
+  /* Clipping engine: keep only the chosen range on the timeline, as its own
+     short programme. "Undo" in the chat (or the editor undo) brings the full
+     video back. The surviving video clip is re-scoped to the window. */
+  const handleCutToClip = useCallback((clip: ClipSuggestion) => {
+    setLiveClips(prev => {
+      const source = prev.length ? prev : clips;
+      const next: EditorClip[] = source
+        .filter(c => c.type === 'video' || c.type === 'audio')
+        .map(c => ({
+          ...c,
+          startS: Math.max(c.startS, clip.startS),
+          endS:   Math.min(c.endS, clip.endS),
+        }))
+        .filter(c => c.endS - c.startS > 0.05);
+      return next;
+    });
+    setStyledDur(clip.endS - clip.startS);
+    setPhS(0);
+    setHighlightIds([]);
+  }, [clips]);
+
   const [tab,    setTab   ] = useState('Text');
   /** Pressing play at the very end restarts, rather than sitting there stuck. */
   const togglePlay = useCallback(() => setPlaying(p => {
@@ -1948,6 +2071,7 @@ export function EditorShell({
               totalS={totalS}
               onEditApplied={handleEditApplied}
               onStyleApplied={handleStyleApplied}
+              onCutToClip={handleCutToClip}
             />
           </div>
         </FadeUp>
