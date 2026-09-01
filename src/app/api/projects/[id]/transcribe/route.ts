@@ -49,8 +49,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (!(audio instanceof Blob) || audio.size === 0) {
     return NextResponse.json({ error: 'No audio received.' }, { status: 400 });
   }
-  if (audio.size > 24 * 1024 * 1024) {
-    return NextResponse.json({ error: 'Audio chunk too large.' }, { status: 413 });
+  if (audio.size > 4 * 1024 * 1024) {
+    return NextResponse.json({
+      error: 'That audio chunk is too large for the server to accept. ' +
+             'This is a bug in how the file was split — please report it.',
+      reason: 'chunk_too_large',
+    }, { status: 413 });
   }
 
   const upstream = new FormData();

@@ -14,8 +14,14 @@
 /** Whisper is trained at 16 kHz; anything above it is wasted upload. */
 export const ASR_SAMPLE_RATE = 16_000;
 
-/** Stay well under provider upload limits (Groq allows 100 MB). */
-const MAX_CHUNK_BYTES = 18 * 1024 * 1024;
+/**
+ * Stay under the hosting platform's request body limit, which is far smaller
+ * than the provider's. Groq accepts 100 MB, but a Vercel serverless function
+ * rejects anything over 4.5 MB before the route ever runs — and that rejection
+ * is not JSON, so it surfaces as a mystery failure. 3.5 MB leaves room for
+ * multipart overhead and is about 110 seconds of 16 kHz mono.
+ */
+const MAX_CHUNK_BYTES = 3.5 * 1024 * 1024;
 
 export interface AudioChunk {
   blob:    Blob;

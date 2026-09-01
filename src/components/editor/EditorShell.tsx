@@ -722,11 +722,22 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
         form.append('offsetS', String(chunks[i].offsetS));
         form.append('durationS', String(totalS));
 
-        const res  = await fetch(`/api/projects/${projectId}/transcribe`, { method: 'POST', body: form });
-        const data = await res.json().catch(() => null);
+        const res = await fetch(`/api/projects/${projectId}/transcribe`, { method: 'POST', body: form });
+
+        // A platform-level rejection (body too large, function timeout) is not
+        // JSON, and swallowing it produced a bare "failed" with no cause.
+        const text = await res.text();
+        let data: { error?: string; segments?: unknown[] } | null = null;
+        try { data = JSON.parse(text); } catch { data = null; }
 
         if (!res.ok) {
-          replaceLast(data?.error ?? 'Speech recognition failed.');
+          const message = data?.error ?? (
+            res.status === 413 ? `The server refused part ${i + 1} as too large (${Math.round(chunks[i].blob.size / 1e6)} MB).`
+          : res.status === 504 || res.status === 408
+                              ? `Part ${i + 1} took too long and the server gave up. A shorter clip will work.`
+          : res.status === 401 ? 'You have been signed out — sign in and try again.'
+          :                      `Transcription failed on part ${i + 1} (HTTP ${res.status}).`);
+          replaceLast(message);
           setAsr(total > 0 ? 'done' : 'failed');
           return;
         }

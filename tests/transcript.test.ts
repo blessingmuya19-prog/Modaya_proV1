@@ -43,6 +43,14 @@ describe('WAV encoding', () => {
 });
 
 describe('chunking long audio', () => {
+  it('a 5-minute clip is split rather than sent whole', () => {
+    // 5:21 is 10.3 MB as one WAV — it must never be attempted in one request
+    const chunks = chunkForAsr(tone(321));
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const c of chunks) expect(c.blob.size).toBeLessThan(4.5 * 1024 * 1024);
+    expect(chunks.reduce((sum, c) => sum + c.lengthS, 0)).toBeCloseTo(321, 0);
+  });
+
   it('keeps a short file in one piece, at offset zero', () => {
     const chunks = chunkForAsr(tone(30));
     expect(chunks).toHaveLength(1);
@@ -55,7 +63,9 @@ describe('chunking long audio', () => {
     const chunks = chunkForAsr(tone(20 * 60));
     expect(chunks.length).toBeGreaterThan(1);
 
-    for (const c of chunks) expect(c.blob.size).toBeLessThanOrEqual(18 * 1024 * 1024);
+    // Must clear the hosting platform's 4.5 MB request body limit, not just
+    // the provider's much larger one.
+    for (const c of chunks) expect(c.blob.size).toBeLessThan(4.5 * 1024 * 1024);
 
     // contiguous, in order, covering the whole thing
     expect(chunks[0].offsetS).toBe(0);
@@ -69,7 +79,7 @@ describe('chunking long audio', () => {
   it('prefers a quiet instant for the boundary', () => {
     const long = tone(20 * 60);
     // carve a silent hole slightly before the natural split point
-    const naturalSplit = Math.floor((18 * 1024 * 1024 - 44) / 2);
+    const naturalSplit = Math.floor((3.5 * 1024 * 1024 - 44) / 2);
     const holeStart = naturalSplit - ASR_SAMPLE_RATE;         // 1 s earlier
     for (let i = holeStart; i < holeStart + ASR_SAMPLE_RATE / 2; i++) long[i] = 0;
 
