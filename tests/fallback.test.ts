@@ -66,7 +66,7 @@ describe('no-key fallback', () => {
     expect(d.aiMessage.text).not.toMatch(/\btranscribed the\b|\bI transcribed\b/i);
     expect(d.aiMessage.text).toMatch(/hasn't been transcribed yet/i);
     expect(d.aiMessage.text).toMatch(/empty caption slots/i);
-    expect(d.edit.newClips.some((c: { type: string }) => c.type === 'text')).toBe(true);
+    expect(d.edit.newClips.some((c: { id: string }) => c.id.startsWith('cap-'))).toBe(true);
   });
 
   it('says outright that it cannot reframe or remove fillers', async () => {
@@ -254,7 +254,7 @@ describe('with a transcript', () => {
 
   it('writes captions containing the real words', async () => {
     const d = await ask({ message: 'add captions' });
-    const captions = d.edit.newClips.filter((c: { type: string }) => c.type === 'text');
+    const captions = d.edit.newClips.filter((c: { id: string }) => c.id.startsWith('cap-'));
     expect(captions.length).toBe(segments.length);
     expect(captions[0].label).toMatch(/push ups/);
     expect(captions[2].label).toMatch(/elbows tucked/);
@@ -264,7 +264,7 @@ describe('with a transcript', () => {
 
   it('times each caption to when it was said', async () => {
     const d = await ask({ message: 'add captions' });
-    const first = d.edit.newClips.find((c: { type: string }) => c.type === 'text');
+    const first = d.edit.newClips.find((c: { type: string }) => (c.type === 'text' || c.type === 'subtitle'));
     expect(first.startS).toBe(0);
     expect(first.endS).toBe(3);
   });
@@ -328,7 +328,7 @@ describe('transcript supplied by the browser', () => {
 
   it('writes real captions when the server has no copy', async () => {
     const d = await ask({ message: 'add captions', transcript: clientTranscript });
-    const captions = d.edit.newClips.filter((c: { type: string }) => c.type === 'text');
+    const captions = d.edit.newClips.filter((c: { id: string }) => c.id.startsWith('cap-'));
     expect(captions).toHaveLength(3);
     expect(captions[0].label).toMatch(/delivering the car/);
     expect(d.aiMessage.text).toMatch(/from the transcript/i);
@@ -352,7 +352,7 @@ describe('transcript supplied by the browser', () => {
       message: 'add captions',
       transcript: { ...clientTranscript, segments: [{ startS: 95, endS: 500, text: 'over the end' }] },
     });
-    const cap = d.edit.newClips.find((c: { type: string }) => c.type === 'text');
+    const cap = d.edit.newClips.find((c: { type: string }) => (c.type === 'text' || c.type === 'subtitle'));
     expect(cap.endS).toBeLessThanOrEqual(100);
   });
 });

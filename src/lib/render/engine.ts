@@ -332,13 +332,19 @@ export class PreviewEngine {
     const text = clip.label ?? '';
     if (!text) return;
 
-    const size = Math.round(H * (clip.kind === 'subtitle' ? 0.045 : 0.06));
+    /* Where the caption sits. 'lower' is carried two ways: as the clip kind
+       and as the track it lives on ('subs'). Reading only the kind is what
+       put captions in the middle of the frame however often they were asked
+       for at the bottom — the operation that writes them tracks position by
+       track, and projects captioned before this fix are stored that way. */
+    const lower = clip.kind === 'subtitle' || clip.trackId === 'subs';
+    const size = Math.round(H * (lower ? 0.045 : 0.06));
     ctx.font         = `700 ${size}px 'Inter Tight', Inter, system-ui, sans-serif`;
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'alphabetic';
     ctx.globalAlpha  = clip.effects.opacity;
 
-    const y = clip.kind === 'subtitle' ? H - Math.round(H * 0.08) : Math.round(H * 0.5);
+    const y = lower ? H - Math.round(H * 0.08) : Math.round(H * 0.5);
     const m = ctx.measureText(text);
     const padX = size * 0.5, padY = size * 0.32;
 

@@ -149,9 +149,47 @@ describe('operation execution', () => {
 
   it('adds caption slots across the video only', () => {
     const out = applyOperations(clips(), [{ op: 'add_captions', position: 'lower', everyS: 10 }], ctx);
-    const caps = out.clips.filter(c => c.type === 'text');
+    const caps = out.clips.filter(c => c.id.startsWith('cap-'));
     expect(caps.length).toBe(10);
     expect(caps.every(c => c.trackId === 'subs')).toBe(true);
+  });
+
+  /* Asked for captions at the bottom three times and they stayed in the
+     middle: each run wrote a new set on the subs track while the old centred
+     set sat untouched on the text track, still being drawn. */
+  it('captions asked for at the bottom are typed as subtitles', () => {
+    const out = applyOperations(clips(), [{ op: 'add_captions', position: 'lower', everyS: 10 }], ctx);
+    const caps = out.clips.filter(c => c.id.startsWith('cap-'));
+    expect(caps.every(c => c.type === 'subtitle')).toBe(true);
+  });
+
+  it('moving captions to the bottom removes the ones in the middle', () => {
+    const centred = applyOperations(clips(), [{ op: 'add_captions', position: 'centre', everyS: 10 }], ctx);
+    expect(centred.clips.filter(c => c.trackId === 'text').length).toBeGreaterThan(0);
+
+    const moved = applyOperations(centred.clips, [{ op: 'add_captions', position: 'lower', everyS: 10 }], ctx);
+    const leftBehind = moved.clips.filter(c => c.trackId === 'text' && c.id.startsWith('cap-'));
+    expect(leftBehind, 'the centred captions were still on screen').toHaveLength(0);
+    expect(moved.clips.filter(c => c.trackId === 'subs').length).toBe(10);
+  });
+
+  it('and moving them back to the middle clears the bottom set', () => {
+    const lower = applyOperations(clips(), [{ op: 'add_captions', position: 'lower', everyS: 10 }], ctx);
+    const back  = applyOperations(lower.clips, [{ op: 'add_captions', position: 'centre', everyS: 10 }], ctx);
+    expect(back.clips.filter(c => c.trackId === 'subs')).toHaveLength(0);
+    expect(back.clips.filter(c => c.trackId === 'text').length).toBe(10);
+  });
+
+  it('re-running captions does not pile up duplicates', () => {
+    let cur = clips();
+    for (let i = 0; i < 3; i++)
+      cur = applyOperations(cur, [{ op: 'add_captions', position: 'lower', everyS: 10 }], ctx).clips;
+    expect(cur.filter(c => c.id.startsWith('cap-'))).toHaveLength(10);
+  });
+
+  it('says where the captions went', () => {
+    const out = applyOperations(clips(), [{ op: 'add_captions', position: 'lower', everyS: 10 }], ctx);
+    expect(out.summary).toMatch(/bottom/i);
   });
 
   it('never produces zero-length or inverted clips', () => {

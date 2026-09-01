@@ -10,6 +10,7 @@ interface DrawCall { x: number; y: number; w: number; h: number }
 
 let draws: DrawCall[] = [];
 let texts: string[] = [];
+let textDraws: { t: string; x: number; y: number }[] = [];
 let filters: string[] = [];
 let videoTime = 0;
 let paused = true;
@@ -23,7 +24,7 @@ function fakeCtx() {
     save() {}, restore() {},
     fillRect() {},
     measureText: () => ({ width: 100 }),
-    fillText: (t: string) => { texts.push(t); },
+    fillText: (t: string, x: number, y: number) => { texts.push(t); textDraws.push({ t, x, y }); },
     drawImage: (_img: unknown, x: number, y: number, w: number, h: number) => {
       draws.push({ x, y, w, h });
       filters.push((globalThis as never as { __lastFilter: string }).__lastFilter);
@@ -55,7 +56,7 @@ function setup(clips: Parameters<typeof buildSequence>[0], durationS = 100,
 }
 
 beforeEach(() => {
-  draws = []; texts = []; filters = []; videoTime = 0; paused = true;
+  draws = []; texts = []; textDraws = []; filters = []; videoTime = 0; paused = true;
 
   Object.defineProperty(HTMLMediaElement.prototype, 'currentTime', {
     configurable: true,
@@ -233,5 +234,48 @@ describe('end of playback', () => {
     await frames(8);
 
     expect(ends).toBe(1);
+  });
+});
+
+
+/**
+ * Where a caption is drawn.
+ *
+ * Asking for captions along the bottom put them in the middle of the frame
+ * however many times it was asked: the operation records the position as the
+ * track the caption lives on, and the renderer was reading only the clip kind.
+ */
+describe('caption position', () => {
+  const at = (clips: any[], t: number) => {
+    const { engine, canvas } = setup(clips, 100);
+    textDraws = [];
+    engine.seek(t);
+    const hit = textDraws.find(d => d.t.includes('spoken'));
+    return { y: hit?.y ?? -1, H: canvas.height };
+  };
+
+  it('draws a subtitle along the bottom', () => {
+    const { y, H } = at([
+      { id:'v', trackId:'video', label:'V', startS:0, endS:100, type:'video' as const },
+      { id:'cap-0', trackId:'subs', label:'the spoken words', startS:1, endS:5, type:'subtitle' as const },
+    ], 2);
+    expect(y).toBeGreaterThan(H * 0.8);
+  });
+
+  it('draws a caption on the subs track along the bottom even if it is typed as plain text', () => {
+    // projects captioned before the fix are stored exactly like this
+    const { y, H } = at([
+      { id:'v', trackId:'video', label:'V', startS:0, endS:100, type:'video' as const },
+      { id:'cap-0', trackId:'subs', label:'the spoken words', startS:1, endS:5, type:'text' as const },
+    ], 2);
+    expect(y, 'a caption on the subs track was drawn in the middle').toBeGreaterThan(H * 0.8);
+  });
+
+  it('still centres a caption that asked to be centred', () => {
+    const { y, H } = at([
+      { id:'v', trackId:'video', label:'V', startS:0, endS:100, type:'video' as const },
+      { id:'cap-0', trackId:'text', label:'the spoken words', startS:1, endS:5, type:'text' as const },
+    ], 2);
+    expect(y).toBeCloseTo(H * 0.5, 0);
   });
 });

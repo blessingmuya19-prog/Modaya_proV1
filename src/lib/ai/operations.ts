@@ -206,8 +206,17 @@ export function applyOperations(
         break;
       }
       case 'add_captions': {
-        const track = op.position === 'lower' ? 'subs' : 'text';
-        working = working.filter(c => c.trackId !== track || c.type !== 'text');
+        const lower = op.position === 'lower';
+        const track = lower ? 'subs' : 'text';
+        const kind: TimelineClip['type'] = lower ? 'subtitle' : 'text';
+        /* Clear the previous captions from BOTH caption tracks, not just the
+           one being written. Asking for captions lower down used to leave the
+           old middle-of-the-frame set behind, so the screen still showed
+           captions in the middle however many times they were moved. */
+        const isCaption = (c: TimelineClip) =>
+          (c.type === 'text' || c.type === 'subtitle') &&
+          (c.id.startsWith('cap-') || c.trackId === track);
+        working = working.filter(c => !(isCaption(c) && (c.trackId === 'subs' || c.trackId === 'text')));
         const video = working.filter(c => c.type === 'video').sort((a, b) => a.startS - b.startS);
         const spoken = ctx.transcript?.segments ?? [];
         let n = 0;
@@ -225,12 +234,12 @@ export function applyOperations(
               id: `cap-${n}`, trackId: track, label: seg.text.slice(0, 120),
               startS: Number(startS.toFixed(3)),
               endS:   Number(endS.toFixed(3)),
-              type:   'text',
+              type:   kind,
             });
             n++;
             if (n >= 800) break;
           }
-          notes.push(`${n} captions written from the transcript`);
+          notes.push(`${n} captions written from the transcript, ${lower ? 'along the bottom' : 'centred'}`);
         } else {
           for (const v of video) {
             for (let t = v.startS; t < v.endS - 0.4; t += op.everyS) {
@@ -238,14 +247,14 @@ export function applyOperations(
                 id: `cap-${n}`, trackId: track, label: 'Caption',
                 startS: Number(t.toFixed(3)),
                 endS:   Number(Math.min(v.endS, t + op.everyS * 0.9).toFixed(3)),
-                type:   'text',
+                type:   kind,
               });
               n++;
               if (n > 400) break;
             }
             if (n > 400) break;
           }
-          notes.push(`${n} caption slots added`);
+          notes.push(`${n} caption slots added, ${lower ? 'along the bottom' : 'centred'}`);
         }
         applied.push(op);
         break;
