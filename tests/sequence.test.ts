@@ -3,7 +3,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  buildSequence, videoClipAt, overlaysAt, sourceTimeFor, resolveGap,
+  buildSequence, videoClipAt, videoClipsAt, baseClipAt, cutawayClipAt, overlaysAt,
+  sourceTimeFor, resolveGap,
   nextBoundary, playableDuration, fitRect, filterFor,
   DEFAULT_TRANSFORM, DEFAULT_EFFECTS,
 } from '@/lib/render/sequence';
@@ -97,5 +98,32 @@ describe('frame fitting', () => {
     expect(filterFor(DEFAULT_EFFECTS)).toBe('none');
     expect(filterFor({ ...DEFAULT_EFFECTS, brightness: 1.2, blurPx: 3 }))
       .toBe('brightness(1.2) blur(3px)');
+  });
+});
+
+describe('B-roll cutaway stacking', () => {
+  // A base talk shot across 0-10s with a muted overlay cutaway at 3-5s.
+  const seq = {
+    durationS: 10, width: 1080, height: 1920,
+    clips: [
+      { id: 'base', trackId: 'video', kind: 'video' as const, label: 'talk', timelineIn: 0, timelineOut: 10,
+        sourceId: 'p1', sourceIn: 20, transform: { ...DEFAULT_TRANSFORM }, effects: { ...DEFAULT_EFFECTS }, z: 0, muted: false },
+      { id: 'broll', trackId: 'overlay', kind: 'video' as const, label: 'broll', timelineIn: 3, timelineOut: 5,
+        sourceId: 'p1', sourceIn: 80, transform: { ...DEFAULT_TRANSFORM }, effects: { ...DEFAULT_EFFECTS }, z: 10, muted: true },
+    ],
+  };
+
+  it('draws the cutaway on top (videoClipAt) but keeps the base as audio/clock owner (baseClipAt)', () => {
+    expect(videoClipAt(seq as never, 4)?.id).toBe('broll');
+    expect(baseClipAt(seq as never, 4)?.id).toBe('base');
+    expect(cutawayClipAt(seq as never, 4)?.id).toBe('broll');
+    // outside the cutaway, base is both visible and owns audio
+    expect(videoClipAt(seq as never, 6)?.id).toBe('base');
+    expect(cutawayClipAt(seq as never, 6)).toBeNull();
+  });
+
+  it('returns both clips in draw order (lowest z first)', () => {
+    const at = videoClipsAt(seq as never, 4).map(c => c.id);
+    expect(at).toEqual(['base', 'broll']);
   });
 });

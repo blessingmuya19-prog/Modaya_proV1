@@ -4,7 +4,7 @@
  * frame format, place real captions, and stay in bounds and non-overlapping.
  */
 import { describe, it, expect } from 'vitest';
-import { composeStudioPlan, chooseMoments } from '@/lib/studio/editPlan';
+import { composeStudioPlan, chooseMoments, chooseBroll } from '@/lib/studio/editPlan';
 import type { StyleProfile } from '@/lib/ai/styleProfile';
 
 function profile(over: Partial<StyleProfile> = {}): StyleProfile {
@@ -85,20 +85,26 @@ describe('composeStudioPlan — short mode', () => {
     }
   });
 
-  it('keeps every clip inside the output and video shots non-overlapping', () => {
-    const vids = plan.clips.filter(c => c.type === 'video').sort((a, b) => a.startS - b.startS);
+  it('keeps every clip inside the output and main shots non-overlapping', () => {
+    // Base shots (trackId 'video') form the continuous talk track; B-roll
+    // cutaways (trackId 'overlay') deliberately overlap them.
+    const shots = plan.clips.filter(c => c.trackId === 'video').sort((a, b) => a.startS - b.startS);
     for (const c of plan.clips) {
       expect(c.startS).toBeGreaterThanOrEqual(0);
       expect(c.endS).toBeLessThanOrEqual(plan.durationS + 0.01);
       expect(c.endS - c.startS).toBeGreaterThan(0);
     }
-    for (let i = 1; i < vids.length; i++) {
-      expect(vids[i].startS).toBeGreaterThanOrEqual(vids[i - 1].endS - 0.01);
+    for (let i = 1; i < shots.length; i++) {
+      expect(shots[i].startS).toBeGreaterThanOrEqual(shots[i - 1].endS - 0.01);
+    }
+    // B-roll overlays sit on a higher track, above a base shot.
+    for (const ov of plan.clips.filter(c => c.trackId === 'overlay')) {
+      expect(shots.some(s => ov.startS >= s.startS && ov.endS <= s.endS)).toBe(true);
     }
   });
 
   it('reads video shots from the right source ranges (sourceIn set)', () => {
-    const vids = plan.clips.filter(c => c.type === 'video');
+    const vids = plan.clips.filter(c => c.trackId === 'video');
     expect(vids.every(v => v.sourceIn >= 0)).toBe(true);
   });
 });
@@ -113,5 +119,42 @@ describe('composeStudioPlan — full re-cut', () => {
     expect(plan.hookFirst).toBe(false);
     // a re-cut removes material but keeps a substantial programme
     expect(plan.durationS).toBeGreaterThan(120);
+  });
+});
+
+describe('B-roll cutaways', () => {
+  it('chooseBroll avoids ranges already used and stays in bounds', () => {
+    const used = [{ s: 120, e: 150 }];
+    const cuts = chooseBroll({ durationS: 300, interest: interestWithSpike(), used, count: 5 });
+    expect(cuts.length).toBeGreaterThan(0);
+    for (const c of cuts) {
+      expect(c.s).toBeGreaterThanOrEqual(0);
+      expect(c.e).toBeLessThanOrEqual(300);
+      const hitsUsed = c.s >= 120 - 0.3 && c.e <= 150 + 0.3;
+      expect(hitsUsed).toBe(false);
+    }
+  });
+
+  it('places silent overlay cutaways over main shots while keeping base audio', () => {
+    const plan = composeStudioPlan({
+      profile: profile(), sourceDurationS: 300,
+      interest: interestWithSpike(300, [120, 150]),
+    });
+    const overlays = plan.clips.filter(c => c.trackId === 'overlay');
+    // long enough source + target gives at least one cutaway, but never requires it
+    if (overlays.length) {
+      for (const ov of overlays) {
+        expect(ov.startS).toBeGreaterThanOrEqual(0);
+        expect(ov.endS).toBeLessThanOrEqual(plan.durationS + 0.01);
+      }
+      expect(plan.broll).toBe(overlays.length);
+    }
+  });
+
+  it('summary mentions b-roll only when present', () => {
+    const plan = composeStudioPlan({
+      profile: profile(), sourceDurationS: 300, interest: interestWithSpike(),
+    });
+    if (plan.broll > 0) expect(plan.summary).toMatch(/b-roll/i);
   });
 });

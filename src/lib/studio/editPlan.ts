@@ -30,7 +30,7 @@ export type FrameRatio = '9:16' | '1:1' | '16:9';
 
 export interface PlannedShot {
   id: string;
-  trackId: 'video' | 'subs' | 'text';
+  trackId: 'video' | 'overlay' | 'subs' | 'text';
   label: string;
   /** Position in the output programme. */
   startS: number;
@@ -52,6 +52,7 @@ export interface StudioPlan {
   profileName: string;
   frame: { width: number; height: number; ratio: FrameRatio };
   captions: number;
+  broll: number;
   hookFirst: boolean;
 }
 
@@ -167,6 +168,44 @@ export function chooseMoments(opts: {
   })).filter(w => w.e - w.s >= minShot * 0.6);
 }
 
+/**
+ * Pick B-roll cutaways: short, visually strong windows of the source that are
+ * NOT already used as a main moment, so they illustrate the talk without
+ * repeating it. Pure and deterministic.
+ */
+export function chooseBroll(opts: {
+  durationS: number;
+  interest?: number[];
+  /** Source windows already used by the main moments [s,e]. */
+  used: Array<{ s: number; e: number }>;
+  /** How many cutaways to aim for. */
+  count: number;
+  cutLenS?: number;
+}): Array<{ s: number; e: number; score: number }> {
+  const { durationS, interest, used } = opts;
+  const cutLen = clamp(opts.cutLenS ?? 1.6, 0.8, 4);
+  const step = Math.max(1, cutLen / 2);
+  const overlapsUsed = (s: number, e: number) =>
+    used.some(u => Math.min(e, u.e) - Math.max(s, u.s) > 0.3);
+
+  type Win = { s: number; e: number; score: number };
+  const wins: Win[] = [];
+  for (let s = 0; s + cutLen <= durationS + 1e-6; s += step) {
+    const e = Math.min(durationS, s + cutLen);
+    if (overlapsUsed(s, e)) continue;
+    wins.push({ s, e, score: meanInterest(interest, s, e) });
+  }
+  // Non-overlapping, best first; spread them so two cutaways aren't adjacent.
+  const picked: Win[] = [];
+  for (const w of [...wins].sort((a, b) => b.score - a.score)) {
+    if (picked.length >= opts.count) break;
+    const clash = picked.some(p => Math.min(w.e, p.e) - Math.max(w.s, p.s) > -2);
+    if (clash) continue;
+    picked.push(w);
+  }
+  return picked.sort((a, b) => a.s - b.s);
+}
+
 /** Map a transcript onto the condensed programme as lower-third captions. */
 function captionClips(
   shots: Array<{ srcStart: number; outStart: number; outEnd: number }>,
@@ -224,8 +263,10 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
   };
 
   const video: PlannedShot[] = [];
+  const broll: PlannedShot[] = [];
   let cursor = 0;
   let kept = 0;
+  let brollCount = 0;
 
   if (mode === 'short') {
     const targetS = clamp(opts.targetSeconds ?? (refShort ? profile.durationS : 45), 20, 90);
@@ -273,6 +314,36 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
     });
   }
 
+  // B-roll: short, silent cutaways from other visually-strong parts of the
+  // source, dropped over the middle of shots like a real TikTok cutaway. The
+  // base talk track keeps playing beneath them.
+  const usedRanges = video.map(v => ({ s: v.sourceIn, e: v.sourceIn + (v.endS - v.startS) }));
+  const targetCutaways = Math.max(0, Math.round(cursor / 9));   // roughly one per 9s
+  const cuts = chooseBroll({
+    durationS, interest, used: usedRanges, count: targetCutaways, cutLenS: 1.7,
+  });
+  if (cuts.length && video.length) {
+    const main = video.filter(v => v.trackId === 'video');
+    let ci = 0;
+    // Stagger cutaways across the main shots, skipping the hook (first shot).
+    for (let i = 1; i < main.length && ci < cuts.length; i++) {
+      const shot = main[i];
+      const shotLen = shot.endS - shot.startS;
+      if (shotLen < 3.5) continue;
+      const src = cuts[ci++];
+      const len = Math.min(1.7, shotLen * 0.5);
+      const outStart = shot.startS + shotLen * 0.28;
+      broll.push({
+        id: `broll-${broll.length}`, trackId: 'overlay', label: 'B-roll',
+        startS: Number(outStart.toFixed(3)), endS: Number((outStart + len).toFixed(3)),
+        type: 'video', sourceIn: Number(src.s.toFixed(3)),
+        transform: { ...DEFAULT_TRANSFORM, fit: 'cover', scale: 1.08 },
+        effects,
+      });
+      brollCount++;
+    }
+  }
+
   // Real captions over the surviving shots.
   const caps = profile.captions.present
     ? captionClips(
@@ -281,7 +352,7 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
       )
     : [];
 
-  const clips = [...video, ...caps];
+  const clips = [...video, ...broll, ...caps];
   const newDuration = cursor;
   const summary = [
     mode === 'short' ? `${kept} moments` : `${kept} shots`,
@@ -289,6 +360,7 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
     caps.length ? `${caps.length} captions` : null,
     ratio === '9:16' ? 'vertical 9:16' : null,
     profile.punchInRate > 0.25 ? 'punch-ins' : null,
+    brollCount ? `${brollCount} b-roll` : null,
   ].filter(Boolean).join(' · ');
 
   return {
@@ -300,6 +372,7 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
     profileName: profile.sourceName,
     frame,
     captions: caps.length,
+    broll: brollCount,
     hookFirst: mode === 'short',
   };
 }
