@@ -18,8 +18,9 @@ import { LogoMark } from '../ui/Logo';
 import { getMedia, setMedia, subscribeMedia, analyseFile, type MediaEntry } from '@/lib/videoStore';
 import { loadMediaFile, saveMediaFile } from '@/lib/mediaDb';
 import { analyseAudio, analyseReference, interestCurve } from '@/lib/ai/analyseReference';
-import { generateEditPlan, type EditPlan } from '@/lib/ai/styleTransfer';
 import type { StyleProfile } from '@/lib/ai/styleProfile';
+import { composeStudioPlan, type StudioPlan, type TranscriptLine } from '@/lib/studio/editPlan';
+import { transcribeMedia } from '@/lib/ai/transcribeClient';
 import { buildSequence, type Sequence, type StyleLayer } from '@/lib/render/sequence';
 import PreviewCanvas from '../editor/PreviewCanvas';
 import { ExportModal } from '../editor/ExportModal';
@@ -86,9 +87,10 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
   const [headline, setHeadline] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const [plan, setPlan] = useState<EditPlan | null>(null);
+  const [plan, setPlan] = useState<StudioPlan | null>(null);
   const [clips, setClips] = useState<EditorClip[]>([]);
   const [styleLayer, setStyleLayer] = useState<StyleLayer>({});
+  const [frame, setFrame] = useState<{ width: number; height: number }>({ width: 1080, height: 1920 });
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [totalS, setTotalS] = useState(media?.durationS || 0);
@@ -101,38 +103,42 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
   const cancelRef = useRef(false);
   /** Everything a regeneration needs, captured on the first run. */
   const ctxRef = useRef<{
-    blob: Blob; durationS: number; onsets: number[]; interest: number[];
+    durationS: number; onsets: number[]; interest: number[]; transcript: TranscriptLine[];
     baseProfile: StyleProfile; hasRef: boolean; captionsWanted: boolean;
     sourceName?: string;
   } | null>(null);
   /** The profile currently driving the edit (reference/default, then refined). */
   const profileRef = useRef<StyleProfile | null>(null);
   const seedRef = useRef(1);
-  const matchRef = useRef(0);
 
-  /** Build the EditPlan from the current profile and push it to the preview.
+  /** Compose the EditPlan from the current profile and push it to the preview.
    *  Shared by the first run, Regenerate and every chat refinement. Returns
    *  the plan plus the grounded reference-match score. */
-  const applyPlan = useCallback((profile: StyleProfile, seed: number): { plan: EditPlan; match: number } | null => {
+  const applyPlan = useCallback((profile: StyleProfile, seed: number): { plan: StudioPlan; match: number } | null => {
     const ctx = ctxRef.current;
     if (!ctx) return null;
-    const editPlan = generateEditPlan({
-      profile, durationS: ctx.durationS, sourceName: ctx.sourceName,
-      onsets: ctx.onsets, interest: ctx.interest, seed,
+    const plan = composeStudioPlan({
+      profile, sourceDurationS: ctx.durationS,
+      interest: ctx.interest, onsets: ctx.onsets,
+      transcript: ctx.transcript.length ? ctx.transcript : undefined,
+      seed,
     });
-    setPlan(editPlan);
-    const mapped = editPlan.clips.map(clipToEditor);
+    setPlan(plan);
+    setFrame({ width: plan.frame.width, height: plan.frame.height });
+    const mapped = plan.clips.map(clipToEditor);
     const layer: StyleLayer = {};
-    for (const c of editPlan.clips) {
-      layer[c.id] = { sourceIn: c.sourceIn, transform: c.transform, effects: c.effects };
+    for (const c of plan.clips) {
+      if (c.type === 'video') {
+        layer[c.id] = { sourceIn: c.sourceIn, transform: c.transform, effects: c.effects };
+      }
     }
     setClips(mapped);
     setStyleLayer(layer);
-    setTotalS(editPlan.durationS);
+    setTotalS(plan.durationS);
 
-    const captionClips = editPlan.clips.filter(c => c.type === 'text');
-    const cutCount = Math.max(1, editPlan.cutCount || editPlan.clips.filter(c => c.type === 'video').length);
-    const editCpm = (cutCount / Math.max(1, editPlan.durationS)) * 60;
+    const videoShots = plan.clips.filter(c => c.type === 'video');
+    const cutCount = Math.max(1, plan.cutCount || videoShots.length);
+    const editCpm = (cutCount / Math.max(1, plan.durationS)) * 60;
     const m = referenceMatch({
       hasReference: ctx.hasRef,
       editCutsPerMin: editCpm,
@@ -141,25 +147,26 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
       refPunchInRate: ctx.baseProfile.punchInRate,
       editPunchInRate: profile.punchInRate,
       captionsWanted: ctx.captionsWanted,
-      captionsPresent: !ctx.captionsWanted || captionClips.length > 0,
+      captionsPresent: !ctx.captionsWanted || plan.captions > 0,
     });
-    matchRef.current = m;
     setMatch(m);
-    return { plan: editPlan, match: m };
+    return { plan, match: m };
   }, []);
 
   const sourceUrl = media?.objectUrl ?? null;
 
   const sequence: Sequence | null = useMemo(() => {
     if (!media || !clips.length) return null;
+    // The output frame follows the plan's format (9:16 vertical for shorts),
+    // not the source media's shape — the renderer cover-crops to fit it.
     return buildSequence(clips as never[], {
       durationS: totalS,
-      width: media.width ?? 1920,
-      height: media.height ?? 1080,
+      width: frame.width,
+      height: frame.height,
       sourceId: projectId || 'main',
       style: styleLayer,
     });
-  }, [clips, media, totalS, projectId, styleLayer]);
+  }, [clips, media, totalS, projectId, styleLayer, frame]);
 
   const setStage = useCallback((id: StageId, state: 'active' | 'done') => {
     setStages(prev => (state === 'active' ? markActive(prev, id) : markDone(prev, id)));
@@ -216,10 +223,23 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
       const interest = interestCurve(env, durationS);
       const baseProfile: StyleProfile = profile ?? defaultPunchyProfile(durationS);
 
+      // Captions are the real spoken words — transcribe when a speech service
+      // is configured (the call is a no-op without a key and captions fall
+      // back to none). Best-effort: a failed transcription never blocks.
+      let transcript: TranscriptLine[] = [];
+      if (baseProfile.captions.present) {
+        await tick('captions', async () => {
+          const lines = await transcribeMedia(projectId, blob, durationS).catch(() => null);
+          transcript = lines ?? [];
+        });
+      } else {
+        setStage('captions', 'done');
+      }
+
       // Capture everything a later regeneration/refinement needs.
       ctxRef.current = {
-        blob, durationS,
-        onsets: env?.onsets ?? [], interest,
+        durationS,
+        onsets: env?.onsets ?? [], interest, transcript,
         baseProfile, hasRef: withRef && !!profile,
         captionsWanted: baseProfile.captions.present,
         sourceName: stored.filename || entry?.filename,
@@ -230,10 +250,9 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
       // 3 — find the strongest moments (drives which footage the plan keeps)
       await tick('find-moments', () => {});
 
-      // 4+5 — match pacing/cuts and captions (the plan encodes both)
-      let built: { plan: EditPlan; match: number } | null = null as { plan: EditPlan; match: number } | null;
+      // 4 — compose the plan (moments, vertical frame, cuts, push-ins)
+      let built: { plan: StudioPlan; match: number } | null = null as { plan: StudioPlan; match: number } | null;
       await tick('match-pacing', () => { built = applyPlan(baseProfile, 1); });
-      await tick('captions', () => {});
 
       // 6 — the edit is already in state (applyPlan); just mark it.
       await tick('build-edit', () => {});
@@ -373,8 +392,8 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
       </header>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '22px 16px', gap: 16, overflowY: 'auto' }}>
-        {/* Preview */}
-        <div style={{ width: 'min(92vw, 560px)', aspectRatio: '9 / 16', background: '#000', borderRadius: 14, overflow: 'hidden', position: 'relative', border: `1px solid ${C.b3}`, boxShadow: '0 24px 70px rgba(0,0,0,0.7)' }}>
+        {/* Preview — shaped by the plan's frame format (9:16 short / 16:9) */}
+        <div style={{ ...previewBox(plan?.frame.ratio), background: '#000', borderRadius: 14, overflow: 'hidden', position: 'relative', border: `1px solid ${C.b3}`, boxShadow: '0 24px 70px rgba(0,0,0,0.7)' }}>
           {sequence && sourceUrl ? (
             <PreviewCanvas
               sequence={sequence} sourceUrl={sourceUrl} sourceId={projectId || 'main'}
@@ -567,6 +586,13 @@ function WorkingScreen({ stages, refName, progress, onCancel }: { stages: StageS
       <style>{`@keyframes spin { to { transform: rotate(360deg); } } .spin { animation: spin 0.8s linear infinite; }`}</style>
     </div>
   );
+}
+
+/** Preview box sizing per output format: tall column for 9:16, wide for 16:9. */
+function previewBox(ratio?: string): React.CSSProperties {
+  if (ratio === '16:9') return { width: 'min(94vw, 720px)', aspectRatio: '16 / 9' };
+  if (ratio === '1:1')  return { width: 'min(80vw, 440px)', aspectRatio: '1 / 1' };
+  return { width: 'min(86vw, 400px)', aspectRatio: '9 / 16', maxHeight: '70vh' };
 }
 
 /* A default punchy short-form profile used when no reference is given: Modaya
