@@ -8,6 +8,7 @@ import DebugHud from './DebugHud';
 import PreviewCanvas from './PreviewCanvas';
 import { buildSequence, Sequence, StyleLayer } from '@/lib/render/sequence';
 import { analyseReference, analyseAudio, interestCurve } from '@/lib/ai/analyseReference';
+import { decodeForAsr, chunkForAsr } from '@/lib/ai/audioForAsr';
 import { StyleProfile, describeStyle } from '@/lib/ai/styleProfile';
 import { generateEditPlan, EditPlan } from '@/lib/ai/styleTransfer';
 import { detectSilences } from '@/lib/ai/operations';
@@ -660,6 +661,8 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
   const energy   = useRef<number[]>([]);
   /** 'pending' while the decode runs, so the AI can say so instead of guessing. */
   const audioState = useRef<'pending' | 'ready' | 'failed'>('pending');
+  const [asr, setAsr] = useState<'idle' | 'running' | 'done' | 'failed'>('idle');
+  const asrTried = useRef(false);
   useEffect(() => {
     let cancelled = false;
     audioState.current = 'pending';
@@ -680,6 +683,65 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
     })();
     return () => { cancelled = true; };
   }, [projectId]);
+
+  /**
+   * Speech recognition. Deliberately on demand rather than automatic: it costs
+   * a provider call, and plenty of edits never need words. Chunks are uploaded
+   * in order so partial progress is still usable if a later one fails.
+   */
+  const transcribe = async () => {
+    if (asr === 'running') return;
+    asrTried.current = true;
+    setAsr('running');
+    say({ role: 'ai', text: 'Listening to the audio and writing down what is said…' });
+
+    try {
+      const stored = await loadMediaFile(projectId);
+      if (!stored) {
+        replaceLast("I can't find the media for this project in this browser — reopen it and try again.");
+        setAsr('failed');
+        return;
+      }
+
+      const samples = await decodeForAsr(stored.blob);
+      if (!samples || samples.length === 0) {
+        replaceLast("I couldn't decode any audio from this file — it may have no audio track.");
+        setAsr('failed');
+        return;
+      }
+
+      const chunks = chunkForAsr(samples);
+      let total = 0;
+
+      for (let i = 0; i < chunks.length; i++) {
+        if (chunks.length > 1) {
+          replaceLast(`Transcribing… part ${i + 1} of ${chunks.length}.`);
+        }
+        const form = new FormData();
+        form.append('audio', chunks[i].blob, 'audio.wav');
+        form.append('offsetS', String(chunks[i].offsetS));
+        form.append('durationS', String(totalS));
+
+        const res  = await fetch(`/api/projects/${projectId}/transcribe`, { method: 'POST', body: form });
+        const data = await res.json().catch(() => null);
+
+        if (!res.ok) {
+          replaceLast(data?.error ?? 'Speech recognition failed.');
+          setAsr(total > 0 ? 'done' : 'failed');
+          return;
+        }
+        total += Array.isArray(data?.segments) ? data.segments.length : 0;
+      }
+
+      setAsr('done');
+      replaceLast(total > 0
+        ? `Done — ${total} lines transcribed. I can now write real captions, cut filler words, or find where something was said.`
+        : "I listened to the whole thing but couldn't make out any speech.");
+    } catch {
+      replaceLast('Something went wrong while transcribing.');
+      setAsr('failed');
+    }
+  };
 
   const say = (m: Msg) => setMsgs(prev => [...prev, m]);
   const replaceLast = (text: string) =>
@@ -751,6 +813,11 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
     }
   };
 
+  /** Requests that are meaningless without words on the timeline. */
+  const needsTranscript = (text: string) =>
+    /caption|subtitle|filler|\bums?\b|\buhs?\b|transcri|what (did|do|does|is)\s+(they|he|she|it|the)|what.*(say|said|talk|about)|quote|word/i
+      .test(text);
+
   const send = async (text: string) => {
     if (!text.trim() || loading) return;
     const userMsg: Msg = { role: 'user', text: text.trim() };
@@ -759,6 +826,12 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
     setLoading(true);
 
     try {
+      // Transcribe first rather than refusing. The request itself is consent —
+      // nobody asks for captions and then objects to speech recognition.
+      if (needsTranscript(text) && asr !== 'done' && !asrTried.current) {
+        await transcribe();
+      }
+
       const res  = await fetch(`/api/projects/${projectId}/ai`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },

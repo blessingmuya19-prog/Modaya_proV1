@@ -9,6 +9,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { db, Clip } from '@/lib/db';
 import { v4 as uuid } from 'uuid';
 import { describeLoudness } from '@/lib/ai/highlights';
+import { transcriptForPrompt, fillerRanges, Transcript } from '@/lib/ai/transcript';
 import { chatDetailed, explainFailure, extractJson, detectProvider, FailureReason } from '@/lib/ai/llm';
 import { validateOperations, applyOperations, Operation, TimelineClip } from '@/lib/ai/operations';
 
@@ -54,11 +55,15 @@ interface EditResult {
  */
 function applyEdit(
   intent: Intent, clips: Clip[], durationS: number,
-  ctx: { silences: [number, number][]; energy: number[]; modelNote?: string },
+  ctx: {
+    silences: [number, number][]; energy: number[]; modelNote?: string;
+    transcript?: Transcript | null;
+  },
 ): EditResult {
 
   const run = (ops: Operation[]) =>
-    applyOperations(clips as TimelineClip[], ops, { durationS, silences: ctx.silences });
+    applyOperations(clips as TimelineClip[], ops,
+      { durationS, silences: ctx.silences, transcript: ctx.transcript ?? null });
 
   const nothing = (reply: string): EditResult => ({
     reply, summary: 'No change', savedS: 0, affectedIds: [], newClips: clips, intent,
@@ -121,11 +126,14 @@ function applyEdit(
     case 'captions': {
       const out = run([{ op: 'add_captions', position: 'lower', everyS: 3 }]);
       const count = out.clips.filter(c => c.type === 'text').length;
+      const spoken = ctx.transcript?.segments?.length ?? 0;
+
       return {
-        reply: `Added ${count} empty caption slots across the timeline, spaced every 3 seconds. ` +
-               "I can't transcribe the words yet — speech recognition isn't wired up — so the text " +
-               'is blank and ready for you to fill in.',
-        summary:     `${count} caption slots added`,
+        reply: spoken > 0
+          ? `Added ${count} captions with the words from the transcript, timed to when they were said.`
+          : `Added ${count} empty caption slots across the timeline, spaced every 3 seconds. ` +
+            "This project hasn't been transcribed yet, so the text is blank and ready for you to fill in.",
+        summary:     spoken > 0 ? `${count} captions written` : `${count} caption slots added`,
         savedS:      0,
         affectedIds: out.affectedIds,
         newClips:    out.clips as Clip[],
@@ -133,10 +141,25 @@ function applyEdit(
       };
     }
 
-    case 'clean':
-      return nothing(
-        "Removing filler words needs a transcript, and speech recognition isn't available yet. " +
-        'What I can do now is cut the measured pauses — ask me to cut the dead air.');
+    case 'clean': {
+      const fillers = fillerRanges(ctx.transcript ?? null);
+      if (fillers.length === 0) {
+        return nothing(ctx.transcript
+          ? "I read the transcript and couldn't find any segments that are pure filler, so there's nothing safe to cut."
+          : "Removing filler words needs a transcript, and this project hasn't been transcribed yet. " +
+            'What I can do now is cut the measured pauses — ask me to cut the dead air.');
+      }
+      const out = run([{ op: 'remove_ranges', ranges: fillers }]);
+      return {
+        reply: `Cut ${fillers.length} filler ${fillers.length === 1 ? 'moment' : 'moments'} ` +
+               `from the transcript — ${Math.round(out.removedS)}s of "um", "uh" and the like.`,
+        summary:     out.summary,
+        savedS:      Math.round(out.removedS),
+        affectedIds: out.affectedIds,
+        newClips:    out.clips as Clip[],
+        intent,
+      };
+    }
 
     case 'vertical':
       return nothing(
@@ -190,10 +213,19 @@ Choosing the "best", "strongest" or "highlight" part:
 - Say in your reply roughly where it falls ("around 0:38") and that you picked
   it by loudness, which tracks crowd noise and impact but not meaning.
 
+Using the TRANSCRIPT, when one is present:
+- It is the real speech, with timestamps. Quote it, search it, cut from it.
+- "What is this about?" is answered from the transcript, never from the title.
+- add_captions writes the actual words automatically — you do not supply text.
+- To remove filler words or a rambling passage, emit remove_ranges over the
+  exact timestamps of those segments.
+- For "find where they talk about X", use keep_ranges over matching segments.
+
 What you cannot do — say so plainly instead of pretending:
-- You cannot see the picture. You do not know who is on screen or what happens.
-- You cannot hear speech. There is no transcript, so you cannot quote anyone,
-  write real captions, or remove filler words.
+- You cannot see the picture. You do not know who is on screen or what happens
+  visually, only what was said.
+- Without a TRANSCRIPT you cannot quote anyone, write real captions, or remove
+  filler words. Say the video has not been transcribed yet.
 - Do not infer content from the file name. A title is not evidence.`;
 
 interface Plan { reply: string; operations: unknown }
@@ -216,6 +248,7 @@ async function planWithLlm(opts: {
   silences:  [number, number][];
   energy:    number[];
   audio:     'pending' | 'ready' | 'failed';
+  transcript: Transcript | null;
   style?:    string;
   history:   { role: 'user' | 'ai'; text: string }[];
 }): Promise<{
@@ -236,6 +269,7 @@ async function planWithLlm(opts: {
     `TIMELINE:\n${clipSummary}`,
     `SILENT SPANS: ${silenceSummary}`,
     `LOUDNESS:\n${describeLoudness(opts.energy, opts.durationS, opts.audio)}`,
+    `TRANSCRIPT:\n${transcriptForPrompt(opts.transcript)}`,
     opts.style ? `REFERENCE STYLE LEARNED: ${opts.style}` : null,
   ].filter(Boolean).join('\n\n');
 
@@ -298,6 +332,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     ? body.energy.filter((n: unknown) => typeof n === 'number').slice(0, 7200)
     : [];
 
+  const transcript: Transcript | null = project?.transcript ?? null;
   const provider = detectProvider();
   let edit: EditResult | null = null;
   let source: 'llm' | 'rules' = 'rules';
@@ -306,7 +341,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (provider.ready) {
     const attempt = await planWithLlm({
-      message, durationS, clips, silences, energy, audio, style,
+      message, durationS, clips, silences, energy, audio, transcript, style,
       history: (project?.aiHistory ?? []).map(m => ({ role: m.role, text: m.text })),
     });
     const plan = attempt.plan;
@@ -314,7 +349,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     if (plan) {
       const outcome = applyOperations(clips as TimelineClip[], plan.operations,
-                                      { durationS, silences });
+                                      { durationS, silences, transcript });
       source = 'llm';
       edit = {
         reply:       plan.reply,
@@ -339,7 +374,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       : "I'm running without an AI model, so I only understand a few set phrases: cut the dead air, " +
         'pick the highlights, or add captions. No provider key reached this deployment ' +
         `(${buildTag()}) — if you have just added one, it only takes effect on a build made afterwards.`;
-    edit = applyEdit(intent, clips, durationS, { silences, energy, modelNote });
+    edit = applyEdit(intent, clips, durationS, { silences, energy, modelNote, transcript });
   }
 
   const now    = new Date().toISOString();

@@ -30,6 +30,8 @@ export interface OperationContext {
   durationS: number;
   /** Silent spans measured in the browser, [start, end] in seconds. */
   silences?: [number, number][];
+  /** Speech recognition output, when it has run. Gives captions real words. */
+  transcript?: { segments: { startS: number; endS: number; text: string }[] } | null;
 }
 
 export interface EditOutcome {
@@ -207,21 +209,44 @@ export function applyOperations(
         const track = op.position === 'lower' ? 'subs' : 'text';
         working = working.filter(c => c.trackId !== track || c.type !== 'text');
         const video = working.filter(c => c.type === 'video').sort((a, b) => a.startS - b.startS);
+        const spoken = ctx.transcript?.segments ?? [];
         let n = 0;
-        for (const v of video) {
-          for (let t = v.startS; t < v.endS - 0.4; t += op.everyS) {
+
+        if (spoken.length > 0) {
+          // Real words at the times they were said. Only caption spans that
+          // survive on the timeline, so captions never appear over cut footage.
+          for (const seg of spoken) {
+            const host = video.find(v => seg.startS < v.endS && seg.endS > v.startS);
+            if (!host) continue;
+            const startS = Math.max(seg.startS, host.startS);
+            const endS   = Math.min(seg.endS,   host.endS);
+            if (endS - startS < 0.12) continue;
             working.push({
-              id: `cap-${n}`, trackId: track, label: 'Caption',
-              startS: Number(t.toFixed(3)),
-              endS:   Number(Math.min(v.endS, t + op.everyS * 0.9).toFixed(3)),
+              id: `cap-${n}`, trackId: track, label: seg.text.slice(0, 120),
+              startS: Number(startS.toFixed(3)),
+              endS:   Number(endS.toFixed(3)),
               type:   'text',
             });
             n++;
+            if (n >= 800) break;
+          }
+          notes.push(`${n} captions written from the transcript`);
+        } else {
+          for (const v of video) {
+            for (let t = v.startS; t < v.endS - 0.4; t += op.everyS) {
+              working.push({
+                id: `cap-${n}`, trackId: track, label: 'Caption',
+                startS: Number(t.toFixed(3)),
+                endS:   Number(Math.min(v.endS, t + op.everyS * 0.9).toFixed(3)),
+                type:   'text',
+              });
+              n++;
+              if (n > 400) break;
+            }
             if (n > 400) break;
           }
-          if (n > 400) break;
+          notes.push(`${n} caption slots added`);
         }
-        notes.push(`${n} caption slots added`);
         applied.push(op);
         break;
       }

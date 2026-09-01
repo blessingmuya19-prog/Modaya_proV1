@@ -12,6 +12,8 @@
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
+import type { Transcript } from '@/lib/ai/transcript';
+
 export interface User {
   id:           string;
   email:        string;
@@ -56,6 +58,8 @@ export interface Project {
   sizeMb:      number;
   /** Poster frame captured at upload, stored as a small JPEG data URL */
   thumbnail:   string;
+  /** Speech recognition output, once it has run. */
+  transcript?: Transcript;
 }
 
 // ── Filesystem helpers — dev-only ─────────────────────────────────────────────

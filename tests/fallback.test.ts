@@ -61,8 +61,11 @@ describe('no-key fallback', () => {
 
   it('never claims a transcription accuracy figure', async () => {
     const d = await ask({ message: 'add captions' });
-    expect(d.aiMessage.text).not.toMatch(/accuracy|%|transcrib(ed|ing)\b/i);
-    expect(d.aiMessage.text).toMatch(/can't transcribe/i);
+    // No invented accuracy, and no claim to have produced words it does not have.
+    expect(d.aiMessage.text).not.toMatch(/accuracy|\d+\s*%/i);
+    expect(d.aiMessage.text).not.toMatch(/\btranscribed the\b|\bI transcribed\b/i);
+    expect(d.aiMessage.text).toMatch(/hasn't been transcribed yet/i);
+    expect(d.aiMessage.text).toMatch(/empty caption slots/i);
     expect(d.edit.newClips.some((c: { type: string }) => c.type === 'text')).toBe(true);
   });
 
@@ -225,5 +228,84 @@ describe('audio measurement state reaches the model', () => {
 
   it('tells the model the decode failed', async () => {
     expect(await capture('failed')).toMatch(/could not be decoded/i);
+  });
+});
+
+/**
+ * With a transcript, two long-standing refusals become real work: captions get
+ * the actual words, and filler removal becomes possible. Neither may claim more
+ * than the transcript supports.
+ */
+describe('with a transcript', () => {
+  const segments = [
+    { startS: 0,   endS: 3,   text: 'Right, today we are working on push ups' },
+    { startS: 3,   endS: 3.4, text: 'um, uh' },
+    { startS: 4,   endS: 8,   text: 'keep your elbows tucked in close' },
+    { startS: 9,   endS: 9.3, text: 'you know, like' },
+    { startS: 10,  endS: 14,  text: 'and breathe out on the way up' },
+  ];
+
+  beforeEach(() => {
+    (project as unknown as { transcript: unknown }).transcript = {
+      segments, language: 'en', model: 'whisper-large-v3-turbo', madeAt: '2026-09-01T00:00:00Z',
+    };
+  });
+  afterEach(() => { delete (project as unknown as { transcript?: unknown }).transcript; });
+
+  it('writes captions containing the real words', async () => {
+    const d = await ask({ message: 'add captions' });
+    const captions = d.edit.newClips.filter((c: { type: string }) => c.type === 'text');
+    expect(captions.length).toBe(segments.length);
+    expect(captions[0].label).toMatch(/push ups/);
+    expect(captions[2].label).toMatch(/elbows tucked/);
+    expect(d.aiMessage.text).toMatch(/from the transcript/i);
+    expect(d.aiMessage.text).not.toMatch(/empty|blank|can't transcribe/i);
+  });
+
+  it('times each caption to when it was said', async () => {
+    const d = await ask({ message: 'add captions' });
+    const first = d.edit.newClips.find((c: { type: string }) => c.type === 'text');
+    expect(first.startS).toBe(0);
+    expect(first.endS).toBe(3);
+  });
+
+  it('removes filler segments and nothing else', async () => {
+    const d = await ask({ message: 'remove filler words' });
+    expect(d.edit.savedS).toBe(1);                       // 0.4s + 0.3s, rounded
+    const video = d.edit.newClips
+      .filter((c: { type: string }) => c.type === 'video')
+      .map((c: { startS: number; endS: number }) => [c.startS, c.endS]);
+    expect(video).toEqual([[0, 3], [3.4, 9], [9.3, 100]]);
+    expect(d.aiMessage.text).toMatch(/filler/i);
+  });
+
+  it('sends the transcript to the model with timestamps', async () => {
+    process.env.GROQ_API_KEY = 'gsk_transcript_capture';
+    let body = '';
+    vi.stubGlobal('fetch', vi.fn(async (_u: string, init: RequestInit) => {
+      body = String(init.body);
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: '{"reply":"ok","operations":[{"op":"none"}]}' } }],
+      }), { status: 200 });
+    }));
+    await ask({ message: 'what do they say about elbows' });
+    expect(body).toMatch(/TRANSCRIPT/);
+    expect(body).toMatch(/elbows tucked in close/);
+    expect(body).toMatch(/\[4\.0-8\.0\]/);
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('without a transcript', () => {
+  it('still refuses filler removal, and says why', async () => {
+    const d = await ask({ message: 'remove filler words' });
+    expect(d.aiMessage.text).toMatch(/hasn't been transcribed yet/i);
+    expect(d.edit.savedS).toBe(0);
+  });
+
+  it('captions are empty slots, and admit it', async () => {
+    const d = await ask({ message: 'add captions' });
+    expect(d.aiMessage.text).toMatch(/empty caption slots/i);
+    expect(d.aiMessage.text).toMatch(/hasn't been transcribed/i);
   });
 });

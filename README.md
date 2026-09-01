@@ -85,6 +85,21 @@ misspellings such as `GROK_API_KEY`.
 Providers are auto-detected in the order above. Force one with `LLM_PROVIDER`,
 and change the model with `LLM_MODEL`.
 
+### Speech recognition
+
+Asking for captions, filler removal, or what was said transcribes the project
+first, using Whisper on the **same Groq key** as the editing brain — no second
+account. The browser decodes the media to 16 kHz mono, encodes a WAV and
+uploads it in chunks split on quiet moments, so a boundary never lands
+mid-word. Timestamps come back on the project timeline and are stored with the
+project.
+
+It runs on demand, never automatically: it costs a provider call, and most
+edits never need words. With a transcript present, `add_captions` writes the
+real words at the times they were said, and filler removal cuts only segments
+that are *entirely* filler — a segment carrying meaning is never cut for
+containing one "um".
+
 ### How the AI is wired
 
 The model never edits the timeline directly. It receives the timeline state,
