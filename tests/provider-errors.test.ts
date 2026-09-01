@@ -283,3 +283,74 @@ describe('settings diagnostics', () => {
     delete process.env.VERCEL; delete process.env.VERCEL_ENV;
   });
 });
+
+/**
+ * Groq's strict JSON validator rejects an empty completion, which is what
+ * gpt-oss returns when chain-of-thought eats the token budget. A provider-side
+ * quirk must not surface as a dead end to the user.
+ */
+describe('strict JSON mode failure', () => {
+  const jsonFail = () =>
+    new Response(JSON.stringify({
+      error: {
+        message: "Failed to validate JSON. Please adjust your prompt. See 'failed_generation' for more details.",
+        type: 'invalid_request_error', code: 'json_validate_failed', failed_generation: '',
+      },
+    }), { status: 400 });
+
+  it('retries the same model without the strict flag and succeeds', async () => {
+    withGroq();
+    const calls: { model: string; strict: boolean }[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_u: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      calls.push({ model: body.model, strict: !!body.response_format });
+      if (calls.length === 1) return jsonFail();
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: '{"reply":"here you go","operations":[]}' } }],
+      }), { status: 200 });
+    }));
+
+    const out = await chatDetailed([{ role: 'user', content: 'hi' }], { json: true, timeoutMs: 500 });
+    expect(out.ok).toBe(true);
+    expect(calls).toHaveLength(2);
+    expect(calls[0].strict).toBe(true);
+    expect(calls[1].strict).toBe(false);
+    expect(calls[1].model).toBe(calls[0].model);   // same model, not the next one
+  });
+
+  it('moves on to the next model when the retry also fails', async () => {
+    withGroq();
+    const models: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_u: string, init: RequestInit) => {
+      models.push(JSON.parse(String(init.body)).model);
+      return models.length <= 2
+        ? jsonFail()
+        : new Response(JSON.stringify({ choices: [{ message: { content: '{"reply":"ok"}' } }] }), { status: 200 });
+    }));
+
+    const out = await chatDetailed([{ role: 'user', content: 'hi' }], { json: true, timeoutMs: 500 });
+    expect(out.ok).toBe(true);
+    expect(new Set(models).size).toBeGreaterThan(1);
+  });
+
+  it('does not retry when strict mode was never asked for', async () => {
+    withGroq();
+    const fetchMock = vi.fn(async () => jsonFail());
+    vi.stubGlobal('fetch', fetchMock);
+    const out = await chatDetailed([{ role: 'user', content: 'hi' }], { json: false, timeoutMs: 500 });
+    expect(out.ok).toBe(false);
+    // one attempt per model in the chain, never two for the same model
+    expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(4);
+  });
+
+  it('leaves reasoning models room to think', async () => {
+    withGroq();
+    let maxTokens = 0;
+    vi.stubGlobal('fetch', vi.fn(async (_u: string, init: RequestInit) => {
+      maxTokens = JSON.parse(String(init.body)).max_tokens;
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 });
+    }));
+    await chatDetailed([{ role: 'user', content: 'hi' }], { timeoutMs: 500 });
+    expect(maxTokens).toBeGreaterThanOrEqual(2048);
+  });
+});

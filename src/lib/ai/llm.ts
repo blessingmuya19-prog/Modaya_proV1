@@ -40,6 +40,7 @@ export type FailureReason =
   | 'unauthorized'
   | 'rate_limited'
   | 'model_unavailable'
+  | 'json_mode_unsupported'
   | 'timeout'
   | 'empty_response'
   | 'provider_error';
@@ -54,6 +55,12 @@ export class ProviderError extends Error {
 
 /** Map an HTTP status (and body) from any provider onto a reason. */
 function reasonFor(status: number, body: string): FailureReason {
+  // Groq's strict JSON validator rejects an empty completion, which is exactly
+  // what a reasoning model returns when chain-of-thought exhausts the token
+  // budget. Retryable without the strict flag, so it gets its own reason.
+  if (/json_validate_failed|failed to validate json|response_format/i.test(body)) {
+    return 'json_mode_unsupported';
+  }
   if (status === 401 || status === 403) return 'unauthorized';
   if (status === 429) return 'rate_limited';
   if (status === 404) return 'model_unavailable';
@@ -195,7 +202,9 @@ async function openAiCompatible(
       model,
       messages,
       temperature: 0.3,
-      max_tokens:  900,
+      // Reasoning models need room for chain-of-thought before the answer;
+      // too small a budget returns an empty completion.
+      max_tokens:  2048,
       ...(json ? { response_format: { type: 'json_object' } } : {}),
     }),
   });
@@ -330,11 +339,27 @@ export async function chatDetailed(
     ok: false, reason: 'provider_error', status: 0, detail: 'no model attempted',
   };
 
+  const wantJson = opts.json ?? false;
+
+  const attempt = (model: string, json: boolean) => withTimeoutStrict(
+    callProvider({ ...cfg, model }, messages, json),
+    opts.timeoutMs ?? 20_000);
+
   for (const model of candidates) {
     try {
-      const text = await withTimeoutStrict(
-        callProvider({ ...cfg, model }, messages, opts.json ?? false),
-        opts.timeoutMs ?? 20_000);
+      let text: string | null;
+      try {
+        text = await attempt(model, wantJson);
+      } catch (err) {
+        // Strict JSON mode failed on the provider's side. The prompt already
+        // demands JSON and extractJson is forgiving, so ask again without the
+        // flag rather than losing the request entirely.
+        if (wantJson && err instanceof ProviderError && err.reason === 'json_mode_unsupported') {
+          text = await attempt(model, false);
+        } else {
+          throw err;
+        }
+      }
 
       if (!text || !text.trim()) {
         last = { ok: false, reason: 'empty_response', status: 0, detail: 'the provider returned no text' };
@@ -349,7 +374,9 @@ export async function chatDetailed(
 
       // Only a retired or unavailable model is worth another attempt; a bad key
       // or a dead network will fail identically for every model in the chain.
-      if (last.reason !== 'model_unavailable') return last;
+      // A retired model is worth another attempt, and so is one whose JSON mode
+      // is broken. A bad key or a dead network fails identically every time.
+      if (last.reason !== 'model_unavailable' && last.reason !== 'json_mode_unsupported') return last;
     }
   }
 
@@ -372,6 +399,9 @@ export function explainFailure(reason: FailureReason, provider: string, detail =
              'Providers retire models regularly — set LLM_MODEL to one your account can access.';
     case 'timeout':
       return `${provider} did not answer in time. The key may well be fine — try once more.`;
+    case 'json_mode_unsupported':
+      return `${provider} could not return valid JSON for this request, even after retrying without strict mode. ` +
+             'Asking again usually works; if it keeps happening, set LLM_MODEL to a different model.';
     case 'empty_response':
       return `${provider} accepted the request but returned nothing.`;
     default:
