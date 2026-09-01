@@ -8,7 +8,7 @@ that style.
 ```bash
 npm install
 npm run dev        # http://localhost:3000
-npm test           # 71 tests, no browser required
+npm test           # 101 tests, no browser required
 ```
 
 ## AI setup (optional, free)
@@ -28,20 +28,59 @@ Adding one free key turns on real language understanding of your requests:
 | **Cloudflare Workers AI** | Free daily allowance | Cloudflare dashboard |
 | **Ollama** | Entirely offline, your machine | <https://ollama.com> |
 
-Create `.env.local` in the project root and set one key:
+There are three ways to supply the key. Pick the one that matches where the app
+is running — a key set in one place is invisible to the others.
+
+**1. Running on your own machine.** Create `.env.local` in the project root:
 
 ```bash
 GROQ_API_KEY=gsk_...
 ```
 
-Then confirm it works before touching the UI:
+Then confirm it before touching the UI:
 
 ```bash
 npm run ai:check     # names the provider, sends one request, reports OK or the exact error
 ```
 
-`.env.local` is git-ignored, so a key can never be committed. On Vercel, add the
-same variable under Settings → Environment Variables and redeploy.
+**2. Without editing files.** Dashboard → Settings → **AI editor**. Paste the
+key and press Connect: the server makes a real call to the provider before
+saving, so a bad key is rejected immediately instead of silently falling back.
+In development the key is written to `.env.local` for you.
+
+**3. Deployed on Vercel.** Settings → Environment Variables → `GROQ_API_KEY`.
+Two things catch people out:
+
+- Tick **every environment you use** — Production, Preview and Development. A
+  branch that is not your production branch deploys as a Preview and cannot see
+  a Production-only variable.
+- **Redeploy afterwards.** Variables are read at build time, so a build made
+  before you saved the key will never see it. Visit the stable alias
+  (`your-project.vercel.app`) rather than a `...-abc123-....vercel.app`
+  deployment URL, which pins you to one specific build.
+
+`.env.local` is git-ignored, so a key can never be committed. On Vercel the
+filesystem is read-only, so a key entered through the settings page there lasts
+only for that serverless instance — use an environment variable instead. The
+settings page says which of the two applies.
+
+### When the AI does not answer
+
+The editor never pretends. If a request falls back to the rules engine, the
+reply says why, and the cause determines the fix:
+
+| Reply says | Cause | Fix |
+| --- | --- | --- |
+| "No provider key reached this deployment" | The key is not visible to this build | Check the variable name and environment, then redeploy |
+| "could not reach *provider*" | No network route from the server | Firewall, proxy, or an offline sandbox — the key is fine |
+| "rejected that key" | Revoked or mistyped key | Regenerate it at the provider |
+| "over the free-tier rate limit" | Too many requests | Wait; the key is valid |
+| "will not serve this model to your account" | Model not on your tier | Set `LLM_MODEL` to one you can access |
+
+The no-key reply names the commit and environment that answered it, so a stale
+deployment is easy to spot. Dashboard → Settings → AI editor lists, by name
+only, which provider variables the server can actually see and flags lookalike
+misspellings such as `GROK_API_KEY`.
 
 Providers are auto-detected in the order above. Force one with `LLM_PROVIDER`,
 and change the model with `LLM_MODEL`.
@@ -71,8 +110,22 @@ request always produces the same edit.
 | `src/lib/ai/operations.ts` | Validates and executes edit operations |
 | `src/lib/mediaDb.ts` | IndexedDB persistence for media and thumbnail frames |
 
+## Data storage — current limitation
+
+`src/lib/db.ts` is an in-process store. In development it persists to
+`data/*.json`. **On Vercel it is memory-only**, because the filesystem there is
+read-only: accounts, projects and uploads do not survive a new deployment or an
+idle instance recycling. Uploaded media is held in the browser's IndexedDB
+(`src/lib/mediaDb.ts`), so it is per-device.
+
+This is fine for evaluating the editor and wrong for real use. Connecting a
+managed database (Vercel Postgres, Neon or Supabase) is the next step before
+anyone stores work they care about.
+
 ## Diagnostics
 
 Append `?debug=1` to an editor URL for an overlay showing the render source,
 video clock, dropped frames, timeline scroll state and frame extraction
-progress.
+progress. The AI response also carries an `engine` block naming the source
+(`llm` or `rules`), the provider, the model, the build, and any failure
+reason.
