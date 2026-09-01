@@ -43,6 +43,7 @@ export type FailureReason =
   | 'json_mode_unsupported'
   | 'timeout'
   | 'empty_response'
+  | 'no_vision'
   | 'provider_error';
 
 export class ProviderError extends Error {
@@ -95,6 +96,8 @@ interface ProviderConfig {
   ready:   boolean;
 }
 
+const env = (k: string): string => (process.env[k] ?? '').trim();
+
 /**
  * Free-tier defaults, in preference order. Providers retire models on a few
  * weeks' notice — Groq shut down llama-3.3-70b-versatile on 2026-08-16 — so
@@ -120,12 +123,36 @@ const MODEL_CHAIN: Record<Exclude<ProviderName, 'none'>, string[]> = {
   ollama:     ['llama3.1'],
 };
 
+/**
+ * Models that can actually look at a picture. Kept apart from MODEL_CHAIN
+ * because most of the good text models are blind, and a blind model handed an
+ * image either errors or — far worse — cheerfully describes what it imagines.
+ *
+ * Groq serves qwen3.6-27b as its multimodal model; Gemini Flash takes images
+ * on the free tier; OpenRouter's free Gemma reads them too. Anything not
+ * listed is treated as unable to see, and the app says so.
+ */
+const VISION_MODELS: Record<Exclude<ProviderName, 'none'>, string[]> = {
+  groq:       ['qwen/qwen3.6-27b'],
+  gemini:     ['gemini-2.5-flash', 'gemini-2.0-flash'],
+  openrouter: ['google/gemma-4-31b-it:free'],
+  cloudflare: [],
+  ollama:     [env('OLLAMA_VISION_MODEL') || 'llava'],
+};
+
+/** Can this provider see, and with which model? */
+export function visionModelFor(name: ProviderName): string | null {
+  if (name === 'none') return null;
+  const forced = env('LLM_VISION_MODEL');
+  if (forced) return forced;
+  return VISION_MODELS[name]?.[0] ?? null;
+}
+
 const DEFAULT_MODELS: Record<Exclude<ProviderName, 'none'>, string> =
   Object.fromEntries(
     Object.entries(MODEL_CHAIN).map(([k, v]) => [k, v[0]]),
   ) as Record<Exclude<ProviderName, 'none'>, string>;
 
-const env = (k: string): string => (process.env[k] ?? '').trim();
 
 export function detectProvider(): ProviderConfig {
   const forced = env('LLM_PROVIDER').toLowerCase() as ProviderName;
@@ -187,9 +214,31 @@ async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
 
 /* ─────────────── providers ─────────────── */
 
+/**
+ * OpenAI's content-parts shape: attach the pictures to the last thing the
+ * user said, so the model reads the question and the frames together.
+ */
+function withImages(messages: ChatMessage[], images: string[]) {
+  if (!images.length) return messages;
+  const out: unknown[] = messages.map(m => ({ role: m.role, content: m.content }));
+  for (let i = out.length - 1; i >= 0; i--) {
+    const m = out[i] as { role: string; content: string };
+    if (m.role !== 'user') continue;
+    out[i] = {
+      role: 'user',
+      content: [
+        { type: 'text', text: m.content },
+        ...images.map(url => ({ type: 'image_url', image_url: { url } })),
+      ],
+    };
+    break;
+  }
+  return out;
+}
+
 async function openAiCompatible(
   baseUrl: string, apiKey: string, model: string, messages: ChatMessage[],
-  json: boolean, extraHeaders: Record<string, string> = {},
+  json: boolean, extraHeaders: Record<string, string> = {}, images: string[] = [],
 ): Promise<string | null> {
   const res = await httpFetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
@@ -200,7 +249,7 @@ async function openAiCompatible(
     },
     body: JSON.stringify({
       model,
-      messages,
+      messages: withImages(messages, images),
       temperature: 0.3,
       // Reasoning models need room for chain-of-thought before the answer;
       // too small a budget returns an empty completion.
@@ -215,12 +264,24 @@ async function openAiCompatible(
 
 async function gemini(
   apiKey: string, model: string, messages: ChatMessage[], json: boolean,
+  images: string[] = [],
 ): Promise<string | null> {
   const system = messages.filter(m => m.role === 'system').map(m => m.content).join('\n\n');
   const turns  = messages.filter(m => m.role !== 'system').map(m => ({
     role:  m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: m.content }],
+    parts: [{ text: m.content }] as Record<string, unknown>[],
   }));
+
+  // Gemini wants raw base64 with the mime type beside it, not a data URL.
+  if (images.length) {
+    const lastUser = [...turns].reverse().find(t => t.role === 'user');
+    if (lastUser) {
+      for (const url of images) {
+        const m = /^data:([^;]+);base64,(.+)$/.exec(url);
+        if (m) lastUser.parts.push({ inlineData: { mimeType: m[1], data: m[2] } });
+      }
+    }
+  }
 
   const res = await httpFetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
@@ -276,7 +337,7 @@ async function ollama(
 
 export async function chat(
   messages: ChatMessage[],
-  opts: { json?: boolean; timeoutMs?: number } = {},
+  opts: { json?: boolean; timeoutMs?: number; images?: string[] } = {},
 ): Promise<LlmResult | null> {
   const cfg = detectProvider();
   if (!cfg.ready) return null;
@@ -286,20 +347,20 @@ export async function chat(
 }
 
 function callProvider(
-  cfg: ProviderConfig, messages: ChatMessage[], json: boolean,
+  cfg: ProviderConfig, messages: ChatMessage[], json: boolean, images: string[] = [],
 ): Promise<string | null> {
   switch (cfg.name) {
     case 'groq':
       return openAiCompatible(env('GROQ_BASE_URL') || 'https://api.groq.com/openai/v1',
-        env('GROQ_API_KEY'), cfg.model, messages, json);
+        env('GROQ_API_KEY'), cfg.model, messages, json, {}, images);
     case 'gemini':
-      return gemini(env('GEMINI_API_KEY') || env('GOOGLE_API_KEY'), cfg.model, messages, json);
+      return gemini(env('GEMINI_API_KEY') || env('GOOGLE_API_KEY'), cfg.model, messages, json, images);
     case 'openrouter':
       return openAiCompatible(env('OPENROUTER_BASE_URL') || 'https://openrouter.ai/api/v1',
         env('OPENROUTER_API_KEY'), cfg.model, messages, json, {
           'HTTP-Referer': env('APP_URL') || 'https://modaya.app',
           'X-Title':      'Modaya',
-        });
+        }, images);
     case 'cloudflare':
       return cloudflare(env('CLOUDFLARE_API_TOKEN'), env('CLOUDFLARE_ACCOUNT_ID'), cfg.model, messages);
     case 'ollama':
@@ -320,20 +381,35 @@ export type ChatOutcome =
  */
 export async function chatDetailed(
   messages: ChatMessage[],
-  opts: { json?: boolean; timeoutMs?: number } = {},
+  opts: { json?: boolean; timeoutMs?: number; images?: string[] } = {},
 ): Promise<ChatOutcome> {
   const cfg = detectProvider();
   if (!cfg.ready) {
     return { ok: false, reason: 'not_configured', status: 0, detail: 'no provider key in the environment' };
   }
+
+  /* Pictures go to a model that can see, or nowhere at all. Sending them to a
+     text model wastes the call; worse, some answer anyway from the words
+     alone and the person is told what is "in" a frame nothing ever looked
+     at. */
+  const images = opts.images ?? [];
+  const seer   = images.length ? visionModelFor(cfg.name) : null;
+  if (images.length && !seer) {
+    return {
+      ok: false, reason: 'no_vision', status: 0,
+      detail: `${cfg.name} has no model here that accepts images`,
+    };
+  }
   // Try the configured model, then the rest of the chain — but only when the
   // model was chosen by us. An explicit LLM_MODEL is the user's decision and is
   // never silently overridden.
   const forcedModel = env('LLM_MODEL');
-  const candidates  = forcedModel
-    ? [forcedModel]
-    : [cfg.model, ...(MODEL_CHAIN[cfg.name as Exclude<ProviderName, 'none'>] ?? [])
-        .filter(m => m !== cfg.model)];
+  const candidates  = seer
+    ? [seer]
+    : forcedModel
+      ? [forcedModel]
+      : [cfg.model, ...(MODEL_CHAIN[cfg.name as Exclude<ProviderName, 'none'>] ?? [])
+          .filter(m => m !== cfg.model)];
 
   let last: ChatOutcome = {
     ok: false, reason: 'provider_error', status: 0, detail: 'no model attempted',
@@ -342,8 +418,9 @@ export async function chatDetailed(
   const wantJson = opts.json ?? false;
 
   const attempt = (model: string, json: boolean) => withTimeoutStrict(
-    callProvider({ ...cfg, model }, messages, json),
-    opts.timeoutMs ?? 20_000);
+    callProvider({ ...cfg, model }, messages, json, images),
+    // Looking at half a dozen frames takes longer than reading a sentence.
+    opts.timeoutMs ?? (images.length ? 45_000 : 20_000));
 
   for (const model of candidates) {
     try {
@@ -404,6 +481,12 @@ export function explainFailure(reason: FailureReason, provider: string, detail =
              'Asking again usually works; if it keeps happening, set LLM_MODEL to a different model.';
     case 'empty_response':
       return `${provider} accepted the request but returned nothing.`;
+    case 'no_vision':
+      return `I can measure the picture — shot changes, movement, brightness — but I cannot look at it: ` +
+             `no model available through ${provider} accepts images. ` +
+             'Groq serves qwen/qwen3.6-27b, Google AI Studio serves Gemini Flash and OpenRouter ' +
+             'serves google/gemma-4-31b-it:free, all on free tiers. A key for any of them, or ' +
+             'LLM_VISION_MODEL set to a model your account can use, and I can see the frames.';
     default:
       return `${provider} returned an error.${detail ? ` (${detail})` : ''}`;
   }

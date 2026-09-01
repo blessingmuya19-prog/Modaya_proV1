@@ -11,11 +11,13 @@ import { v4 as uuid } from 'uuid';
 import { describeLoudness } from '@/lib/ai/highlights';
 import { transcriptForPrompt, fillerRanges, sanitiseSegments, Transcript } from '@/lib/ai/transcript';
 import { chatDetailed, explainFailure, extractJson, detectProvider, FailureReason } from '@/lib/ai/llm';
+import { summariseVisual, keyframeTimes, motionBetween, type VisualScan } from '@/lib/ai/visualScan';
 import { groundOperations, validateOperations, applyOperations, parseStyle, parsePlacement, Operation, TimelineClip } from '@/lib/ai/operations';
 
 // ── Intent detection ──────────────────────────────────────────────────────────
 
 type Intent =
+  | 'describe'
   | 'tighten' | 'clean' | 'moments' | 'captions' | 'text_overlay' | 'restyle'
   | 'move_text' | 'remove_text'
   | 'vertical' | 'highlights' | 'cut_silence' | 'unknown';
@@ -53,6 +55,8 @@ function detectIntent(text: string): Intent {
       tokens.every(w => placeWord.test(w) || FILLER.test(w)))       return 'move_text';
   if (p.match(/\btext\b|\btitle\b|\bname\b|overlay|watermark|lower.?third/))
                                                                    return 'text_overlay';
+  if (p.match(/what (?:can you |do you )?see|what.?s (?:in|happening|going on)|describe|look at|analyse the (?:video|picture|footage)|how many (?:cuts|shots)|what happens/))
+                                                                   return 'describe';
   if (p.match(/highlight|best moment|standout|top (?:moment|part|bit|clip|section)|\bmoments?\b/))
                                                                    return 'moments';
   if (p.match(/vertical|9.?:?.?16|portrait|tiktok|reels|shorts/)) return 'vertical';
@@ -122,6 +126,8 @@ function applyEdit(
     /** The timeline before the last edit, so a move can put back something
      *  that was taken off by mistake. */
     previousClips?: Clip[];
+    /** What the browser measured from the pixels. */
+    visual?: VisualScan | null;
   },
 ): EditResult {
 
@@ -135,6 +141,30 @@ function applyEdit(
   });
 
   switch (intent) {
+    /* Someone asking what is in the video, with no model to look for them.
+       Answer with what was actually measured and be honest about the rest —
+       an editor that invents a description is worse than one that admits it
+       cannot see. */
+    case 'describe': {
+      const parts: string[] = [];
+      if (ctx.visual) parts.push(summariseVisual(ctx.visual));
+      if (ctx.transcript?.segments?.length) {
+        const words = ctx.transcript.segments.map(s => s.text).join(' ').trim();
+        parts.push(`What is said: "${words.slice(0, 400)}${words.length > 400 ? '…' : ''}"`);
+      }
+      if (!parts.length) {
+        return nothing('I have not measured this video yet — give it a moment after it loads, ' +
+                       'and I can tell you where the cuts and the movement are.');
+      }
+      return {
+        reply: `I cannot see the picture — ${ctx.modelNote ? 'no AI model is answering right now' :
+                 'no model is configured to look at frames'} — but here is what was measured ` +
+               `from the pixels and the audio:\n\n${parts.join('\n')}`,
+        summary: 'described what was measured', savedS: 0, affectedIds: [],
+        newClips: clips, intent,
+      };
+    }
+
     case 'cut_silence':
     case 'tighten': {
       if (!ctx.silences.length) {
@@ -158,14 +188,30 @@ function applyEdit(
 
     case 'moments':
     case 'highlights': {
-      if (!ctx.energy.length) {
+      /* Loudness alone picks the crowd noise over the play that caused it.
+         When the picture has been measured too, a second of footage has to be
+         both loud AND moving to count as a highlight. */
+      const motionScore = ctx.visual && ctx.visual.samples.length
+        ? (sec: number) => motionBetween(ctx.visual as VisualScan, sec, sec + 1)
+        : null;
+
+      if (!ctx.energy.length && !motionScore) {
         return nothing(
           'I need to analyse your audio before I can pick highlights. Reopen the project ' +
           'so the media loads, then ask again.');
       }
-      // Keep the loudest ~35% of the runtime, merged into contiguous windows
-      const ranked  = ctx.energy.map((v, i) => ({ v, i })).sort((a, b) => b.v - a.v);
-      const keepSec = Math.max(1, Math.round(ctx.energy.length * 0.35));
+
+      const seconds = ctx.energy.length || Math.floor(durationS);
+      const loudest = Math.max(...ctx.energy, 0.0001);
+      const scored  = Array.from({ length: seconds }, (_, i) => {
+        const loud = (ctx.energy[i] ?? 0) / loudest;
+        const move = motionScore ? motionScore(i) : 0;
+        return { i, v: motionScore && ctx.energy.length ? 0.55 * loud + 0.45 * Math.min(1, move * 6)
+                    : motionScore ? Math.min(1, move * 6) : loud };
+      });
+
+      const ranked  = scored.sort((a, b) => b.v - a.v);
+      const keepSec = Math.max(1, Math.round(seconds * 0.35));
       const chosen  = ranked.slice(0, keepSec).map(r => r.i).sort((a, b) => a - b);
 
       const ranges: [number, number][] = [];
@@ -178,8 +224,11 @@ function applyEdit(
       const out = run([{ op: 'keep_ranges', ranges }]);
       return {
         reply: `Kept the ${ranges.length} most active ${ranges.length === 1 ? 'section' : 'sections'} ` +
-               `by audio energy — ${fmtS(durationS - out.removedS)} of the original ${fmtS(durationS)}. ` +
-               'That ranking is loudness, not meaning; with an AI key I can choose on content instead.',
+               (motionScore
+                 ? `by loudness and movement together — ${fmtS(durationS - out.removedS)} of the original ${fmtS(durationS)}. ` +
+                   'Both are measurements of the file rather than judgements about what matters in it.'
+                 : `by audio energy — ${fmtS(durationS - out.removedS)} of the original ${fmtS(durationS)}. ` +
+                   'That ranking is loudness, not meaning; with an AI key I can choose on content instead.'),
         summary:     out.summary,
         savedS:      Math.round(out.removedS),
         affectedIds: out.affectedIds,
@@ -389,6 +438,13 @@ Text style — the "style" object, every field optional:
   remove one and keep another — never claim you can only remove all text.
   When they single one out — "the one on the bottom", "the top one" — you
   MUST set match or position. A bare remove_text means every overlay.
+- The PICTURE section is measured from the pixels: shot changes, movement,
+  brightness. It is fact — use it for "where is the action", "how many cuts",
+  "cut the black at the start".
+- If frames are attached you can see them; describe only what is actually in
+  them. If none are attached you have NOT seen the video: say so plainly and
+  answer from the measurements and the transcript. Never describe people,
+  places or actions you have not been shown — the file name is not evidence.
 - style_text changes how existing text looks without rewriting it, so
   "same captions, different font" does not need recognition to run again.
 - If someone asks for a font you cannot name above, pick the closest of the
@@ -449,9 +505,17 @@ async function planWithLlm(opts: {
   transcript: Transcript | null;
   style?:    string;
   history:   { role: 'user' | 'ai'; text: string }[];
+  /** Shot changes, movement and brightness measured in the browser. */
+  visual?:   VisualScan | null;
+  /** A few frames, as data URLs, for a model that can actually see. */
+  frames?:   string[];
 }): Promise<{
   plan:    { reply: string; operations: Operation[] } | null;
   failure: { reason: FailureReason; detail: string } | null;
+  /** True when frames were sent but no model available could look at them. */
+  blind?:  boolean;
+  /** The model that actually answered — the vision one differs from the text one. */
+  model?:  string;
 }> {
 
   const clipSummary = opts.clips.slice(0, 40)
@@ -468,6 +532,13 @@ async function planWithLlm(opts: {
     `SILENT SPANS: ${silenceSummary}`,
     `LOUDNESS:\n${describeLoudness(opts.energy, opts.durationS, opts.audio)}`,
     `TRANSCRIPT:\n${transcriptForPrompt(opts.transcript)}`,
+    opts.visual ? `PICTURE (measured from the pixels, not guessed):\n${summariseVisual(opts.visual)}` : null,
+    opts.frames?.length
+      ? `FRAMES ATTACHED: ${opts.frames.length}, taken at ` +
+        `${(opts.visual ? keyframeTimes(opts.visual, opts.frames.length) : [])
+            .map(t => `${t.toFixed(1)}s`).join(', ')}. ` +
+        'Describe only what is in them. If you are unsure, say so.'
+      : null,
     opts.style ? `REFERENCE STYLE LEARNED: ${opts.style}` : null,
   ].filter(Boolean).join('\n\n');
 
@@ -476,14 +547,25 @@ async function planWithLlm(opts: {
     content: m.text,
   }));
 
-  const res = await chatDetailed([
+  const ask = (images: string[]) => chatDetailed([
     { role: 'system', content: SYSTEM },
     { role: 'system', content: context },
     ...recent,
     { role: 'user', content: opts.message },
-  ], { json: true, timeoutMs: 20_000 });
+  ], { json: true, images, timeoutMs: images.length ? 45_000 : 20_000 });
 
-  if (!res.ok) return { plan: null, failure: { reason: res.reason, detail: res.detail } };
+  let res   = await ask(opts.frames ?? []);
+  let blind = false;
+
+  /* No model here can see. The question still deserves an answer from the
+     measurements, so ask again without the pictures and be plain about it
+     rather than dropping all the way back to the rules engine. */
+  if (!res.ok && res.reason === 'no_vision') {
+    blind = true;
+    res = await ask([]);
+  }
+
+  if (!res.ok) return { plan: null, failure: { reason: res.reason, detail: res.detail }, blind };
 
   const plan = extractJson<Plan>(res.result.text);
   if (!plan || typeof plan.reply !== 'string') {
@@ -496,6 +578,8 @@ async function planWithLlm(opts: {
       operations: validateOperations(plan.operations, { durationS: opts.durationS }),
     },
     failure: null,
+    blind,
+    model: res.result.model,
   };
 }
 
@@ -528,6 +612,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     body.audio === 'pending' || body.audio === 'failed' ? body.audio : 'ready';
   const energy: number[] = Array.isArray(body.energy)
     ? body.energy.filter((n: unknown) => typeof n === 'number').slice(0, 7200)
+    : [];
+
+  /**
+   * What the browser saw. Measurements are cheap and always trustworthy, so
+   * they travel with every message; frames are heavy and only come along when
+   * the question needs eyes.
+   */
+  const visual: VisualScan | null = (() => {
+    const v = body.visual;
+    if (!v || typeof v !== 'object' || !Array.isArray(v.samples)) return null;
+    const samples = v.samples
+      .filter((x: unknown) => x && typeof (x as { tS?: unknown }).tS === 'number')
+      .slice(0, 400)
+      .map((x: { tS: number; brightness?: number; motion?: number }) => ({
+        tS: x.tS, brightness: Number(x.brightness ?? 0), motion: Number(x.motion ?? 0),
+      }));
+    if (!samples.length) return null;
+    return {
+      durationS: Number(v.durationS) || durationS,
+      samples,
+      cuts: Array.isArray(v.cuts) ? v.cuts.filter((n: unknown) => typeof n === 'number').slice(0, 400) : [],
+    };
+  })();
+
+  const frames: string[] = Array.isArray(body.frames)
+    ? body.frames
+        .filter((f: unknown) => typeof f === 'string' && f.startsWith('data:image/'))
+        .slice(0, 6)
     : [];
 
   /**
@@ -596,14 +708,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   let source: 'llm' | 'rules' = 'rules';
 
   let failure: { reason: FailureReason; detail: string } | null = null;
+  /** The model that actually answered. Differs from the provider default when
+   *  the question needed eyes and went to the multimodal model instead. */
+  let modelUsed: string | null = null;
 
   if (provider.ready) {
     const attempt = await planWithLlm({
-      message, durationS, clips, silences, energy, audio, transcript, style,
+      message, durationS, clips, silences, energy, audio, transcript, style, visual, frames,
       history: (project?.aiHistory ?? []).map(m => ({ role: m.role, text: m.text })),
     });
     const plan = attempt.plan;
     failure = attempt.failure;
+    modelUsed = attempt.model ?? null;
+
+    /* Frames were offered and nothing could look at them. Never let an answer
+       stand as if it had seen the video. */
+    const blindNote = attempt.blind && frames.length
+      ? ' (I answered from the measurements — no model available to this app can look at the frames. ' +
+        'A Google AI Studio key, or a Groq account with qwen/qwen3.6-27b, and I can.)'
+      : '';
 
     if (plan) {
       const grounded = groundOperations(plan.operations, message);
@@ -629,9 +752,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const surprising = /^(put "|there was no )/.test(outcome.summary);
 
       edit = {
-        reply:       didNothing || misdescribed || surprising
-                       ? sentence(outcome.summary)
-                       : plan.reply,
+        reply:       (didNothing || misdescribed || surprising
+                        ? sentence(outcome.summary)
+                        : plan.reply) + blindNote,
         summary:     outcome.summary,
         savedS:      Math.round(outcome.removedS),
         affectedIds: outcome.affectedIds,
@@ -654,7 +777,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         'pick the highlights, or add captions. No provider key reached this deployment ' +
         `(${buildTag()}) — if you have just added one, it only takes effect on a build made afterwards.`;
     edit = applyEdit(intent, clips, durationS, {
-      silences, energy, modelNote, transcript, message,
+      silences, energy, modelNote, transcript, message, visual,
       previousClips: project?.previousClips ?? [],
     });
   }
@@ -690,7 +813,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       newClips:    edit.newClips,
     },
     engine: {
-      source, provider: provider.name, model: provider.model,
+      source, provider: provider.name, model: modelUsed ?? provider.model,
       ...(failure ? { failure: failure.reason } : {}),
       build: buildTag(),
     },

@@ -18,6 +18,7 @@ import { saveTranscript, loadTranscript, StoredTranscript } from '@/lib/mediaDb'
 import { StyleProfile, describeStyle } from '@/lib/ai/styleProfile';
 import { generateEditPlan, EditPlan } from '@/lib/ai/styleTransfer';
 import { detectSilences } from '@/lib/ai/operations';
+import { scanVideo, compactScan, type VisualScan, type Keyframe } from '@/lib/ai/visualScan';
 import { analyseFile } from '@/lib/videoStore';
 import { loadMediaFile } from '@/lib/mediaDb';
 import { getProjectFrames } from '@/lib/thumbnailStore';
@@ -679,6 +680,11 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
      silence rather than a guess. Runs in the background; never blocks typing. */
   const silences = useRef<[number, number][]>([]);
   const energy   = useRef<number[]>([]);
+  /* The same idea for the picture: shot changes, movement and brightness,
+     measured once from the pixels, plus a few frames kept back for a model
+     that can actually look at them. */
+  const visual    = useRef<VisualScan | null>(null);
+  const keyframes = useRef<Keyframe[]>([]);
   /** 'pending' while the decode runs, so the AI can say so instead of guessing. */
   const audioState = useRef<'pending' | 'ready' | 'failed'>('pending');
   const [asr, setAsr] = useState<'idle' | 'running' | 'done' | 'failed'>('idle');
@@ -717,6 +723,26 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
       }
     })();
     return () => { cancelled = true; };
+  }, [projectId]);
+
+  /* Watch the video once, in the background. Never blocks the editor: the
+     scan is abandoned the moment the project changes. */
+  useEffect(() => {
+    const stop = new AbortController();
+    (async () => {
+      try {
+        const stored = await loadMediaFile(projectId);
+        if (!stored || stop.signal.aborted) return;
+        const seen = await scanVideo(stored.blob, { signal: stop.signal });
+        if (!seen || stop.signal.aborted) return;
+        visual.current    = compactScan(seen.scan);
+        keyframes.current = seen.keyframes;
+      } catch {
+        /* No frames to measure is not an error worth interrupting anyone for;
+           the AI simply says it has not seen the picture. */
+      }
+    })();
+    return () => stop.abort();
   }, [projectId]);
 
   /**
@@ -878,6 +904,11 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
     /caption|subtitle|filler|\bums?\b|\buhs?\b|transcri|what (did|do|does|is)\s+(they|he|she|it|the)|what.*(say|said|talk|about)|quote|word/i
       .test(text);
 
+  /** Questions that are only answerable by looking at the picture. */
+  const needsVision = (text: string) =>
+    /what (?:can |do )?you see|what.?s (?:in|happening|going on)|describe|look at|watch|see the|visual|colour|color|wearing|who is|what is (?:he|she|it|this|that)|jersey|logo|scene|shot|background/i
+      .test(text);
+
   const send = async (text: string) => {
     if (!text.trim() || loading) return;
     const userMsg: Msg = { role: 'user', text: text.trim() };
@@ -902,6 +933,9 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
           audio:    audioState.current,
           transcript: transcript.current ?? undefined,
           style:    learnedStyle ?? undefined,
+          visual:   visual.current ?? undefined,
+          // Frames are heavy. They travel only when the question needs eyes.
+          frames:   needsVision(text) ? keyframes.current.map(k => k.dataUrl).slice(0, 6) : undefined,
         }),
       });
       const data = await res.json();

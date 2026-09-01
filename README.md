@@ -85,6 +85,30 @@ misspellings such as `GROK_API_KEY`.
 Providers are auto-detected in the order above. Force one with `LLM_PROVIDER`,
 and change the model with `LLM_MODEL`.
 
+### Seeing the picture
+
+Two different things, kept apart on purpose:
+
+**Measurement** runs in the browser on every project — shot changes, movement
+and brightness, read straight from the pixels. It needs no key, works offline,
+and travels with every chat message, so "where is the action", "how many cuts"
+and highlight picking are answered from the actual file rather than a guess.
+
+**Sight** attaches up to six frames — one from the middle of each shot — when a
+question needs eyes ("what do you see", "what is he wearing"). Those go to a
+model that accepts images:
+
+| Provider | Vision model used |
+|---|---|
+| Groq | `qwen/qwen3.6-27b` |
+| Gemini | `gemini-2.5-flash` |
+| OpenRouter | `google/gemma-4-31b-it:free` |
+| Cloudflare | none — the app says so |
+
+Override with `LLM_VISION_MODEL`. If no model available can see, the app never
+pretends: it answers from the measurements and says plainly that it did not
+look at the video.
+
 ### Speech recognition
 
 Asking for captions, filler removal, or what was said transcribes the project
