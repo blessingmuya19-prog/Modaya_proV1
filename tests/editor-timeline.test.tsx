@@ -127,6 +127,172 @@ describe('editor timeline', () => {
       `captions added ${heavyNodes - plainNodes} DOM nodes`).toBeLessThan(200);
   });
 
+  /* ── CapCut-style timeline gestures ── */
+
+  it('scrubs from anywhere in the track area, not just the ruler', () => {
+    const { container } = mount([
+      { id:'v', trackId:'video', label:'V', startS:0, endS:300, type:'video' },
+    ]);
+    const rows = container.querySelector('[data-modaya-timeline] > div > div:nth-of-type(2)') as HTMLElement;
+    expect(rows, 'track area not found').toBeTruthy();
+    const ruler = container.querySelector('[data-modaya-timeline] > div > div') as HTMLElement;
+    ruler.getBoundingClientRect = () => ({ left:0, top:0, right:900, bottom:24,
+      width:900, height:24, x:0, y:0, toJSON:()=>{} });
+
+    act(() => {
+      rows.dispatchEvent(new MouseEvent('mousedown', { bubbles:true, clientX:300, button:0 }));
+      window.dispatchEvent(new MouseEvent('mouseup'));
+    });
+
+    const ph = container.querySelector('[data-modaya-playhead]') as HTMLElement;
+    expect(parseFloat(ph.style.left), 'dragging the tracks did not move the playhead').toBeGreaterThan(0);
+  });
+
+  it('plays and pauses on the space bar', async () => {
+    const { container } = mount([]);
+    const video = container.querySelector('video') as HTMLVideoElement;
+    expect(video.paused).toBe(true);
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key:' ', bubbles:true }));
+    });
+    await act(async () => { await new Promise(r => setTimeout(r, 60)); });
+    expect(video.paused, 'space did not start playback').toBe(false);
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key:' ', bubbles:true }));
+    });
+    expect(video.paused, 'space did not stop playback').toBe(true);
+  });
+
+  it('ignores the space bar while the chat box has focus', async () => {
+    const { container } = mount([]);
+    const box = container.querySelector('textarea') as HTMLTextAreaElement;
+    expect(box, 'chat box not found').toBeTruthy();
+
+    const video = container.querySelector('video') as HTMLVideoElement;
+    await act(async () => {
+      box.dispatchEvent(new KeyboardEvent('keydown', { key:' ', bubbles:true }));
+    });
+    await act(async () => { await new Promise(r => setTimeout(r, 40)); });
+    expect(video.paused, 'typing a space in the chat started playback').toBe(true);
+  });
+
+  it('steps the playhead with the arrow keys and jumps with home and end', async () => {
+    const { container } = mount([]);
+    const ph = () => parseFloat((container.querySelector('[data-modaya-playhead]') as HTMLElement).style.left);
+
+    await act(async () => {
+      for (let i = 0; i < 3; i++)
+        window.dispatchEvent(new KeyboardEvent('keydown', { key:'ArrowRight', bubbles:true }));
+    });
+    const stepped = ph();
+    expect(stepped, 'arrow key did not move the playhead').toBeGreaterThan(0);
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key:'ArrowLeft', bubbles:true }));
+    });
+    expect(ph()).toBeLessThan(stepped);
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key:'End', bubbles:true }));
+    });
+    const atEnd = ph();
+    expect(atEnd).toBeGreaterThan(stepped);
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key:'Home', bubbles:true }));
+    });
+    expect(ph()).toBe(0);
+  });
+
+  it('zooms the timeline on ctrl and wheel, and leaves the page alone', async () => {
+    const { container } = mount([]);
+    const scroller = container.querySelector('[data-modaya-timeline]') as HTMLElement;
+    // the content is as wide as the programme is long: its width IS the zoom
+    const contentW = () => parseFloat(
+      (container.querySelector('[data-modaya-timeline] > div') as HTMLElement).style.width);
+
+    const before = contentW();
+    const inward = new WheelEvent('wheel', { deltaY:-240, ctrlKey:true, bubbles:true, cancelable:true });
+    await act(async () => { scroller.dispatchEvent(inward); });
+
+    expect(inward.defaultPrevented, 'the browser would have zoomed the whole page').toBe(true);
+    expect(contentW(), 'ctrl+wheel did not zoom in').toBeGreaterThan(before);
+
+    const zoomedIn = contentW();
+    await act(async () => {
+      scroller.dispatchEvent(new WheelEvent('wheel', { deltaY:240, ctrlKey:true, bubbles:true, cancelable:true }));
+    });
+    expect(contentW(), 'ctrl+wheel did not zoom back out').toBeLessThan(zoomedIn);
+  });
+
+  it('zooms around the pointer, not the left edge', async () => {
+    const { container } = mount([]);
+    const scroller = container.querySelector('[data-modaya-timeline]') as HTMLElement;
+    scroller.getBoundingClientRect = () => ({ left:0, top:0, right:800, bottom:200,
+      width:800, height:200, x:0, y:0, toJSON:()=>{} });
+    Object.defineProperty(scroller, 'scrollLeft', { configurable:true, writable:true, value:600 });
+    Object.defineProperty(scroller, 'clientWidth', { configurable:true, value:800 });
+
+    // pointer 400px into the view, i.e. 1000px into the content
+    await act(async () => {
+      scroller.dispatchEvent(new WheelEvent('wheel',
+        { deltaY:-240, ctrlKey:true, clientX:400, bubbles:true, cancelable:true }));
+    });
+
+    // zooming in about the pointer must push the view to the right
+    expect(scroller.scrollLeft, 'the view stayed anchored to the left edge').toBeGreaterThan(600);
+  });
+
+  it('walks along the timeline on a plain wheel', async () => {
+    const { container } = mount([]);
+    const scroller = container.querySelector('[data-modaya-timeline]') as HTMLElement;
+    Object.defineProperty(scroller, 'scrollLeft', { configurable:true, writable:true, value:0 });
+    Object.defineProperty(scroller, 'scrollHeight', { configurable:true, value:100 });
+    Object.defineProperty(scroller, 'clientHeight', { configurable:true, value:100 });
+
+    await act(async () => {
+      scroller.dispatchEvent(new WheelEvent('wheel', { deltaY:200, bubbles:true, cancelable:true }));
+    });
+    expect(scroller.scrollLeft, 'a plain wheel did not scroll the timeline sideways').toBeGreaterThan(0);
+  });
+
+  it('sticks the playhead to a cut when dragged close to one', () => {
+    const { container } = mount([
+      { id:'a', trackId:'video', label:'A', startS:0,  endS:30,  type:'video' },
+      { id:'b', trackId:'video', label:'B', startS:30, endS:100, type:'video' },
+    ]);
+    const ruler = container.querySelector('[data-modaya-timeline] > div > div') as HTMLElement;
+    ruler.getBoundingClientRect = () => ({ left:0, top:0, right:900, bottom:24,
+      width:900, height:24, x:0, y:0, toJSON:()=>{} });
+    const ph = () => parseFloat((container.querySelector('[data-modaya-playhead]') as HTMLElement).style.left);
+
+    // 4 px per second in jsdom: 124px is 31s, one second past the cut at 30s
+    act(() => {
+      ruler.dispatchEvent(new MouseEvent('mousedown', { bubbles:true, clientX:124, button:0 }));
+      window.dispatchEvent(new MouseEvent('mouseup'));
+    });
+    expect(ph(), 'the playhead did not snap to the cut').toBe(120);
+  });
+
+  it('lets you land between cuts by holding alt', () => {
+    const { container } = mount([
+      { id:'a', trackId:'video', label:'A', startS:0,  endS:30,  type:'video' },
+      { id:'b', trackId:'video', label:'B', startS:30, endS:100, type:'video' },
+    ]);
+    const ruler = container.querySelector('[data-modaya-timeline] > div > div') as HTMLElement;
+    ruler.getBoundingClientRect = () => ({ left:0, top:0, right:900, bottom:24,
+      width:900, height:24, x:0, y:0, toJSON:()=>{} });
+
+    act(() => {
+      ruler.dispatchEvent(new MouseEvent('mousedown', { bubbles:true, clientX:124, button:0, altKey:true }));
+      window.dispatchEvent(new MouseEvent('mouseup'));
+    });
+    const ph = parseFloat((container.querySelector('[data-modaya-playhead]') as HTMLElement).style.left);
+    expect(ph, 'alt did not defeat snapping').toBeCloseTo(124, 1);
+  });
+
   it('returns the playhead to the start when the video ends', async () => {
     const { container } = mount([]);
     const btn = Array.from(container.querySelectorAll('button'))

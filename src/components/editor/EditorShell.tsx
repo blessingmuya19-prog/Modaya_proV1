@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, useLayoutEffect } from 'react';
 import Link from 'next/link';
 import { Logo, LogoMark } from '../ui/Logo';
 import { ExportModal } from './ExportModal';
@@ -7,6 +7,10 @@ import { getMedia, subscribeMedia } from '@/lib/videoStore';
 import DebugHud from './DebugHud';
 import PreviewCanvas from './PreviewCanvas';
 import { packClips } from './packClips';
+import {
+  clampZoom, anchoredScrollLeft, zoomFactor, snapTime, snapEdges, stepTime,
+  keyIsForEditor,
+} from './timelineGestures';
 import { buildSequence, Sequence, StyleLayer } from '@/lib/render/sequence';
 import { analyseReference, analyseAudio, interestCurve } from '@/lib/ai/analyseReference';
 import { decodeForAsr, chunkForAsr } from '@/lib/ai/audioForAsr';
@@ -1258,6 +1262,53 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
   }, [readView]);
   useEffect(() => () => { if (viewRaf.current) cancelAnimationFrame(viewRaf.current); }, []);
 
+  /* Zoom has to be applied before the scroll position that goes with it, or
+     the browser clamps the scroll against the old content width. */
+  const pendingScroll = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const node = scrollRef.current;
+    if (!node || pendingScroll.current == null) return;
+    node.scrollLeft = pendingScroll.current;
+    pendingScroll.current = null;
+    readView(node);
+  });
+
+  /* The wheel, CapCut style: it scrolls the timeline sideways, and with ctrl
+     or ⌘ held (which is also what a trackpad pinch sends) it zooms about the
+     pointer instead of the left edge. Registered by hand because React's
+     wheel listener is passive — preventDefault would be ignored, and the
+     page would zoom instead of the timeline. */
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return;
+
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const rect = node.getBoundingClientRect();
+        const pointerX = Math.max(0, e.clientX - rect.left);
+        setZoom(z => {
+          const next = clampZoom(z * zoomFactor(e.deltaY));
+          if (next === z) return z;
+          pendingScroll.current = anchoredScrollLeft(
+            { zoom: z, next, pointerX, scrollLeft: node.scrollLeft });
+          return next;
+        });
+        return;
+      }
+      // Let a genuinely vertical list scroll vertically; otherwise a plain
+      // wheel walks along the timeline, which is what an editor wants.
+      const canScrollDown = node.scrollHeight > node.clientHeight + 4;
+      if (canScrollDown || e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      if (!e.deltaY) return;
+      e.preventDefault();
+      node.scrollLeft += e.deltaY;
+    };
+
+    node.addEventListener('wheel', onWheel, { passive: false });
+    return () => node.removeEventListener('wheel', onWheel);
+  }, [scrollRef]);
+
   const scrollMounted = useCallback((node: HTMLDivElement | null) => {
     if (!node) return;
     (scrollRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
@@ -1304,31 +1355,33 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
     return Math.max(0, Math.min(totalS, raw / zoom));
   }, [zoom, totalS]);
 
-  /* ── Ruler mousedown ── */
-  const onRulerDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setPlayheadS(clientXToS(e.clientX));
-    const move = (ev: MouseEvent) => setPlayheadS(clientXToS(ev.clientX));
-    const up   = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup',   up);
-  }, [clientXToS, setPlayheadS]);
+  /* Every cut the playhead should stick to. Rebuilt only when the edit
+     changes, not while dragging. */
+  const edges = useMemo(() => snapEdges(tracks, totalS), [tracks, totalS]);
 
-  /* ── Playhead line / dot mousedown ── */
-  const onPlayheadDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragging.current    = true;
-    wasPlaying.current  = playing;
-    if (playing) setPlaying(false);          // pause while scrubbing
+  /* A drag lands on a cut if it comes close, unless alt is held — the escape
+     hatch CapCut gives you when you need a position between two cuts. */
+  const timeAt = useCallback((clientX: number, ev?: { altKey?: boolean }) => {
+    const raw = clientXToS(clientX);
+    if (ev?.altKey) return raw;
+    return Math.max(0, Math.min(totalS, snapTime(raw, edges, zoom)));
+  }, [clientXToS, edges, zoom, totalS]);
 
-    const move = (ev: MouseEvent) => {
-      ev.preventDefault();
-      setPlayheadS(clientXToS(ev.clientX));
-    };
+  /* One scrub gesture, wherever it starts. Grabbing the ruler, the playhead
+     or any empty part of a track all do the same thing — CapCut lets you
+     scrub from anywhere, and hunting for a 4px ruler strip is miserable. */
+  const beginScrub = useCallback((e: React.MouseEvent, opts: { pauseWhileDragging: boolean }) => {
+    e.preventDefault();
+    dragging.current   = true;
+    wasPlaying.current = playing;
+    if (opts.pauseWhileDragging && playing) setPlaying(false);
+
+    setPlayheadS(timeAt(e.clientX, e));
+
+    const move = (ev: MouseEvent) => { ev.preventDefault(); setPlayheadS(timeAt(ev.clientX, ev)); };
     const up = () => {
       dragging.current = false;
-      if (wasPlaying.current) setPlaying(true); // resume if it was playing
+      if (opts.pauseWhileDragging && wasPlaying.current) setPlaying(true);
       document.body.style.cursor = '';
       window.removeEventListener('mousemove', move);
       window.removeEventListener('mouseup',   up);
@@ -1336,7 +1389,23 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
     document.body.style.cursor = 'col-resize';
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup',   up);
-  }, [playing, setPlaying, setPlayheadS, clientXToS]);
+  }, [playing, setPlaying, setPlayheadS, timeAt]);
+
+  const onRulerDown    = useCallback((e: React.MouseEvent) =>
+    beginScrub(e, { pauseWhileDragging: false }), [beginScrub]);
+
+  const onPlayheadDown = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    beginScrub(e, { pauseWhileDragging: true });
+  }, [beginScrub]);
+
+  /* Scrubbing from the track rows. Ignored on a clip itself, so selecting or
+     dragging clips later stays possible. */
+  const onTracksDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    if ((e.target as HTMLElement)?.closest?.('[data-modaya-clip]')) return;
+    beginScrub(e, { pauseWhileDragging: true });
+  }, [beginScrub]);
 
   const phPx = playheadS * zoom;
 
@@ -1364,7 +1433,7 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
               const clip = { s: pk.s, e: pk.e, label: pk.label };
               const ci   = pk.key;
               return (
-                <div key={ci} style={{ position:'absolute', left, top:3,
+                <div key={ci} data-modaya-clip style={{ position:'absolute', left, top:3,
                   height:`calc(100% - 6px)`, width:w,
                   background:tr.bg, borderRadius:5,
                   border:`1px solid ${highlightIds && highlightIds.length > 0 && (tr.id==='video'||tr.id==='aud1') ? tr.color+'cc' : tr.color+'55'}`,
@@ -1564,7 +1633,10 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
             </div>
 
             {/* ── Track rows ── */}
-            {trackRows}
+            {/* Scrub from anywhere in the track area, not only the ruler */}
+            <div onMouseDown={onTracksDown} style={{ cursor:'col-resize' }}>
+              {trackRows}
+            </div>
 
             {/* ── Playhead vertical line + draggable dot ── */}
             <div data-modaya-playhead style={{ position:'absolute', top:RULER_H, bottom:0,
@@ -1690,6 +1762,38 @@ export function EditorShell({
   /** Reaching the end rewinds to the start, like every other player. */
   const endPlay    = useCallback(() => { setPlaying(false); setPhS(0); }, []);
   const [expOpen,setExpOpen] = useState(false);
+
+  /* Transport from the keyboard, as every editor does it: space plays and
+     pauses, the arrows step a frame at a time (a second with shift), home and
+     end jump to the two ends. Never while someone is typing in the chat, and
+     never behind the export dialog. */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (expOpen || !keyIsForEditor(e.target)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      switch (e.key) {
+        case ' ': case 'Spacebar': case 'k':
+          e.preventDefault(); togglePlay(); break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          setPlaying(false);
+          setPhS(t => stepTime(t, -1, { totalS: totalSRef.current, coarse: e.shiftKey }));
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          setPlaying(false);
+          setPhS(t => stepTime(t, 1, { totalS: totalSRef.current, coarse: e.shiftKey }));
+          break;
+        case 'Home':
+          e.preventDefault(); setPhS(0); break;
+        case 'End':
+          e.preventDefault(); setPlaying(false); setPhS(totalSRef.current); break;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [expOpen, togglePlay]);
   const [playing,setPlaying] = useState(false);
   const [phS,    setPhS   ] = useState(0);
   const raf = useRef<number|null>(null);
