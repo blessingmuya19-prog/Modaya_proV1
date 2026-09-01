@@ -11,7 +11,7 @@
  * browser; the DOM side lives in engine.ts.
  */
 
-import type { TextPosition, TextStyle } from '@/lib/ai/operations';
+import type { TextPosition, TextAlign, TextStyle } from '@/lib/ai/operations';
 
 export type ClipKind = 'video' | 'audio' | 'text' | 'subtitle';
 
@@ -38,6 +38,7 @@ export interface SequenceClip {
   kind:        ClipKind;
   /** Text clips: where the words sit in the frame, and how they look. */
   textPosition?: TextPosition;
+  textAlign?:    TextAlign;
   textStyle?:    TextStyle;
   label:       string;
   /** Position on the programme timeline. */
@@ -77,6 +78,7 @@ export interface EditorClipLike {
   id: string; trackId: string; label: string;
   startS: number; endS: number; type: ClipKind;
   textPosition?: TextPosition;
+  textAlign?:    TextAlign;
   textStyle?:    TextStyle;
 }
 
@@ -111,6 +113,7 @@ export function buildSequence(
       trackId:     c.trackId,
       kind:        c.type,
       textPosition: c.textPosition,
+      textAlign:    c.textAlign,
       textStyle:    c.textStyle,
       label:       c.label,
       timelineIn:  Math.max(0, c.startS),

@@ -80,9 +80,15 @@ export function simulateProcessing(projectId: string, filename: string, duration
   db.projects.update(projectId, { status: 'processing' });
 
   setTimeout(() => {
+    /* Only lay down the analysed clips if nothing has been edited yet.
+       Anyone quick enough to ask for a caption or a title in these first few
+       seconds used to watch it disappear when this fired. */
+    const current = db.projects.findById(projectId);
+    const touched = (current?.clips?.length ?? 0) > 0;
+
     db.projects.update(projectId, {
       status: 'ready',
-      clips:  makeClipsFromFile({ filename, durationS, aspectRatio }),
+      ...(touched ? {} : { clips: makeClipsFromFile({ filename, durationS, aspectRatio }) }),
     });
   }, 4000);
 }

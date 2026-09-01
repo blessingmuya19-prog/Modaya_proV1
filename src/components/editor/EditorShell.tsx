@@ -130,6 +130,7 @@ export interface EditorClip {
   startS: number; endS: number; type: 'video'|'audio'|'text'|'subtitle';
   /** Text clips: where in the frame the words sit, and how they look. */
   textPosition?: 'top'|'centre'|'lower';
+  textAlign?: 'left'|'centre'|'right';
   textStyle?: import('@/lib/ai/operations').TextStyle;
 }
 export interface EditorAIMsg { role: 'user'|'ai'; text: string; ts: string; }

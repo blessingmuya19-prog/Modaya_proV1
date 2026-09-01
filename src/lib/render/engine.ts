@@ -371,8 +371,11 @@ export class PreviewEngine {
     const size  = Math.round(H * scale);
     const weight = style.bold === false ? 400 : 700;
 
+    /* Which side of the frame. Centred unless a corner was asked for. */
+    const side = clip.textAlign ?? 'centre';
+
     ctx.font         = `${weight} ${size}px ${FONT_STACKS[style.font ?? 'sans']}`;
-    ctx.textAlign    = 'center';
+    ctx.textAlign    = side === 'left' ? 'left' : side === 'right' ? 'right' : 'center';
     ctx.textBaseline = 'alphabetic';
     ctx.globalAlpha  = clip.effects.opacity;
 
@@ -391,10 +394,20 @@ export class PreviewEngine {
     const bg   = style.background ?? 'box';
     const padX = size * 0.5, padY = size * 0.32;
 
+    /* The x the text is drawn from, honouring the side margin so a corner
+       caption never touches the edge of the frame. */
+    const sideMargin = Math.round(W * 0.05);
+    const x = side === 'left'  ? sideMargin
+            : side === 'right' ? W - sideMargin
+            : W / 2;
+
     if (bg === 'box') {
       const widest = Math.max(...lines.map(l => ctx.measureText(l).width));
+      const boxX = side === 'left'  ? x - padX
+                 : side === 'right' ? x - widest - padX
+                 : x - widest / 2 - padX;
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.fillRect(W / 2 - widest / 2 - padX, firstBaseline - size - padY * 0.4,
+      ctx.fillRect(boxX, firstBaseline - size - padY * 0.4,
                    widest + padX * 2, block + padY * 1.4 - (lineH - size));
     }
 
@@ -405,7 +418,7 @@ export class PreviewEngine {
     }
 
     ctx.fillStyle = style.colour ?? '#fff';
-    lines.forEach((line, i) => ctx.fillText(line, W / 2, firstBaseline + i * lineH));
+    lines.forEach((line, i) => ctx.fillText(line, x, firstBaseline + i * lineH));
 
     ctx.shadowColor   = 'transparent';
     ctx.shadowBlur    = 0;

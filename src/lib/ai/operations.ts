@@ -14,6 +14,12 @@
  *  text track and change nothing on screen. */
 export type TextPosition = 'top' | 'centre' | 'lower';
 
+/** Across the frame. With TextPosition this gives the nine placements people
+ *  mean by "top corner", "bottom right", "centred" and so on. */
+export type TextAlign = 'left' | 'centre' | 'right';
+
+export interface Placement { position: TextPosition; align: TextAlign }
+
 /** How words look. Deliberately a short list of choices rather than free CSS:
  *  every font here is one the browser already has, so nothing has to be
  *  downloaded and captions can never render in a fallback face. */
@@ -36,6 +42,7 @@ export interface TimelineClip {
   type:    'video' | 'audio' | 'text' | 'subtitle';
   /** Text clips only. */
   textPosition?: TextPosition;
+  textAlign?:    TextAlign;
   textStyle?:    TextStyle;
 }
 
@@ -43,8 +50,11 @@ export type Operation =
   | { op: 'remove_ranges'; ranges: [number, number][] }
   | { op: 'keep_ranges';   ranges: [number, number][] }
   | { op: 'trim_to';       targetS: number }
-  | { op: 'add_captions';  position: TextPosition; everyS: number; style?: TextStyle }
-  | { op: 'add_text';      text: string; position: TextPosition; startS: number; endS: number; style?: TextStyle }
+  | { op: 'add_captions';  position: TextPosition; align?: TextAlign; everyS: number; style?: TextStyle }
+  | { op: 'add_text';      text: string; position: TextPosition; align?: TextAlign;
+                           startS: number; endS: number; style?: TextStyle }
+  | { op: 'move_text';     match?: string; position?: TextPosition; align?: TextAlign }
+  | { op: 'remove_text';   match?: string; position?: TextPosition; all?: boolean }
   | { op: 'style_text';    target: 'captions' | 'all'; style: TextStyle }
   | { op: 'punch_in';      rate: number }
   | { op: 'grade';         brightness: number; contrast: number; saturation: number }
@@ -66,6 +76,40 @@ export interface EditOutcome {
   applied:     Operation[];
 }
 
+/** Which text clips a request is about: by words, by where they sit, or all
+ *  of them. Vague enough to match how people describe what is on screen,
+ *  strict enough that "remove the bottom one" never takes the top one too. */
+export function textTargets(
+  clips: TimelineClip[], match?: string, position?: TextPosition,
+): string[] {
+  const text = clips.filter(c => c.type === 'text' || c.type === 'subtitle');
+  const needle = (match ?? '').trim().toLowerCase();
+
+  let hits = text;
+  if (needle) hits = hits.filter(c => c.label.trim().toLowerCase().includes(needle));
+  if (position) {
+    hits = hits.filter(c =>
+      (c.textPosition ?? (c.trackId === 'subs' ? 'lower' : 'centre')) === position);
+  }
+  // Nothing described? Then it means the overlays, not the captions.
+  if (!needle && !position) hits = text.filter(c => c.id.startsWith('txt-'));
+  return hits.map(c => c.id);
+}
+
+const ALIGN_SAID: Record<TextAlign, string> = {
+  left: 'on the left', centre: '', right: 'on the right',
+};
+
+function placeSaid(position: TextPosition, align?: TextAlign): string {
+  const where = WHERE_SAID[position];
+  const side  = align ? ALIGN_SAID[align] : '';
+  if (!side) return where;
+  // "across the top on the right" reads better as "in the top right corner"
+  if (position === 'top')   return `in the top ${align} corner`;
+  if (position === 'lower') return `in the bottom ${align} corner`;
+  return `${where} ${side}`;
+}
+
 const WHERE_SAID: Record<TextPosition, string> = {
   top: 'across the top', centre: 'in the middle', lower: 'along the bottom',
 };
@@ -78,6 +122,32 @@ const num = (v: unknown, fallback: number): number =>
 
 const POSITIONS: TextPosition[] = ['top', 'centre', 'lower'];
 
+/** Which side of the frame, from the words people use. */
+export function parseAlign(raw: unknown, fallback: TextAlign = 'centre'): TextAlign {
+  const v = String(raw ?? '').trim().toLowerCase();
+  if (!v) return fallback;
+  if (/\bleft\b/.test(v))  return 'left';
+  if (/\bright\b/.test(v)) return 'right';
+  if (/\b(centre|center|middle)\b/.test(v)) return 'centre';
+  return fallback;
+}
+
+/**
+ * A whole placement out of one phrase — "top corner", "bottom right",
+ * "middle". A corner with no side named is the right-hand one, where a
+ * watermark normally goes; the reply says which corner was chosen so it can
+ * be moved with one word.
+ */
+export function parsePlacement(raw: unknown, fallback: Placement = { position: 'lower', align: 'centre' }): Placement {
+  const v = String(raw ?? '').trim().toLowerCase();
+  if (!v) return fallback;
+
+  const position = parsePosition(v, fallback.position);
+  let align = parseAlign(v, /corner/.test(v) ? 'right' : fallback.align);
+  if (/corner/.test(v) && align === 'centre') align = 'right';
+  return { position, align };
+}
+
 /** Words people actually use for a position, mapped to the three we render. */
 export function parsePosition(raw: unknown, fallback: TextPosition = 'lower'): TextPosition {
   const v = String(raw ?? '').trim().toLowerCase();
@@ -85,7 +155,7 @@ export function parsePosition(raw: unknown, fallback: TextPosition = 'lower'): T
   if (POSITIONS.includes(v as TextPosition)) return v as TextPosition;
   if (/^(top|upper|above|head)/.test(v))            return 'top';
   if (/(middle|center|centre|mid)/.test(v))         return 'centre';
-  if (/(bottom|lower|below|under|subtitle)/.test(v))return 'lower';
+  if (/(b[ou]tt?[ou]m|lower|below|under|subtitle|beneath)/.test(v)) return 'lower';
   return fallback;
 }
 
@@ -142,6 +212,31 @@ export function parseStyle(raw: unknown): TextStyle | undefined {
  * Unknown ops, malformed ranges and out-of-range numbers are dropped, not
  * repaired by guesswork.
  */
+/**
+ * Fill in what the model left off from what the person actually typed.
+ *
+ * A model that answers "remove the one on the buttom" with a bare
+ * {"op":"remove_text"} is asking to delete every overlay, which is not what
+ * was said. The words are right there in the message, so read them.
+ */
+export function groundOperations(ops: Operation[], message: string): Operation[] {
+  const said = message ?? '';
+  const spot: TextPosition | undefined =
+      /\b(b[ou]tt?[ou]m|lower|below|beneath)\b/i.test(said) ? 'lower'
+    : /\b(top|upper|above)\b/i.test(said)                    ? 'top'
+    : /\b(middle|centre|center)\b/i.test(said)               ? 'centre'
+    : undefined;
+  const everything = /\b(all|both|every|everything)\b/i.test(said);
+
+  return ops.map(op => {
+    if (op.op === 'remove_text' && !op.match && !op.position && !op.all)
+      return everything ? { ...op, all: true } : { ...op, position: spot };
+    if (op.op === 'move_text' && !op.match && !op.position)
+      return { ...op, position: spot };
+    return op;
+  });
+}
+
 export function validateOperations(raw: unknown, ctx: OperationContext): Operation[] {
   if (!Array.isArray(raw)) return [];
   const out: Operation[] = [];
@@ -165,11 +260,32 @@ export function validateOperations(raw: unknown, ctx: OperationContext): Operati
       case 'add_captions':
         out.push({
           op: 'add_captions',
-          position: parsePosition(o.position, 'lower'),
+          position: parsePlacement(o.position, { position: 'lower', align: 'centre' }).position,
+          align:    o.align ? parseAlign(o.align) : parsePlacement(o.position, { position:'lower', align:'centre' }).align,
           everyS:   clamp(num(o.everyS, 3), 1, 15),
           style:    parseStyle(o.style),
         });
         break;
+      case 'move_text': {
+        const match    = String(o.match ?? '').trim().slice(0, 120) || undefined;
+        const place    = o.position ?? o.align ?? o.to ?? o.placement;
+        const position = o.position === undefined && place === undefined
+          ? undefined : parsePlacement(String(place ?? '')).position;
+        const align    = o.align === undefined && place === undefined
+          ? undefined : parsePlacement(String(o.align ?? place ?? '')).align;
+        if (position === undefined && align === undefined) break;
+        out.push({ op: 'move_text', match, position, align });
+        break;
+      }
+      case 'remove_text': {
+        out.push({
+          op: 'remove_text',
+          match: String(o.match ?? '').trim().slice(0, 120) || undefined,
+          position: o.position === undefined ? undefined : parsePosition(o.position),
+          all: o.all === true,
+        });
+        break;
+      }
       case 'add_text': {
         // A text overlay is only as good as its words: no words, no operation.
         const text = String(o.text ?? '').trim().slice(0, 200);
@@ -177,9 +293,11 @@ export function validateOperations(raw: unknown, ctx: OperationContext): Operati
         const startS = clamp(num(o.startS, 0), 0, ctx.durationS);
         const endS   = clamp(num(o.endS, ctx.durationS), 0, ctx.durationS);
         if (endS - startS < 0.1) break;
+        const placement = parsePlacement(o.position, { position: 'centre', align: 'centre' });
         out.push({
           op: 'add_text', text,
-          position: parsePosition(o.position, 'centre'),
+          position: placement.position,
+          align:    o.align ? parseAlign(o.align) : placement.align,
           startS, endS,
           style: parseStyle(o.style),
         });
@@ -350,6 +468,7 @@ export function applyOperations(
               endS:   Number(endS.toFixed(3)),
               type:   kind,
               textPosition: where,
+              ...(op.align ? { textAlign: op.align } : {}),
               ...(op.style ? { textStyle: op.style } : {}),
             });
             n++;
@@ -386,6 +505,29 @@ export function applyOperations(
            Separate from captions: captions come from the transcript and get
            rewritten every time they are regenerated, whereas a name or a
            title is yours and must survive that. */
+
+        /* "Move it to the top corner" reaches here as another add_text with
+           the same words. Adding a second copy is how you end up with two
+           names on screen and no way to say which one to delete, so the same
+           words over the same span are treated as a move. */
+        const twin = working.find(c =>
+          c.id.startsWith('txt-') &&
+          c.label.trim().toLowerCase() === op.text.trim().toLowerCase() &&
+          op.startS < c.endS && op.endS > c.startS);
+
+        if (twin) {
+          working = working.map(c => c.id === twin.id ? {
+            ...c,
+            textPosition: op.position,
+            textAlign:    op.align ?? c.textAlign,
+            ...(op.style ? { textStyle: { ...(c.textStyle ?? {}), ...op.style } } : {}),
+          } : c);
+          applied.push(op);
+          affected.add(twin.id);
+          notes.push(`moved "${op.text.slice(0, 40)}" ${placeSaid(op.position, op.align)}`);
+          break;
+        }
+
         const id = `txt-${working.filter(c => c.id.startsWith('txt-')).length}`;
         working.push({
           id, trackId: 'text', label: op.text,
@@ -393,11 +535,62 @@ export function applyOperations(
           endS:   Number(op.endS.toFixed(3)),
           type:   'text',
           textPosition: op.position,
+          ...(op.align ? { textAlign: op.align } : {}),
           ...(op.style ? { textStyle: op.style } : {}),
         });
         applied.push(op);
         affected.add(id);
-        notes.push(`"${op.text.slice(0, 40)}" ${WHERE_SAID[op.position]} from ${fmt(op.startS)} to ${fmt(op.endS)}`);
+        notes.push(`"${op.text.slice(0, 40)}" ${placeSaid(op.position, op.align)} from ${fmt(op.startS)} to ${fmt(op.endS)}`);
+        break;
+      }
+
+      case 'move_text': {
+        const targets = textTargets(working, op.match, undefined);
+        if (!targets.length) { notes.push('no text on screen to move'); break; }
+        working = working.map(c => targets.includes(c.id) ? {
+          ...c,
+          textPosition: op.position ?? c.textPosition,
+          textAlign:    op.align    ?? c.textAlign,
+        } : c);
+        targets.forEach(id => affected.add(id));
+        applied.push(op);
+        const moved = working.find(c => c.id === targets[0]);
+        notes.push(`moved ${targets.length === 1 ? `"${moved?.label.slice(0, 40)}"` : `${targets.length} text clips`} ` +
+                   placeSaid(moved?.textPosition ?? 'centre', moved?.textAlign));
+        break;
+      }
+
+      case 'remove_text': {
+        const targets = op.all
+          ? working.filter(c => c.type === 'text' || c.type === 'subtitle').map(c => c.id)
+          : textTargets(working, op.match, op.position);
+
+        if (!targets.length) {
+          notes.push(op.match || op.position
+            ? 'no text matched that description'
+            : 'there is no text on screen to remove');
+          break;
+        }
+
+        /* "remove the text" with several on screen and nothing to tell them
+           apart: ask instead of deleting the lot. Guessing wrong here costs
+           the user work they can't get back. */
+        if (!op.all && !op.match && !op.position && targets.length > 1) {
+          const list = working
+            .filter(c => targets.includes(c.id))
+            .map(c => `"${c.label.slice(0, 30)}" (${placeSaid(c.textPosition ?? 'lower', c.textAlign ?? 'centre')})`)
+            .join(' and ');
+          notes.push(`there is more than one: ${list} — which should go?`);
+          break;
+        }
+
+        const gone = working.filter(c => targets.includes(c.id));
+        working = working.filter(c => !targets.includes(c.id));
+        applied.push(op);
+        targets.forEach(id => affected.add(id));
+        notes.push(gone.length === 1
+          ? `removed "${gone[0].label.slice(0, 40)}"`
+          : `removed ${gone.length} text clips`);
         break;
       }
       case 'style_text': {

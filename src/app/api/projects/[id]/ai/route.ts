@@ -11,12 +11,13 @@ import { v4 as uuid } from 'uuid';
 import { describeLoudness } from '@/lib/ai/highlights';
 import { transcriptForPrompt, fillerRanges, sanitiseSegments, Transcript } from '@/lib/ai/transcript';
 import { chatDetailed, explainFailure, extractJson, detectProvider, FailureReason } from '@/lib/ai/llm';
-import { validateOperations, applyOperations, parseStyle, Operation, TimelineClip } from '@/lib/ai/operations';
+import { groundOperations, validateOperations, applyOperations, parseStyle, parsePlacement, Operation, TimelineClip } from '@/lib/ai/operations';
 
 // ── Intent detection ──────────────────────────────────────────────────────────
 
 type Intent =
   | 'tighten' | 'clean' | 'moments' | 'captions' | 'text_overlay' | 'restyle'
+  | 'move_text' | 'remove_text'
   | 'vertical' | 'highlights' | 'cut_silence' | 'unknown';
 
 function detectIntent(text: string): Intent {
@@ -28,6 +29,14 @@ function detectIntent(text: string): Intent {
   if (p.match(/caption|subtitle|transcri/))                        return 'captions';
   if (p.match(/\bfont\b|typeface|\bstyle\b|colour|color|bigger|smaller|bold|uppercase/))
                                                                    return 'restyle';
+  if (p.match(/\b(remove|delete|get rid of|take off|erase)\b/) &&
+      p.match(/\btext\b|\btitle\b|\bname\b|overlay|watermark|caption|\bone\b/))
+                                                                   return 'remove_text';
+  /* "move it to the top corner" is about text already on screen. Adding it
+     again is what left two names on the video with no way to say which. */
+  if (p.match(/\b(move|put|place|shift|reposition|drag)\b|corner/) &&
+      p.match(/\b(top|bottom|lower|upper|corner|left|right|middle|centre|center|up|down)\b/) &&
+      !p.match(/\bcaptions?\b|\bsubtitles?\b/))                   return 'move_text';
   if (p.match(/\btext\b|\btitle\b|\bname\b|overlay|watermark|lower.?third/))
                                                                    return 'text_overlay';
   if (p.match(/highlight|best moment|standout|top (?:moment|part|bit|clip|section)|\bmoments?\b/))
@@ -212,13 +221,47 @@ function applyEdit(
           'I can put text on screen — tell me the exact words and I\'ll place them. ' +
           'For example: put text on screen "Blessing Muya".');
       }
-      const where = /\b(top|upper|above)\b/i.test(ctx.message ?? '') ? 'top'
-                  : /\b(bottom|lower|below)\b/i.test(ctx.message ?? '') ? 'lower'
-                  : 'centre';
-      const out = run([{ op: 'add_text', text: words, position: where, startS: 0, endS: durationS }]);
+      const place = parsePlacement(ctx.message ?? '', { position: 'lower', align: 'centre' });
+      const out = run([{ op: 'add_text', text: words, position: place.position,
+                         align: place.align, startS: 0, endS: durationS }]);
       return {
-        reply: `Put "${words}" on screen ${WHERE_WORDS[where]}, for the whole clip. ` +
+        reply: `${out.summary.charAt(0).toUpperCase()}${out.summary.slice(1)}. ` +
                'Say when it should appear, or ask for a different font, size or colour.',
+        summary: out.summary, savedS: 0, affectedIds: out.affectedIds,
+        newClips: out.clips as Clip[], intent,
+      };
+    }
+
+    case 'move_text': {
+      const msg   = ctx.message ?? '';
+      const place = parsePlacement(msg, { position: 'top', align: 'centre' });
+      const out   = run([{ op: 'move_text', position: place.position, align: place.align }]);
+      const moved = out.summary.startsWith('moved');
+      return {
+        reply: moved
+          ? `${out.summary.charAt(0).toUpperCase()}${out.summary.slice(1)}.`
+          : "There's no text on screen to move yet — tell me the words and I'll put them up first.",
+        summary: out.summary, savedS: 0, affectedIds: out.affectedIds,
+        newClips: out.clips as Clip[], intent,
+      };
+    }
+
+    case 'remove_text': {
+      const msg = ctx.message ?? '';
+      const position = /\b(b[ou]tt?[ou]m|lower|below)\b/i.test(msg) ? 'lower' as const
+                     : /\b(top|upper|above)\b/i.test(msg)    ? 'top'   as const
+                     : /\b(middle|centre|center)\b/i.test(msg) ? 'centre' as const
+                     : undefined;
+      const all   = /\b(all|both|every|everything)\b/i.test(msg);
+      const words = wordsForOverlay(msg) ?? undefined;
+      const out   = run([{ op: 'remove_text', match: words, position, all }]);
+      const removed = out.summary.startsWith('removed');
+      const asking  = out.summary.startsWith('there is more than one');
+      return {
+        reply: removed || asking
+          ? `${out.summary.charAt(0).toUpperCase()}${out.summary.slice(1)}${asking ? '' : '.'}`
+          : `${out.summary.charAt(0).toUpperCase()}${out.summary.slice(1)} — ` +
+            'tell me the words or whereabouts it sits and I\'ll take that one off.',
         summary: out.summary, savedS: 0, affectedIds: out.affectedIds,
         newClips: out.clips as Clip[], intent,
       };
@@ -292,7 +335,9 @@ Available operations:
   {"op":"trim_to","targetS":number}                      shorten to a length
   {"op":"add_captions","position":"top"|"centre"|"lower","everyS":number,"style":{...}}
   {"op":"add_text","text":"the words","position":"top"|"centre"|"lower",
-   "startS":number,"endS":number,"style":{...}}     put the user's own words on screen
+   "align":"left"|"centre"|"right","startS":number,"endS":number,"style":{...}}
+  {"op":"move_text","match":"words to find","position":...,"align":...}  move text already on screen
+  {"op":"remove_text","match":"words to find","position":...,"all":true} take text off screen
   {"op":"style_text","target":"captions"|"all","style":{...}}   restyle existing text
   {"op":"punch_in","rate":0..1}                          push in on some shots
   {"op":"grade","brightness":n,"contrast":n,"saturation":n}   around 1.0
@@ -309,6 +354,17 @@ Text style — the "style" object, every field optional:
   a different track and never a refusal.
 - add_text is for words the user gives you: a name, a title, a label. Use
   their exact wording. Default to the whole clip unless they say when.
+- "Corner" means position plus align: top corner is position:"top" with
+  align:"right" unless they name a side. Say which corner you chose.
+- Moving something already on screen is move_text, NEVER a second add_text.
+  "Put it top left", "move it up", "no, the other corner" are all move_text
+  with a match on the words that are already there. Adding again leaves two
+  copies on screen and the user then has to ask you to delete one.
+- remove_text takes text off: match on its words, or position:"lower" for
+  "remove the one at the bottom", or all:true for every overlay. You CAN
+  remove one and keep another — never claim you can only remove all text.
+  When they single one out — "the one on the bottom", "the top one" — you
+  MUST set match or position. A bare remove_text means every overlay.
 - style_text changes how existing text looks without rewriting it, so
   "same captions, different font" does not need recognition to run again.
 - If someone asks for a font you cannot name above, pick the closest of the
@@ -497,11 +553,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     failure = attempt.failure;
 
     if (plan) {
-      const outcome = applyOperations(clips as TimelineClip[], plan.operations,
+      const outcome = applyOperations(clips as TimelineClip[],
+                                      groundOperations(plan.operations, message),
                                       { durationS, silences, transcript });
       source = 'llm';
+
+      /* The model writes its reply before knowing whether the edit was
+         possible. When nothing was applied, "Taken that one off." is simply
+         untrue — say what actually happened instead. */
+      const didNothing = outcome.applied.length === 0 && outcome.summary !== 'No change';
+
       edit = {
-        reply:       plan.reply,
+        reply:       didNothing
+                       ? `${outcome.summary.charAt(0).toUpperCase()}${outcome.summary.slice(1)}`
+                       : plan.reply,
         summary:     outcome.summary,
         savedS:      Math.round(outcome.removedS),
         affectedIds: outcome.affectedIds,
@@ -534,7 +599,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (project) {
     db.projects.update(id, {
       aiHistory: [...(project.aiHistory ?? []), userMsg, aiMsg],
-      clips: edit.newClips.length > 0 ? edit.newClips : clips,
+      /* Every branch of applyEdit returns the whole timeline, including the
+         no-change one, so this can be written straight through. Treating an
+         empty list as "nothing happened" meant taking the last clip off
+         never stuck. */
+      clips: edit.newClips,
     });
   }
 

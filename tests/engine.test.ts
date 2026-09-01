@@ -340,6 +340,29 @@ describe('text position and style on the canvas', () => {
     expect(draw({}).hit!.t).toBe('Blessing Muya');
   });
 
+  it('draws in the top right corner when asked for one', () => {
+    const { hit, H, W } = draw({ textPosition: 'top', textAlign: 'right' });
+    expect(hit!.y).toBeLessThan(H * 0.3);
+    expect(hit!.x, 'the words were not pushed to the right').toBeGreaterThan(W * 0.6);
+  });
+
+  it('draws in the bottom left corner when asked for one', () => {
+    const { hit, H, W } = draw({ textPosition: 'lower', textAlign: 'left' });
+    expect(hit!.y).toBeGreaterThan(H * 0.8);
+    expect(hit!.x).toBeLessThan(W * 0.4);
+  });
+
+  it('keeps a corner clear of the very edge of the frame', () => {
+    const { hit, W } = draw({ textPosition: 'top', textAlign: 'right' });
+    expect(hit!.x).toBeLessThan(W - 1);
+    expect(W - hit!.x).toBeGreaterThan(W * 0.02);
+  });
+
+  it('centres text across the frame when no side is asked for', () => {
+    const { hit, W } = draw({ textPosition: 'top' });
+    expect(hit!.x).toBeCloseTo(W / 2, 0);
+  });
+
   it('still reads the old track-and-kind rule when a clip has no position', () => {
     const { hit, H } = draw({ trackId: 'subs', type: 'subtitle' });
     expect(hit!.y, 'a caption from before the fix moved').toBeGreaterThan(H * 0.8);

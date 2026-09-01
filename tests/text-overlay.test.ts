@@ -8,7 +8,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  applyOperations, validateOperations, parseStyle, parsePosition,
+  applyOperations, validateOperations, parseStyle, parsePosition, parsePlacement,
+  parseAlign, textTargets, groundOperations,
   type TimelineClip, type OperationContext,
 } from '@/lib/ai/operations';
 import { wrapText } from '@/lib/render/engine';
@@ -218,5 +219,203 @@ describe('long text in a narrow frame', () => {
 
   it('copes with empty text', () => {
     expect(wrapText(ctx2d, '   ', 200)).toEqual([]);
+  });
+});
+
+
+/**
+ * The conversation that produced two names on screen and no way to delete
+ * either: "add my name" → "move it to top corner" → a SECOND overlay appeared
+ * → "remove the one on the bottom" → "I can't target just the bottom text".
+ */
+describe('corners', () => {
+  it('reads a corner out of the phrase, and picks a side when none is named', () => {
+    expect(parsePlacement('top corner')).toEqual({ position: 'top', align: 'right' });
+    expect(parsePlacement('top left')).toEqual({ position: 'top', align: 'left' });
+    expect(parsePlacement('bottom right corner')).toEqual({ position: 'lower', align: 'right' });
+    expect(parsePlacement('middle')).toEqual({ position: 'centre', align: 'centre' });
+  });
+
+  it('reads a side on its own', () => {
+    expect(parseAlign('left')).toBe('left');
+    expect(parseAlign('on the right please')).toBe('right');
+    expect(parseAlign('somewhere')).toBe('centre');
+  });
+
+  it('places text in the corner asked for', () => {
+    const out = applyOperations(clips(), [
+      { op: 'add_text', text: 'Blessing Muya', position: 'top', align: 'right', startS: 0, endS: 19 },
+    ], ctx);
+    const txt = out.clips.find(c => c.id.startsWith('txt-'));
+    expect(txt?.textPosition).toBe('top');
+    expect(txt?.textAlign).toBe('right');
+    expect(out.summary).toMatch(/top right corner/i);
+  });
+});
+
+describe('removing without saying which one', () => {
+  const two = (): TimelineClip[] => ([
+    ...clips(),
+    { id: 'txt-0', trackId: 'text', label: 'Blessing Muya', startS: 0, endS: 19,
+      type: 'text', textPosition: 'top', textAlign: 'right' },
+    { id: 'txt-1', trackId: 'text', label: 'Subscribe', startS: 0, endS: 19,
+      type: 'text', textPosition: 'lower' },
+  ]);
+
+  it('asks which one instead of deleting both', () => {
+    const out = applyOperations(two(), [{ op: 'remove_text' }], ctx);
+    expect(out.clips.filter(c => c.id.startsWith('txt-')),
+      'both overlays were deleted on an ambiguous request').toHaveLength(2);
+    expect(out.summary).toMatch(/more than one/i);
+    expect(out.summary).toMatch(/Blessing Muya/);
+    expect(out.summary).toMatch(/Subscribe/);
+  });
+
+  it('just does it when there is only one', () => {
+    const one = two().filter(c => c.id !== 'txt-1');
+    const out = applyOperations(one, [{ op: 'remove_text' }], ctx);
+    expect(out.clips.filter(c => c.id.startsWith('txt-'))).toHaveLength(0);
+  });
+
+  it('just does it when they say all of them', () => {
+    const out = applyOperations(two(), [{ op: 'remove_text', all: true }], ctx);
+    expect(out.clips.filter(c => c.id.startsWith('txt-'))).toHaveLength(0);
+  });
+});
+
+describe('reading the target out of the message when the model left it off', () => {
+  it('takes the bottom from "remove the one on the buttom"', () => {
+    const [op] = groundOperations([{ op: 'remove_text' }], 'remove the one on the buttom');
+    expect(op).toMatchObject({ op: 'remove_text', position: 'lower' });
+  });
+
+  it('takes the top from "delete the top one"', () => {
+    const [op] = groundOperations([{ op: 'remove_text' }], 'delete the top one');
+    expect(op).toMatchObject({ op: 'remove_text', position: 'top' });
+  });
+
+  it('reads "remove all the text" as all of it', () => {
+    const [op] = groundOperations([{ op: 'remove_text' }], 'remove all the text');
+    expect(op).toMatchObject({ op: 'remove_text', all: true });
+  });
+
+  it('leaves a target the model did give alone', () => {
+    const [op] = groundOperations(
+      [{ op: 'remove_text', match: 'subscribe' }], 'remove the one at the top');
+    expect(op).toMatchObject({ match: 'subscribe' });
+    expect((op as { position?: string }).position).toBeUndefined();
+  });
+
+  it('leaves it ambiguous when the message says nothing either', () => {
+    const [op] = groundOperations([{ op: 'remove_text' }], 'remove the text');
+    expect((op as { position?: string }).position).toBeUndefined();
+  });
+
+  it('grounds a bare move_text the same way', () => {
+    const [op] = groundOperations([{ op: 'move_text' }], 'move it to the top');
+    expect(op).toMatchObject({ op: 'move_text', position: 'top' });
+  });
+});
+
+describe('typos', () => {
+  it('reads the ways people actually spell bottom', () => {
+    for (const w of ['bottom', 'buttom', 'bottum', 'buttom corner', 'at the botom'])
+      expect(parsePosition(w), `"${w}" was not understood`).toBe('lower');
+  });
+});
+
+describe('moving text that is already on screen', () => {
+  const named = () => applyOperations(clips(), [
+    { op: 'add_text', text: 'Blessing Muya', position: 'lower', startS: 0, endS: 19 },
+  ], ctx).clips;
+
+  it('moves the one that is there instead of adding a second', () => {
+    const moved = applyOperations(named(), [
+      { op: 'move_text', match: 'Blessing', position: 'top', align: 'right' },
+    ], ctx);
+    const overlays = moved.clips.filter(c => c.id.startsWith('txt-'));
+    expect(overlays, 'a second copy was created').toHaveLength(1);
+    expect(overlays[0].textPosition).toBe('top');
+    expect(overlays[0].textAlign).toBe('right');
+  });
+
+  it('treats re-adding the same words over the same span as a move, not a twin', () => {
+    const again = applyOperations(named(), [
+      { op: 'add_text', text: 'Blessing Muya', position: 'top', align: 'right', startS: 0, endS: 19 },
+    ], ctx);
+    const overlays = again.clips.filter(c => c.id.startsWith('txt-'));
+    expect(overlays, 'the editor ended up with two of the same name').toHaveLength(1);
+    expect(overlays[0].textPosition).toBe('top');
+    expect(again.summary).toMatch(/^moved/);
+  });
+
+  it('still allows the same words twice at different times', () => {
+    const twice = applyOperations(named(), [
+      { op: 'add_text', text: 'Blessing Muya', position: 'top', startS: 30, endS: 40 },
+    ], { durationS: 100 });
+    expect(twice.clips.filter(c => c.id.startsWith('txt-'))).toHaveLength(2);
+  });
+
+  it('says there is nothing to move when the screen is bare', () => {
+    const out = applyOperations(clips(), [{ op: 'move_text', position: 'top' }], ctx);
+    expect(out.summary).toMatch(/no text on screen to move/i);
+  });
+});
+
+describe('removing one piece of text and keeping the other', () => {
+  /** Exactly the state the editor was left in: two overlays, top and bottom. */
+  const twoOverlays = (): TimelineClip[] => ([
+    ...clips(),
+    { id: 'txt-0', trackId: 'text', label: 'blessing muya', startS: 0, endS: 19,
+      type: 'text', textPosition: 'lower' },
+    { id: 'txt-1', trackId: 'text', label: 'blessing muya', startS: 0, endS: 19,
+      type: 'text', textPosition: 'top' },
+  ]);
+
+  it('removes the one at the bottom and leaves the one at the top', () => {
+    const out = applyOperations(twoOverlays(), [
+      { op: 'remove_text', position: 'lower' },
+    ], ctx);
+    const left = out.clips.filter(c => c.id.startsWith('txt-'));
+    expect(left).toHaveLength(1);
+    expect(left[0].textPosition).toBe('top');
+  });
+
+  it('removes by the words when there is only one of them', () => {
+    const mixed: TimelineClip[] = [
+      ...clips(),
+      { id: 'txt-0', trackId: 'text', label: 'Blessing Muya', startS: 0, endS: 19, type: 'text', textPosition: 'top' },
+      { id: 'txt-1', trackId: 'text', label: 'Subscribe', startS: 0, endS: 19, type: 'text', textPosition: 'lower' },
+    ];
+    const out = applyOperations(mixed, [{ op: 'remove_text', match: 'subscribe' }], ctx);
+    const left = out.clips.filter(c => c.id.startsWith('txt-'));
+    expect(left.map(c => c.label)).toEqual(['Blessing Muya']);
+  });
+
+  it('takes everything off when asked for all of it', () => {
+    const out = applyOperations(twoOverlays(), [{ op: 'remove_text', all: true }], ctx);
+    expect(out.clips.filter(c => c.type === 'text' || c.type === 'subtitle')).toHaveLength(0);
+  });
+
+  it('leaves the captions alone when removing an overlay', () => {
+    let cur = applyOperations(twoOverlays(), [
+      { op: 'add_captions', position: 'lower', everyS: 10 }], withTranscript).clips;
+    cur = applyOperations(cur, [{ op: 'remove_text', position: 'top' }], ctx).clips;
+    expect(cur.filter(c => c.id.startsWith('cap-')).length).toBe(2);
+    expect(cur.filter(c => c.id.startsWith('txt-')).length).toBe(1);
+  });
+
+  it('says so plainly when nothing matches, rather than removing the wrong thing', () => {
+    const out = applyOperations(twoOverlays(), [{ op: 'remove_text', match: 'never written' }], ctx);
+    expect(out.summary).toMatch(/no text matched/i);
+    expect(out.clips.filter(c => c.id.startsWith('txt-'))).toHaveLength(2);
+  });
+
+  it('picks out targets by words or by where they sit', () => {
+    const cl = twoOverlays();
+    expect(textTargets(cl, undefined, 'lower')).toEqual(['txt-0']);
+    expect(textTargets(cl, undefined, 'top')).toEqual(['txt-1']);
+    expect(textTargets(cl, 'blessing')).toEqual(['txt-0', 'txt-1']);
+    expect(textTargets(cl, 'nothing like this')).toEqual([]);
   });
 });
