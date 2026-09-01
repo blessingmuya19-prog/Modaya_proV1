@@ -29,7 +29,7 @@ const mask = k => (k ? `${k.slice(0, 4)}…${k.slice(-4)} (${k.length} chars)` :
 
 const providers = [
   { name: 'groq',       key: () => env('GROQ_API_KEY'),
-    model: 'llama-3.3-70b-versatile',
+    model: 'openai/gpt-oss-120b',
     call: (key, model) => openai('https://api.groq.com/openai/v1', key, model) },
   { name: 'gemini',     key: () => env('GEMINI_API_KEY') || env('GOOGLE_API_KEY'),
     model: 'gemini-2.5-flash', call: (key, model) => gemini(key, model) },

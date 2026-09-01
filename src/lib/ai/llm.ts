@@ -88,13 +88,35 @@ interface ProviderConfig {
   ready:   boolean;
 }
 
-const DEFAULT_MODELS: Record<Exclude<ProviderName, 'none'>, string> = {
-  groq:       'llama-3.3-70b-versatile',
-  gemini:     'gemini-2.5-flash',
-  openrouter: 'meta-llama/llama-3.3-70b-instruct:free',
-  cloudflare: '@cf/meta/llama-3.1-8b-instruct',
-  ollama:     'llama3.1',
+/**
+ * Free-tier defaults, in preference order. Providers retire models on a few
+ * weeks' notice — Groq shut down llama-3.3-70b-versatile on 2026-08-16 — so
+ * each provider carries a chain rather than a single id. If the first is gone,
+ * the next is tried automatically and the user never has to know.
+ */
+const MODEL_CHAIN: Record<Exclude<ProviderName, 'none'>, string[]> = {
+  groq: [
+    'openai/gpt-oss-120b',        // replaces llama-3.3-70b-versatile
+    'qwen/qwen3.6-27b',
+    'openai/gpt-oss-20b',
+    'moonshotai/kimi-k2-instruct',
+  ],
+  gemini: [
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+  ],
+  openrouter: [
+    'meta-llama/llama-3.3-70b-instruct:free',
+    'qwen/qwen3-32b:free',
+  ],
+  cloudflare: ['@cf/meta/llama-3.1-8b-instruct'],
+  ollama:     ['llama3.1'],
 };
+
+const DEFAULT_MODELS: Record<Exclude<ProviderName, 'none'>, string> =
+  Object.fromEntries(
+    Object.entries(MODEL_CHAIN).map(([k, v]) => [k, v[0]]),
+  ) as Record<Exclude<ProviderName, 'none'>, string>;
 
 const env = (k: string): string => (process.env[k] ?? '').trim();
 
@@ -250,14 +272,8 @@ export async function chat(
   const cfg = detectProvider();
   if (!cfg.ready) return null;
 
-  const json      = opts.json ?? false;
-  const timeoutMs = opts.timeoutMs ?? 20_000;
-
-  const call = (): Promise<string | null> => callProvider(cfg, messages, json);
-
-  const text = await withTimeout(call().catch(() => null), timeoutMs);
-  if (!text) return null;
-  return { text, provider: cfg.name, model: cfg.model };
+  const out = await chatDetailed(messages, opts);
+  return out.ok ? out.result : null;
 }
 
 function callProvider(
@@ -301,18 +317,43 @@ export async function chatDetailed(
   if (!cfg.ready) {
     return { ok: false, reason: 'not_configured', status: 0, detail: 'no provider key in the environment' };
   }
-  try {
-    const text = await withTimeoutStrict(callProvider(cfg, messages, opts.json ?? false), opts.timeoutMs ?? 20_000);
-    if (!text || !text.trim()) {
-      return { ok: false, reason: 'empty_response', status: 0, detail: 'the provider returned no text' };
+  // Try the configured model, then the rest of the chain — but only when the
+  // model was chosen by us. An explicit LLM_MODEL is the user's decision and is
+  // never silently overridden.
+  const forcedModel = env('LLM_MODEL');
+  const candidates  = forcedModel
+    ? [forcedModel]
+    : [cfg.model, ...(MODEL_CHAIN[cfg.name as Exclude<ProviderName, 'none'>] ?? [])
+        .filter(m => m !== cfg.model)];
+
+  let last: ChatOutcome = {
+    ok: false, reason: 'provider_error', status: 0, detail: 'no model attempted',
+  };
+
+  for (const model of candidates) {
+    try {
+      const text = await withTimeoutStrict(
+        callProvider({ ...cfg, model }, messages, opts.json ?? false),
+        opts.timeoutMs ?? 20_000);
+
+      if (!text || !text.trim()) {
+        last = { ok: false, reason: 'empty_response', status: 0, detail: 'the provider returned no text' };
+        continue;
+      }
+      return { ok: true, result: { text, provider: cfg.name, model } };
+    } catch (err) {
+      last = err instanceof ProviderError
+        ? { ok: false, reason: err.reason, status: err.status, detail: err.detail }
+        : { ok: false, reason: 'provider_error', status: 0,
+            detail: err instanceof Error ? err.message : String(err) };
+
+      // Only a retired or unavailable model is worth another attempt; a bad key
+      // or a dead network will fail identically for every model in the chain.
+      if (last.reason !== 'model_unavailable') return last;
     }
-    return { ok: true, result: { text, provider: cfg.name, model: cfg.model } };
-  } catch (err) {
-    if (err instanceof ProviderError) {
-      return { ok: false, reason: err.reason, status: err.status, detail: err.detail };
-    }
-    return { ok: false, reason: 'provider_error', status: 0, detail: err instanceof Error ? err.message : String(err) };
   }
+
+  return last;
 }
 
 /** Human-readable, provider-aware explanation of a failure. */
@@ -327,7 +368,8 @@ export function explainFailure(reason: FailureReason, provider: string, detail =
     case 'rate_limited':
       return `${provider} says you are over its free-tier rate limit. The key is valid; wait a minute and try again.`;
     case 'model_unavailable':
-      return `The key works, but ${provider} will not serve this model to your account. Set LLM_MODEL to one you can access.`;
+      return `Your ${provider} key works, but none of the models this app knows about are available to your account. ` +
+             'Providers retire models regularly — set LLM_MODEL to one your account can access.';
     case 'timeout':
       return `${provider} did not answer in time. The key may well be fine — try once more.`;
     case 'empty_response':

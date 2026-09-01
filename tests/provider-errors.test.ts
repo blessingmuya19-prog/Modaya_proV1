@@ -155,6 +155,77 @@ describe('explainFailure wording', () => {
  * Diagnostics must name variables, never expose their values — the whole point
  * is to debug a hosted deploy without anyone pasting a secret anywhere.
  */
+/**
+ * Providers retire models on short notice — Groq shut down
+ * llama-3.3-70b-versatile on 2026-08-16, which broke this app in production.
+ * A dead default must not become a dead feature.
+ */
+describe('model chain', () => {
+  it('moves to the next model when the first is retired', async () => {
+    withGroq();
+    const seen: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      const model = JSON.parse(String(init.body)).model as string;
+      seen.push(model);
+      if (seen.length === 1) return new Response('model has been decommissioned', { status: 404 });
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'OK' } }] }), { status: 200 });
+    }));
+
+    const out = await ask();
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.result.model).toBe(seen[1]);
+    expect(seen.length).toBe(2);
+    expect(seen[0]).not.toBe(seen[1]);
+  });
+
+  it('does not retry when the key is the problem', async () => {
+    withGroq();
+    const fetchMock = vi.fn(async () => new Response('invalid api key', { status: 401 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const out = await ask();
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.reason).toBe('unauthorized');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('respects an explicit LLM_MODEL instead of substituting one', async () => {
+    withGroq();
+    process.env.LLM_MODEL = 'my-own-model';
+    const seen: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      seen.push(JSON.parse(String(init.body)).model);
+      return new Response('no such model', { status: 404 });
+    }));
+
+    const out = await ask();
+    expect(out.ok).toBe(false);
+    expect(seen).toEqual(['my-own-model']);
+  });
+
+  it('gives up with a clear reason when the whole chain is unavailable', async () => {
+    withGroq();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('decommissioned', { status: 404 })));
+    const out = await ask();
+    expect(out.ok).toBe(false);
+    if (!out.ok) {
+      expect(out.reason).toBe('model_unavailable');
+      expect(explainFailure(out.reason, 'groq')).toMatch(/set LLM_MODEL/i);
+    }
+  });
+
+  it('no longer defaults to the model Groq retired', async () => {
+    withGroq();
+    const seen: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      seen.push(JSON.parse(String(init.body)).model);
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'OK' } }] }), { status: 200 });
+    }));
+    await ask();
+    expect(seen[0]).toBe('openai/gpt-oss-120b');
+  });
+});
+
 describe('settings diagnostics', () => {
   const load = async () => {
     vi.resetModules();
