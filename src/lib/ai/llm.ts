@@ -63,7 +63,13 @@ function reasonFor(status: number, body: string): FailureReason {
     return 'json_mode_unsupported';
   }
   if (status === 401 || status === 403) return 'unauthorized';
-  if (status === 429) return 'rate_limited';
+  /* Google answers a bad key with 400 and "API key not valid", not 401. Read
+     as a generic error it sends the user hunting through model settings when
+     the key is simply wrong. */
+  if (/api[_ ]?key[_ ]?(not valid|invalid)|API_KEY_INVALID|invalid api key|permission denied/i.test(body)) {
+    return 'unauthorized';
+  }
+  if (status === 429 || /quota|rate limit/i.test(body)) return 'rate_limited';
   if (status === 404) return 'model_unavailable';
   if (status === 400 && /model/i.test(body)) return 'model_unavailable';
   if (status >= 500) return 'provider_error';
@@ -154,24 +160,52 @@ const DEFAULT_MODELS: Record<Exclude<ProviderName, 'none'>, string> =
   ) as Record<Exclude<ProviderName, 'none'>, string>;
 
 
+/** Is there a usable key for this provider in the environment? */
+export function hasKeyFor(name: Exclude<ProviderName, 'none'>): boolean {
+  switch (name) {
+    case 'groq':       return !!env('GROQ_API_KEY');
+    case 'gemini':     return !!(env('GEMINI_API_KEY') || env('GOOGLE_API_KEY'));
+    case 'openrouter': return !!env('OPENROUTER_API_KEY');
+    case 'cloudflare': return !!(env('CLOUDFLARE_API_TOKEN') && env('CLOUDFLARE_ACCOUNT_ID'));
+    case 'ollama':     return !!env('OLLAMA_BASE_URL');
+  }
+}
+
+const PROVIDER_ORDER: Exclude<ProviderName, 'none'>[] =
+  ['groq', 'gemini', 'openrouter', 'cloudflare', 'ollama'];
+
+/**
+ * Who gets to look at the frames.
+ *
+ * Not necessarily whoever is answering the text. Someone running Groq for
+ * speed and Google for eyes has two perfectly good keys, and making them
+ * choose one would be daft: the question goes to whichever configured
+ * provider can actually see, the current one first.
+ */
+export function visionRoute(preferred?: ProviderName):
+    { provider: Exclude<ProviderName, 'none'>; model: string } | null {
+  const order = preferred && preferred !== 'none'
+    ? [preferred as Exclude<ProviderName, 'none'>,
+       ...PROVIDER_ORDER.filter(p => p !== preferred)]
+    : PROVIDER_ORDER;
+
+  for (const name of order) {
+    if (!hasKeyFor(name)) continue;
+    const model = visionModelFor(name);
+    if (model) return { provider: name, model };
+  }
+  return null;
+}
+
 export function detectProvider(): ProviderConfig {
   const forced = env('LLM_PROVIDER').toLowerCase() as ProviderName;
   const model  = env('LLM_MODEL');
-
-  const has = (name: Exclude<ProviderName, 'none'>): boolean => {
-    switch (name) {
-      case 'groq':       return !!env('GROQ_API_KEY');
-      case 'gemini':     return !!(env('GEMINI_API_KEY') || env('GOOGLE_API_KEY'));
-      case 'openrouter': return !!env('OPENROUTER_API_KEY');
-      case 'cloudflare': return !!(env('CLOUDFLARE_API_TOKEN') && env('CLOUDFLARE_ACCOUNT_ID'));
-      case 'ollama':     return !!env('OLLAMA_BASE_URL');
-    }
-  };
+  const has    = hasKeyFor;
 
   const order: Exclude<ProviderName, 'none'>[] =
     forced && forced !== 'none' && forced in DEFAULT_MODELS
       ? [forced as Exclude<ProviderName, 'none'>]
-      : ['groq', 'gemini', 'openrouter', 'cloudflare', 'ollama'];
+      : PROVIDER_ORDER;
 
   for (const name of order) {
     if (has(name)) return { name, model: model || DEFAULT_MODELS[name], ready: true };
@@ -393,11 +427,11 @@ export async function chatDetailed(
      alone and the person is told what is "in" a frame nothing ever looked
      at. */
   const images = opts.images ?? [];
-  const seer   = images.length ? visionModelFor(cfg.name) : null;
+  const seer   = images.length ? visionRoute(cfg.name) : null;
   if (images.length && !seer) {
     return {
       ok: false, reason: 'no_vision', status: 0,
-      detail: `${cfg.name} has no model here that accepts images`,
+      detail: 'no configured provider has a model that accepts images',
     };
   }
   // Try the configured model, then the rest of the chain — but only when the
@@ -405,7 +439,7 @@ export async function chatDetailed(
   // never silently overridden.
   const forcedModel = env('LLM_MODEL');
   const candidates  = seer
-    ? [seer]
+    ? [seer.model]
     : forcedModel
       ? [forcedModel]
       : [cfg.model, ...(MODEL_CHAIN[cfg.name as Exclude<ProviderName, 'none'>] ?? [])
@@ -417,8 +451,10 @@ export async function chatDetailed(
 
   const wantJson = opts.json ?? false;
 
+  /* When the pictures go to a different provider than the text, the whole
+     call goes there — its own key, its own endpoint, its own model. */
   const attempt = (model: string, json: boolean) => withTimeoutStrict(
-    callProvider({ ...cfg, model }, messages, json, images),
+    callProvider({ ...cfg, ...(seer ? { name: seer.provider } : {}), model }, messages, json, images),
     // Looking at half a dozen frames takes longer than reading a sentence.
     opts.timeoutMs ?? (images.length ? 45_000 : 20_000));
 
@@ -442,7 +478,7 @@ export async function chatDetailed(
         last = { ok: false, reason: 'empty_response', status: 0, detail: 'the provider returned no text' };
         continue;
       }
-      return { ok: true, result: { text, provider: cfg.name, model } };
+      return { ok: true, result: { text, provider: seer?.provider ?? cfg.name, model } };
     } catch (err) {
       last = err instanceof ProviderError
         ? { ok: false, reason: err.reason, status: err.status, detail: err.detail }

@@ -5,7 +5,7 @@
  * given a picture and must never be allowed to answer as though it had one.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { chatDetailed, visionModelFor, explainFailure } from '@/lib/ai/llm';
+import { chatDetailed, visionModelFor, visionRoute, explainFailure } from '@/lib/ai/llm';
 
 const KEYS = [
   'LLM_PROVIDER', 'LLM_MODEL', 'LLM_VISION_MODEL', 'GROQ_API_KEY', 'GEMINI_API_KEY',
@@ -107,6 +107,53 @@ describe('sending frames', () => {
     const msgs = calls[0].body.messages as { role: string; content: unknown }[];
     expect(typeof msgs[msgs.length - 1].content).toBe('string');
     expect(calls[0].body.model).toBe('openai/gpt-oss-120b');
+  });
+});
+
+describe('two keys, one of which can see', () => {
+  it('sends the frames to Google while Groq keeps answering the text', async () => {
+    process.env.GROQ_API_KEY   = 'gsk_test';
+    process.env.GEMINI_API_KEY = 'g';
+    process.env.LLM_PROVIDER   = 'groq';
+
+    // Groq can see too, so force the interesting case: Groq blind.
+    process.env.LLM_VISION_MODEL = '';
+    const calls = captureFetch();
+
+    await chatDetailed([{ role: 'user', content: 'cut the pauses' }], {});
+    expect(calls[0].url).toMatch(/groq/);
+
+    const route = visionRoute('groq');
+    expect(route?.provider).toBe('groq');       // Groq has qwen, so it stays home
+  });
+
+  it('falls through to a provider that can when the current one cannot', () => {
+    process.env.CLOUDFLARE_API_TOKEN  = 't';
+    process.env.CLOUDFLARE_ACCOUNT_ID = 'a';
+    process.env.GEMINI_API_KEY        = 'g';
+
+    const route = visionRoute('cloudflare');
+    expect(route?.provider, 'it did not look past the blind provider').toBe('gemini');
+    expect(route?.model).toMatch(/^gemini-/);
+  });
+
+  it('actually calls that other provider, with its own key', async () => {
+    process.env.CLOUDFLARE_API_TOKEN  = 't';
+    process.env.CLOUDFLARE_ACCOUNT_ID = 'a';
+    process.env.GEMINI_API_KEY        = 'g';
+    process.env.LLM_PROVIDER          = 'cloudflare';
+    const calls = captureFetch();
+
+    const out = await ask([FRAME]);
+    expect(out.ok, 'the request never reached a model that could see').toBe(true);
+    expect(calls[0].url).toMatch(/generativelanguage\.googleapis\.com/);
+    if (out.ok) expect(out.result.provider).toBe('gemini');
+  });
+
+  it('reports nobody when no configured provider can see', () => {
+    process.env.CLOUDFLARE_API_TOKEN  = 't';
+    process.env.CLOUDFLARE_ACCOUNT_ID = 'a';
+    expect(visionRoute('cloudflare')).toBeNull();
   });
 });
 

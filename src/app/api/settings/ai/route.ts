@@ -13,7 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { getCurrentUser } from '@/lib/auth';
-import { detectProvider, chatDetailed, explainFailure, ProviderName } from '@/lib/ai/llm';
+import { visionRoute, detectProvider, chatDetailed, explainFailure, ProviderName } from '@/lib/ai/llm';
 
 const ENV_VAR: Record<string, string> = {
   groq:       'GROQ_API_KEY',
@@ -77,6 +77,12 @@ function status() {
     model:      cfg.model,
     keyHint:    key ? mask(key) : '',
     persisted:  process.env.NODE_ENV === 'development',
+    /* Sight is a separate capability from answering, and worth stating: a
+       working key does not mean the editor can look at the video. */
+    vision:     (() => {
+      const route = visionRoute(cfg.name);
+      return route ? { provider: route.provider, model: route.model } : null;
+    })(),
   };
 }
 
@@ -103,16 +109,58 @@ export async function POST(req: NextRequest) {
       { status: 400 });
   }
 
+  /* Catch the key that belongs to a different provider before asking that
+     provider to reject it. The shapes are distinctive enough to be sure. */
+  const shapeComplaint =
+      provider === 'gemini'     && key.startsWith('gsk_')
+        ? 'That is a Groq key (they start with gsk_). A Google AI Studio key starts with AIza.'
+    : provider === 'gemini'     && key.startsWith('sk-or-')
+        ? 'That is an OpenRouter key. A Google AI Studio key starts with AIza.'
+    : provider === 'gemini'     && !key.startsWith('AIza')
+        ? 'Google AI Studio keys start with AIza and are about 39 characters. ' +
+          'Check you copied the API key from aistudio.google.com/apikey, not a project id or an OAuth token.'
+    : provider === 'groq'       && !key.startsWith('gsk_')
+        ? 'Groq keys start with gsk_. Check you copied the whole key from console.groq.com/keys.'
+    : provider === 'openrouter' && !key.startsWith('sk-or-')
+        ? 'OpenRouter keys start with sk-or-. Check you copied the whole key from openrouter.ai/keys.'
+    : null;
+
+  if (shapeComplaint && body.force !== true) {
+    return NextResponse.json({ error: shapeComplaint, reason: 'wrong_shape', canSaveAnyway: true },
+                             { status: 400 });
+  }
+
   // Apply to the running process, remembering what to restore on failure
   const varName  = ENV_VAR[provider];
   const previous = process.env[varName];
-  process.env[varName]  = key;
+  const before   = detectProvider();
+
+  /* Someone who already has a working provider and adds a second key is
+     usually adding a capability, not replacing what works. Keep whoever was
+     answering in charge; the new key is still used wherever it is better —
+     frames, for one. Nothing to switch back and forth. */
+  const alreadyWorking = before.ready && before.name !== provider;
+  const previousForced = process.env.LLM_PROVIDER;
+
+  process.env[varName] = key;
+
+  /* Point the verification ping at the provider whose key this is. Without
+     this it tests whoever happened to be answering already, and a Google key
+     is "verified" by a Groq reply — which is no verification at all. */
   process.env.LLM_PROVIDER = provider;
+
+  /** Where LLM_PROVIDER should end up once the check is done. */
+  const settle = () => {
+    if (!alreadyWorking) { process.env.LLM_PROVIDER = provider; return; }
+    if (previousForced === undefined) delete process.env.LLM_PROVIDER;
+    else process.env.LLM_PROVIDER = previousForced;
+  };
 
   const rollback = () => {
     if (previous === undefined) delete process.env[varName];
     else process.env[varName] = previous;
-    delete process.env.LLM_PROVIDER;
+    if (previousForced === undefined) delete process.env.LLM_PROVIDER;
+    else process.env.LLM_PROVIDER = previousForced;
   };
 
   const keep = () => {
@@ -131,6 +179,7 @@ export async function POST(req: NextRequest) {
     const keyNotAtFault = out.reason === 'unreachable' || out.reason === 'timeout';
     if (keyNotAtFault && body.force === true) {
       const persisted = keep();
+      settle();
       return NextResponse.json({ ...status(), verified: false, persisted, warning: message });
     }
 
@@ -147,7 +196,17 @@ export async function POST(req: NextRequest) {
       { status: httpStatus });
   }
 
-  return NextResponse.json({ ...status(), verified: true, persisted: keep() });
+  settle();
+
+  const now  = status();
+  const note = alreadyWorking
+    ? `${before.name} still answers your requests; the ${provider} key is added alongside it` +
+      (now.vision?.provider === provider ? ' and now handles looking at frames.' : '.')
+    : now.vision?.provider === provider
+      ? `${provider} is answering, and it can look at frames.`
+      : `${provider} is answering. No model here can look at frames yet.`;
+
+  return NextResponse.json({ ...now, verified: true, persisted: keep(), note });
 }
 
 export async function DELETE() {

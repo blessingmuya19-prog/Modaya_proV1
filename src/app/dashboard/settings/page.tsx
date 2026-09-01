@@ -164,6 +164,8 @@ export default function SettingsPage() {
   const [aiCanForce, setAiCanForce] = useState(false);
   const [aiStatus,   setAiStatus  ] = useState<{
     configured: boolean; provider: string; model: string; keyHint: string; persisted: boolean;
+    vision?: { provider: string; model: string } | null;
+    note?: string;
     diagnostics?: {
       present: string[]; lookalike: string[]; keyShapedName: string[];
       vercelEnv: string | null; onVercel: boolean; commit: string | null;
@@ -198,7 +200,7 @@ export default function SettingsPage() {
       setAiCanForce(false);
       addToast(
         data.verified
-          ? `Connected to ${data.provider}. The AI editor is live.`
+          ? (data.note ? `Key verified. ${data.note}` : `Connected to ${data.provider}. The AI editor is live.`)
           : `Key saved for ${data.provider}, but it could not be tested from here.`,
         data.verified ? 'success' : 'info');
       if (!data.verified && data.warning) setAiError(data.warning);
@@ -378,6 +380,12 @@ export default function SettingsPage() {
                 {aiStatus.model}{aiStatus.keyHint ? ` · key ${aiStatus.keyHint}` : ''}
                 {aiStatus.persisted ? ' · saved locally' : ' · this session only'}
               </div>
+              <div style={{ fontFamily: F, fontSize: 12, color: C.dim, marginTop: 2 }}>
+                {aiStatus.vision
+                  ? `Can see the video · ${aiStatus.vision.model}` +
+                    (aiStatus.vision.provider !== aiStatus.provider ? ` via ${aiStatus.vision.provider}` : '')
+                  : 'Cannot look at frames — add a Google AI Studio key for that'}
+              </div>
             </div>
             <button onClick={removeAiKey} disabled={aiBusy}
               style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 11px',
@@ -401,7 +409,9 @@ export default function SettingsPage() {
 
             <Field label="API key">
               <TInput type={showKey ? 'text' : 'password'} value={aiKey} onChange={setAiKey}
-                placeholder={aiProvider === 'groq' ? 'gsk_…' : 'Paste your key'}
+                placeholder={aiProvider === 'groq' ? 'gsk_…'
+                           : aiProvider === 'gemini' ? 'AIza…'
+                           : 'sk-or-…'}
                 suffix={
                   <button type="button" onClick={() => setShowKey(s => !s)}
                     style={{ background: 'none', border: 'none', cursor: 'pointer',

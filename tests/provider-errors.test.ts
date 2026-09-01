@@ -354,3 +354,29 @@ describe('strict JSON mode failure', () => {
     expect(maxTokens).toBeGreaterThanOrEqual(2048);
   });
 });
+
+describe('the shapes Google uses', () => {
+  /** Google answers a bad key with 400, not 401, and buries why in the body. */
+  const failWith = async (status: number, body: string) => {
+    process.env.GEMINI_API_KEY = 'AIzaSyFake';
+    respond(status, body);
+    const out = await ask();
+    if (out.ok) throw new Error('expected a failure');
+    return out;
+  };
+
+  it('reads a 400 "API key not valid" as a rejected key, not a mystery', async () => {
+    const out = await failWith(400, JSON.stringify({
+      error: { code: 400, message: 'API key not valid. Please pass a valid API key.',
+               status: 'INVALID_ARGUMENT' },
+    }));
+    expect(out.reason).toBe('unauthorized');
+  });
+
+  it('reads a quota message as a rate limit whatever the status', async () => {
+    const out = await failWith(400, JSON.stringify({
+      error: { message: 'Quota exceeded for quota metric generate_content_free_tier_requests' },
+    }));
+    expect(out.reason).toBe('rate_limited');
+  });
+});
