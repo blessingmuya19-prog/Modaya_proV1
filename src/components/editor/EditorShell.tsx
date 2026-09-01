@@ -9,6 +9,7 @@ import PreviewCanvas from './PreviewCanvas';
 import { buildSequence, Sequence, StyleLayer } from '@/lib/render/sequence';
 import { analyseReference, analyseAudio, interestCurve } from '@/lib/ai/analyseReference';
 import { decodeForAsr, chunkForAsr } from '@/lib/ai/audioForAsr';
+import { saveTranscript, loadTranscript, StoredTranscript } from '@/lib/mediaDb';
 import { StyleProfile, describeStyle } from '@/lib/ai/styleProfile';
 import { generateEditPlan, EditPlan } from '@/lib/ai/styleTransfer';
 import { detectSilences } from '@/lib/ai/operations';
@@ -662,6 +663,21 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
   /** 'pending' while the decode runs, so the AI can say so instead of guessing. */
   const audioState = useRef<'pending' | 'ready' | 'failed'>('pending');
   const [asr, setAsr] = useState<'idle' | 'running' | 'done' | 'failed'>('idle');
+  /**
+   * The transcript lives in the browser and travels with every AI request.
+   * The server keeps a copy, but on a serverless host the next request can
+   * land on an instance that has never seen it — so the browser is the source
+   * of truth.
+   */
+  const transcript = useRef<StoredTranscript | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadTranscript(projectId).then(t => {
+      if (!cancelled && t?.segments?.length) { transcript.current = t; setAsr('done'); }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [projectId]);
   const asrTried = useRef(false);
   useEffect(() => {
     let cancelled = false;
@@ -741,7 +757,21 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
           setAsr(total > 0 ? 'done' : 'failed');
           return;
         }
-        total += Array.isArray(data?.segments) ? data.segments.length : 0;
+        const got = Array.isArray(data?.segments)
+          ? (data.segments as StoredTranscript['segments']) : [];
+        total += got.length;
+
+        if (got.length) {
+          const previous = (transcript.current?.segments ?? [])
+            .filter(sg => sg.endS <= chunks[i].offsetS + 0.001);
+          transcript.current = {
+            segments: [...previous, ...got].sort((x, y) => x.startS - y.startS).slice(0, 5000),
+            language: (data as { language?: string })?.language ?? transcript.current?.language ?? '',
+            model:    (data as { model?: string })?.model ?? 'whisper',
+            madeAt:   new Date().toISOString(),
+          };
+          await saveTranscript(projectId, transcript.current).catch(() => {});
+        }
       }
 
       setAsr('done');
@@ -851,6 +881,7 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
           silences: silences.current.slice(0, 200),
           energy:   energy.current.slice(0, 7200),
           audio:    audioState.current,
+          transcript: transcript.current ?? undefined,
           style:    learnedStyle ?? undefined,
         }),
       });

@@ -309,3 +309,50 @@ describe('without a transcript', () => {
     expect(d.aiMessage.text).toMatch(/hasn't been transcribed/i);
   });
 });
+
+/**
+ * On a serverless host the request that stores a transcript and the request
+ * that uses it routinely land on different instances. The browser holds the
+ * only reliable copy, so a transcript sent with the request must work even
+ * when the server has never seen one.
+ */
+describe('transcript supplied by the browser', () => {
+  const clientTranscript = {
+    segments: [
+      { startS: 0,  endS: 4,  text: 'We are delivering the car today' },
+      { startS: 4,  endS: 4.5, text: 'um' },
+      { startS: 5,  endS: 9,  text: 'and the paperwork is in the glovebox' },
+    ],
+    language: 'en', model: 'whisper-large-v3-turbo', madeAt: '2026-09-01T00:00:00Z',
+  };
+
+  it('writes real captions when the server has no copy', async () => {
+    const d = await ask({ message: 'add captions', transcript: clientTranscript });
+    const captions = d.edit.newClips.filter((c: { type: string }) => c.type === 'text');
+    expect(captions).toHaveLength(3);
+    expect(captions[0].label).toMatch(/delivering the car/);
+    expect(d.aiMessage.text).toMatch(/from the transcript/i);
+  });
+
+  it('removes filler using the browser copy', async () => {
+    const d = await ask({ message: 'remove filler words', transcript: clientTranscript });
+    const video = d.edit.newClips
+      .filter((c: { type: string }) => c.type === 'video')
+      .map((c: { startS: number; endS: number }) => [c.startS, c.endS]);
+    expect(video).toEqual([[0, 4], [4.5, 100]]);
+  });
+
+  it('ignores a malformed transcript rather than trusting it', async () => {
+    const d = await ask({ message: 'add captions', transcript: { segments: 'nonsense' } });
+    expect(d.aiMessage.text).toMatch(/hasn't been transcribed/i);
+  });
+
+  it('clamps segments that run past the end of the video', async () => {
+    const d = await ask({
+      message: 'add captions',
+      transcript: { ...clientTranscript, segments: [{ startS: 95, endS: 500, text: 'over the end' }] },
+    });
+    const cap = d.edit.newClips.find((c: { type: string }) => c.type === 'text');
+    expect(cap.endS).toBeLessThanOrEqual(100);
+  });
+});

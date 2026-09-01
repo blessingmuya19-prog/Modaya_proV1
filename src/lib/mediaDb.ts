@@ -12,9 +12,10 @@
  */
 
 const DB_NAME    = 'modaya-media';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_FILE = 'files';
 const STORE_FRAMES = 'frames';
+const STORE_TRANSCRIPT = 'transcripts';
 
 /** Don't try to persist enormous files — IndexedDB writes would stall the tab. */
 const MAX_PERSIST_BYTES = 600 * 1024 * 1024;   // 600 MB
@@ -44,6 +45,7 @@ function openDb(): Promise<IDBDatabase | null> {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE_FILE))   db.createObjectStore(STORE_FILE);
       if (!db.objectStoreNames.contains(STORE_FRAMES)) db.createObjectStore(STORE_FRAMES);
+      if (!db.objectStoreNames.contains(STORE_TRANSCRIPT)) db.createObjectStore(STORE_TRANSCRIPT);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror   = () => resolve(null);
@@ -100,4 +102,29 @@ export async function loadFrames(projectId: string): Promise<string[]> {
   if (!projectId) return [];
   const rec = await tx<FrameRecord>(STORE_FRAMES, 'readonly', s => s.get(projectId));
   return rec?.frames?.length ? rec.frames : [];
+}
+
+/* ─────────────── transcript cache ─────────────── */
+
+/**
+ * The server keeps a transcript in memory, and on a serverless host the next
+ * request can land on a different instance that has never seen it. The browser
+ * is the one place that reliably remembers, so the transcript lives here and
+ * travels with each AI request.
+ */
+export interface StoredTranscript {
+  segments: { startS: number; endS: number; text: string }[];
+  language: string;
+  model:    string;
+  madeAt:   string;
+}
+
+export async function saveTranscript(projectId: string, t: StoredTranscript) {
+  if (!projectId || !t.segments.length) return;
+  await tx(STORE_TRANSCRIPT, 'readwrite', s => s.put(t, projectId));
+}
+
+export async function loadTranscript(projectId: string): Promise<StoredTranscript | null> {
+  if (!projectId) return null;
+  return tx<StoredTranscript>(STORE_TRANSCRIPT, 'readonly', s => s.get(projectId));
 }

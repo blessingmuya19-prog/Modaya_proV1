@@ -9,7 +9,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { db, Clip } from '@/lib/db';
 import { v4 as uuid } from 'uuid';
 import { describeLoudness } from '@/lib/ai/highlights';
-import { transcriptForPrompt, fillerRanges, Transcript } from '@/lib/ai/transcript';
+import { transcriptForPrompt, fillerRanges, sanitiseSegments, Transcript } from '@/lib/ai/transcript';
 import { chatDetailed, explainFailure, extractJson, detectProvider, FailureReason } from '@/lib/ai/llm';
 import { validateOperations, applyOperations, Operation, TimelineClip } from '@/lib/ai/operations';
 
@@ -332,7 +332,38 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     ? body.energy.filter((n: unknown) => typeof n === 'number').slice(0, 7200)
     : [];
 
-  const transcript: Transcript | null = project?.transcript ?? null;
+  /**
+   * Prefer the transcript the browser sent. The server's copy lives in memory,
+   * and on a serverless host a later request routinely lands on an instance
+   * that never saw it — which made a freshly transcribed project look
+   * untranscribed. The browser always has the newest copy.
+   */
+  const clientTranscript = (() => {
+    const raw = body.transcript;
+    if (!raw || typeof raw !== 'object') return null;
+    const segments = sanitiseSegments(
+      (raw as { segments?: unknown }).segments &&
+      Array.isArray((raw as { segments: unknown[] }).segments)
+        ? (raw as { segments: Record<string, unknown>[] }).segments
+            .map(sg => ({ start: sg.startS, end: sg.endS, text: sg.text }))
+        : null,
+      durationS || Number.MAX_SAFE_INTEGER);
+    if (!segments.length) return null;
+    return {
+      segments,
+      language: String((raw as { language?: unknown }).language ?? ''),
+      model:    String((raw as { model?: unknown }).model ?? ''),
+      madeAt:   String((raw as { madeAt?: unknown }).madeAt ?? new Date().toISOString()),
+    } as Transcript;
+  })();
+
+  const transcript: Transcript | null = clientTranscript ?? project?.transcript ?? null;
+
+  // Keep the server copy fresh when the browser knows more than it does.
+  if (project && clientTranscript &&
+      clientTranscript.segments.length > (project.transcript?.segments.length ?? 0)) {
+    db.projects.update(id, { transcript: clientTranscript });
+  }
   const provider = detectProvider();
   let edit: EditResult | null = null;
   let source: 'llm' | 'rules' = 'rules';
