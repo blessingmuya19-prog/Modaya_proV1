@@ -31,7 +31,7 @@ export function ProjectCard({ project }: { project: Project }) {
         onMouseLeave={() => setHovered(false)}
         style={{
           background: '#111111',
-          border: `1px solid ${hovered ? '#333' : '#242424'}`,
+          border: `1px solid ${hovered ? '#1a1a1a' : '#141414'}`,
           borderRadius: 16, overflow: 'hidden',
           transform: hovered ? 'translateY(-2px)' : 'none',
           boxShadow: hovered ? '0 4px 24px rgba(0,0,0,0.4)' : 'none',
@@ -82,18 +82,18 @@ export function ProjectCard({ project }: { project: Project }) {
             </h3>
             <button
               onClick={e => { e.preventDefault(); e.stopPropagation(); }}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#666', padding: 2, borderRadius: 4, display: 'flex', flexShrink: 0 }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#737D8D', padding: 2, borderRadius: 4, display: 'flex', flexShrink: 0 }}
               onMouseEnter={e => { e.currentTarget.style.color = '#A1A1A1'; e.currentTarget.style.background = '#181818'; }}
-              onMouseLeave={e => { e.currentTarget.style.color = '#666'; e.currentTarget.style.background = 'none'; }}
+              onMouseLeave={e => { e.currentTarget.style.color = '#737D8D'; e.currentTarget.style.background = 'none'; }}
             >
               <MoreHorizontal size={14} />
             </button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#666' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#737D8D' }}>
               <Play size={10} />{project.duration}
             </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#666' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#737D8D' }}>
               <Clock size={10} />{project.lastEdited}
             </span>
           </div>
@@ -107,12 +107,12 @@ export function EmptyProjectState() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px', textAlign: 'center' }}>
       <div style={{ width: 56, height: 56, borderRadius: 16, background: '#111111', border: '1px solid #242424', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
-        <Play size={22} style={{ color: '#666' }} />
+        <Play size={22} style={{ color: '#737D8D' }} />
       </div>
       <h3 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 650, fontSize: 18, letterSpacing: '-0.03em', color: '#FFFFFF', margin: '0 0 8px' }}>
         Your next edit starts here.
       </h3>
-      <p style={{ fontSize: 13, color: '#666', margin: '0 0 24px' }}>Upload a video and let AI do the editing.</p>
+      <p style={{ fontSize: 13, color: '#737D8D', margin: '0 0 24px' }}>Upload a video and let AI do the editing.</p>
       <Link href="/upload" style={{ textDecoration: 'none' }}>
         <button style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,

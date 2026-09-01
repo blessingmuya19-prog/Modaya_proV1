@@ -1,112 +1,357 @@
 'use client';
-import React, { useState } from 'react';
-import { UploadZone } from '@/components/upload/UploadZone';
-import { EditTypeSelector } from '@/components/upload/EditTypeSelector';
-import { AIPromptBox } from '@/components/upload/AIPromptBox';
+import React, { useState, useRef, useCallback } from 'react';
 import { ProcessingScreen } from '@/components/processing/ProcessingScreen';
 import { Logo } from '@/components/ui/Logo';
-import { ArrowLeft, Film } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Upload, X, Zap, Scissors, Flame, Captions, Sparkles, Smartphone, Check, Play, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { setMedia, analyseFile, MediaEntry } from '@/lib/videoStore';
+import { capturePoster, savePoster } from '@/lib/thumbnailStore';
+import { saveMediaFile } from '@/lib/mediaDb';
 
-type Stage = 'upload' | 'configure' | 'processing';
+const PRESETS = [
+  { Icon: Zap,        label: 'Make it faster',  fill: 'Make this video faster and remove all unnecessary pauses and dead air.' },
+  { Icon: Scissors,   label: 'Remove mistakes', fill: 'Remove filler words, stumbles, repeated sentences and dead air.' },
+  { Icon: Flame,      label: 'Find highlights', fill: 'Find the strongest 2 minutes and cut everything else.' },
+  { Icon: Captions,   label: 'Add captions',    fill: 'Transcribe and add accurate captions to the full video.' },
+  { Icon: Sparkles,   label: 'Clean up',        fill: 'Clean up the pacing, remove silence and tighten the overall edit.' },
+  { Icon: Smartphone, label: 'Make vertical',   fill: 'Reframe and crop to 9:16 vertical format, keeping the speaker centred.' },
+];
 
 export default function UploadPage() {
-  const [stage, setStage] = useState<Stage>('upload');
+  const [stage, setStage] = useState<'upload' | 'prompt' | 'processing'>('upload');
   const [file, setFile] = useState<File | null>(null);
-  const [editType, setEditType] = useState('creators');
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [prompt, setPrompt] = useState('');
+  const [detectedMeta, setDetectedMeta] = useState<Omit<MediaEntry,'objectUrl'>|null>(null);
+  const [captions,   setCaptions  ] = useState(true);
+  const [uploading,  setUploading ] = useState(false);
+  const [uploadError,setUploadError] = useState<string | null>(null);
+  const [projectId,  setProjectId ] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
+  const uploadAndProcess = async () => {
+    if (!file || !prompt.trim()) return;
+    setUploadError(null);
+    setUploading(true);
+    try {
+      // Use already-analysed meta (or re-analyse if needed)
+      const meta = detectedMeta ?? await analyseFile(file);
+
+      // Capture a poster frame so the project has a real thumbnail everywhere
+      const posterUrl = previewUrl ?? URL.createObjectURL(file);
+      const thumbnail = await capturePoster(posterUrl).catch(() => '');
+
+      // Send only metadata — no file bytes (Vercel 4.5MB limit + read-only FS)
+      // The blob URL stays in-browser for playback.
+      const res = await fetch('/api/upload', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename:    file.name,
+          sizeMb:      Math.round((file.size / (1024 * 1024)) * 10) / 10,
+          prompt,
+          aspectRatio: meta.aspectRatio,
+          durationS:   meta.durationS,
+          width:       meta.width,
+          height:      meta.height,
+          thumbnail,
+        }),
+      });
+      let data: Record<string, string> = {};
+      try { data = await res.json(); } catch { /* non-JSON response */ }
+
+      if (res.ok && data.projectId) {
+        // Success — store blob URL and move to processing screen
+        const objUrl = previewUrl ?? URL.createObjectURL(file);
+        setMedia(data.projectId, { ...meta, objectUrl: objUrl });
+        if (thumbnail) savePoster(data.projectId, thumbnail);
+        // Keep the actual bytes so the project still plays after a refresh or
+        // when it's reopened from the dashboard in a new session.
+        void saveMediaFile(data.projectId, file, {
+          mimeType:    meta.mimeType,
+          mediaType:   meta.mediaType,
+          aspectRatio: meta.aspectRatio,
+          width:       meta.width,
+          height:      meta.height,
+          durationS:   meta.durationS,
+          filename:    meta.filename,
+        });
+        setProjectId(data.projectId);
+        setStage('processing');
+      } else if (res.status === 401) {
+        setUploadError('You\'re not signed in. Please sign in and try again.');
+        setUploading(false);
+      } else if (res.status === 413) {
+        setUploadError('File too large for this server. This demo supports files up to 4 MB.');
+        setUploading(false);
+      } else {
+        setUploadError(data.error ?? `Server error (${res.status}). Please try again.`);
+        setUploading(false);
+      }
+    } catch (err) {
+      console.error('[upload client]', err);
+      setUploadError('Could not reach the server. Check your connection and try again.');
+      setUploading(false);
+    }
+  };
+
+  const handleFile = useCallback(async (f: File | null) => {
+    if (!f) return;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    const url  = URL.createObjectURL(f);
+    setPreviewUrl(url);
+    setFile(f);
+    // Auto-detect format, dimensions, duration
+    const meta = await analyseFile(f);
+    setDetectedMeta(meta);
+    setStage('prompt');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setIsDragging(false);
+    const f = e.dataTransfer.files[0];
+    if (f?.type.startsWith('video/')) handleFile(f);
+  };
+
+  const formatBytes = (b: number) => b < 1024*1024 ? `${(b/1024).toFixed(0)} KB` : `${(b/(1024*1024)).toFixed(1)} MB`;
+
   if (stage === 'processing') {
-    return <ProcessingScreen filename={file?.name} onComplete={() => router.push('/editor/proj-1')} />;
+    return <ProcessingScreen filename={file?.name} onComplete={() => router.push(`/editor/${projectId ?? 'proj-1'}`)} />;
   }
 
-  const stageLabel: Record<string, string> = { upload: 'Upload', configure: 'Configure' };
-  const stages: Stage[] = ['upload', 'configure'];
-
   return (
-    <div style={{ minHeight: '100vh', background: '#050505' }}>
+    <div style={{ minHeight: '100vh', background: '#050505', display: 'flex', flexDirection: 'column' }}>
+
       {/* Top bar */}
-      <div style={{ height: 56, borderBottom: '1px solid #242424', padding: '0 24px', display: 'flex', alignItems: 'center', gap: 16 }}>
-        <Link href="/dashboard" style={{ textDecoration: 'none' }}>
-          <button style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#666', background: 'none', border: 'none', cursor: 'pointer', transition: 'color 150ms' }}
+      <div style={{ height: 56, borderBottom: '1px solid #141414', padding: '0 24px', display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
+        <Link href="/" style={{ textDecoration: 'none' }}>
+          <button style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#737D8D', background: 'none', border: 'none', cursor: 'pointer', transition: 'color 150ms' }}
             onMouseEnter={e => { e.currentTarget.style.color = '#A1A1A1'; }}
-            onMouseLeave={e => { e.currentTarget.style.color = '#666'; }}
+            onMouseLeave={e => { e.currentTarget.style.color = '#444'; }}
           >
             <ArrowLeft size={14} /> Back
           </button>
         </Link>
         <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-          <Logo size={26} />
+          <Logo size={24} />
         </div>
-        <div style={{ width: 60 }} />
-      </div>
-
-      {/* Stage indicator */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '24px 0' }}>
-        {stages.map((s, i) => (
-          <React.Fragment key={s}>
-            {i > 0 && <div style={{ width: 32, height: 1, background: '#242424' }} />}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{
-                width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700,
-                background: stage === s ? 'transparent' : stage === 'configure' && s === 'upload' ? '#4F8CFF' : '#111111',
-                border: stage === s ? '2px solid #4F8CFF' : stage === 'configure' && s === 'upload' ? 'none' : '1px solid #242424',
-                color: stage === s ? '#4F8CFF' : stage === 'configure' && s === 'upload' ? '#050505' : '#666',
-              }}>
-                {stage === 'configure' && s === 'upload' ? '✓' : i + 1}
-              </div>
-              <span style={{ fontSize: 12, color: stage === s ? '#FFFFFF' : '#666' }}>{stageLabel[s]}</span>
-            </div>
-          </React.Fragment>
-        ))}
+        {/* Step indicator */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {['Upload', 'Edit'].map((label, i) => {
+            const stepStage = i === 0 ? 'upload' : 'prompt';
+            const isActive = stage === stepStage;
+            const isDone = (i === 0 && stage === 'prompt');
+            return (
+              <React.Fragment key={i}>
+                {i > 0 && <div style={{ width: 20, height: 1, background: '#1e1e1e' }} />}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <div style={{ width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, background: isDone ? '#4F8CFF' : isActive ? 'transparent' : 'transparent', border: isDone ? 'none' : isActive ? '1.5px solid #4F8CFF' : '1px solid #1e1e1e', color: isDone ? '#fff' : isActive ? '#4F8CFF' : '#333' }}>
+                    {isDone ? <Check size={10} strokeWidth={3} /> : i + 1}
+                  </div>
+                  <span style={{ fontSize: 12, color: isActive ? '#FFFFFF' : isDone ? '#4F8CFF' : '#333' }}>{label}</span>
+                </div>
+              </React.Fragment>
+            );
+          })}
+        </div>
       </div>
 
       {/* Content */}
-      <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 24px 64px' }}>
-        {stage === 'upload' && (
-          <div style={{ animation: 'slide-up 0.35s cubic-bezier(0.22,1,0.36,1)' }}>
-            <div style={{ textAlign: 'center', marginBottom: 32 }}>
-              <h1 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(26px,4vw,40px)', letterSpacing: '-0.04em', lineHeight: 1.05, color: '#FFFFFF', margin: '0 0 8px' }}>
-                Upload your footage.
-              </h1>
-              <p style={{ fontSize: 14, color: '#666', margin: 0 }}>Drop in your raw video and we&apos;ll handle the rest.</p>
-            </div>
-            <UploadZone onFileSelect={f => { setFile(f); setStage('configure'); }} />
-          </div>
-        )}
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px' }} className="upload-content">
+        <div style={{ width: '100%', maxWidth: 580 }}>
 
-        {stage === 'configure' && (
-          <div style={{ animation: 'slide-up 0.35s cubic-bezier(0.22,1,0.36,1)' }}>
-            {/* File chip */}
-            {file && (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 12, marginBottom: 32,
-                padding: 12, background: '#111111', border: '1px solid #242424', borderRadius: 10,
-                animation: 'scale-in 0.25s cubic-bezier(0.22,1,0.36,1)',
-              }}>
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(79,140,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <Film size={14} style={{ color: '#4F8CFF' }} />
+          {/* ── STAGE: UPLOAD ── */}
+          {stage === 'upload' && (
+            <div style={{ animation: 'slide-up 0.5s cubic-bezier(0.22,1,0.36,1) both' }}>
+              <h1 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(24px,4vw,36px)', letterSpacing: '-0.04em', color: '#FFFFFF', margin: '0 0 8px', textAlign: 'center' }}>
+                Drop your footage
+              </h1>
+              <p style={{ fontSize: 15, fontWeight: 400, letterSpacing: '-0.01em', color: '#A5ADBA', textAlign: 'center', margin: '0 0 36px', lineHeight: 1.6 }}>
+                Upload your video and tell AI how to edit it.
+              </p>
+
+              <input ref={fileInputRef} type="file" accept="video/*" style={{ display: 'none' }} onChange={e => handleFile(e.target.files?.[0] ?? null)} />
+
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleDrop}
+                style={{
+                  border: `1.5px dashed ${isDragging ? 'rgba(79,140,255,0.7)' : 'rgba(255,255,255,0.08)'}`,
+                  borderRadius: 18, padding: '64px 32px', cursor: 'pointer',
+                  background: isDragging ? 'rgba(79,140,255,0.05)' : 'rgba(255,255,255,0.02)',
+                  backdropFilter: 'blur(20px)', textAlign: 'center',
+                  boxShadow: isDragging ? '0 0 40px rgba(79,140,255,0.1)' : 'inset 0 1px 0 rgba(255,255,255,0.04)',
+                  transition: 'all 250ms ease',
+                }}
+              >
+                <div style={{ width: 56, height: 56, borderRadius: '50%', background: isDragging ? 'rgba(79,140,255,0.12)' : 'rgba(255,255,255,0.04)', border: `1px solid ${isDragging ? 'rgba(79,140,255,0.3)' : 'rgba(255,255,255,0.08)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', transition: 'all 250ms' }}>
+                  <Upload size={22} color={isDragging ? '#4F8CFF' : 'rgba(255,255,255,0.5)'} strokeWidth={1.75} />
+                </div>
+                <p style={{ fontSize: 16, fontWeight: 600, color: isDragging ? '#4F8CFF' : '#FFFFFF', margin: '0 0 8px', transition: 'color 200ms' }}>
+                  {isDragging ? 'Drop it here' : 'Drop your video here'}
+                </p>
+                <p style={{ fontSize: 14, color: '#737D8D', margin: '0 0 16px' }}>
+                  or <span style={{ color: '#4F8CFF' }}>browse files</span>
+                </p>
+                <p style={{ fontSize: 12, color: '#252525', margin: 0, letterSpacing: '0.05em' }}>MP4 · MOV · WebM · up to 3 hours</p>
+              </div>
+
+              <p style={{ textAlign: 'center', fontSize: 12, color: '#222', marginTop: 16 }}>
+                Your footage is never shared or used to train AI models.
+              </p>
+            </div>
+          )}
+
+          {/* ── STAGE: PROMPT ── */}
+          {stage === 'prompt' && file && (
+            <div style={{ animation: 'slide-up 0.45s cubic-bezier(0.22,1,0.36,1) both' }}>
+              <h1 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(22px,3.5vw,32px)', letterSpacing: '-0.04em', color: '#FFFFFF', margin: '0 0 8px', textAlign: 'center' }}>
+                What should we do with it?
+              </h1>
+              <p style={{ fontSize: 15, fontWeight: 400, letterSpacing: '-0.01em', color: '#A5ADBA', textAlign: 'center', margin: '0 0 28px' }}>
+                Tell Modaya how to edit your video.
+              </p>
+
+              {/* File chip */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#0c0c0c', border: '1px solid #1a1a1a', borderRadius: 10, padding: '10px 14px', marginBottom: 16 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: '#111', border: '1px solid #1e1e1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Play size={12} color="#4F8CFF" fill="#4F8CFF" style={{ marginLeft: 1 }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 13, color: '#FFFFFF', fontWeight: 600, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
-                  <p style={{ fontSize: 11, color: '#666', margin: 0 }}>{(file.size / (1024 * 1024)).toFixed(1)} MB</p>
+                  <p style={{ fontSize: 13, fontWeight: 500, letterSpacing: '-0.01em', fontFamily: "'Inter Tight', Inter, system-ui, sans-serif", color: '#A5ADBA', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
+                  <p style={{ fontSize: 11, fontWeight: 400, letterSpacing: '-0.01em', fontFamily: "'Inter Tight', Inter, system-ui, sans-serif", color: '#737D8D', margin: 0 }}>{formatBytes(file.size)}</p>
                 </div>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#4ade80', flexShrink: 0 }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5,
+                  background: 'rgba(79,140,255,0.08)', border: '1px solid rgba(79,140,255,0.2)',
+                  borderRadius: 9999, padding: '2px 8px' }}>
+                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#4F8CFF' }} />
+                  <span style={{ fontSize: 10, color: '#4F8CFF', fontWeight: 600 }}>Ready</span>
+                </div>
+                <button onClick={() => { setFile(null); setStage('upload'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#737D8D', display: 'flex', padding: 0 }}>
+                  <X size={14} />
+                </button>
               </div>
-            )}
 
-            <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 28, letterSpacing: '-0.04em', lineHeight: 1.1, color: '#FFFFFF', margin: '0 0 24px' }}>
-              What do you want to make?
-            </h2>
-            <EditTypeSelector selected={editType} onSelect={setEditType} />
+              {/* Prompt textarea */}
+              <div style={{ background: '#0A0A0A', border: '1px solid #1e1e1e', borderRadius: 14, overflow: 'hidden', marginBottom: 10 }}
+                onFocus={() => {}} // handled by textarea
+              >
+                <textarea
+                  value={prompt}
+                  onChange={e => setPrompt(e.target.value)}
+                  placeholder="Describe your edit... e.g. Make this faster, remove pauses, add captions and keep the strongest moments."
+                  rows={4}
+                  style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', padding: '16px 18px 12px', fontSize: 14, color: '#FFFFFF', fontFamily: "'Inter Tight', Inter, system-ui, sans-serif", resize: 'none', lineHeight: 1.5, letterSpacing: '-0.01em', boxSizing: 'border-box' }}
+                />
+                {/* Controls bar */}
+                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '10px 14px', borderTop: '1px solid #141414', background: '#050505' }} className="prompt-controls">
+                  {/* Auto-detected format badge */}
+                  {detectedMeta && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '4px 10px', borderRadius: 7, background: '#0e0e0e',
+                      border: '1px solid #1e1e1e' }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: '#4F8CFF',
+                        letterSpacing: '0.04em', textTransform: 'uppercase',
+                        fontFamily: "'Inter Tight', sans-serif" }}>
+                        Auto-detected
+                      </span>
+                      <span style={{ width: 1, height: 10, background: '#2a2a2a' }} />
+                      <span style={{ fontSize: 11, fontWeight: 500, color: '#A5ADBA',
+                        fontFamily: "'Inter Tight', sans-serif" }}>
+                        {detectedMeta.aspectRatio}
+                      </span>
+                      {detectedMeta.width > 0 && (
+                        <>
+                          <span style={{ width: 1, height: 10, background: '#2a2a2a' }} />
+                          <span style={{ fontSize: 11, color: '#737D8D',
+                            fontFamily: "'Inter Tight', sans-serif" }}>
+                            {detectedMeta.width}×{detectedMeta.height}
+                          </span>
+                        </>
+                      )}
+                      {detectedMeta.durationS > 0 && (
+                        <>
+                          <span style={{ width: 1, height: 10, background: '#2a2a2a' }} />
+                          <span style={{ fontSize: 11, color: '#737D8D',
+                            fontFamily: "'Inter Tight', sans-serif" }}>
+                            {Math.floor(detectedMeta.durationS / 60)}:{String(Math.floor(detectedMeta.durationS % 60)).padStart(2,'0')}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {/* Captions toggle */}
+                  <button onClick={() => setCaptions(!captions)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', fontSize: 11, fontWeight: 500, borderRadius: 8, border: `1px solid ${captions ? 'rgba(79,140,255,0.25)' : '#1a1a1a'}`, background: captions ? 'rgba(79,140,255,0.08)' : 'transparent', color: captions ? '#4F8CFF' : '#3a3a3a', cursor: 'pointer', transition: 'all 150ms' }}>
+                    <Captions size={11} /> Captions
+                  </button>
+                  {/* Submit */}
+                  <div style={{ marginLeft: 'auto' }} className="ml-auto">
+                    <button
+                      onClick={uploadAndProcess} disabled={uploading || !prompt.trim()}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 20px', fontSize: 13, fontWeight: 600, color: '#FFFFFF', background: prompt.trim() && !uploading ? 'linear-gradient(135deg,#4F8CFF,#326FEA)' : '#111', border: 'none', borderRadius: 9, cursor: prompt.trim() && !uploading ? 'pointer' : 'not-allowed', boxShadow: prompt.trim() && !uploading ? '0 4px 16px rgba(79,140,255,0.28)' : 'none', transition: 'all 200ms' }}
+                    >
+                      {uploading ? 'Uploading…' : 'Edit video'} <ArrowRight size={13} />
+                    </button>
+                  </div>
+                </div>
+              </div>
 
-            <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 650, fontSize: 20, letterSpacing: '-0.03em', color: '#FFFFFF', margin: '32px 0 16px' }}>
-              Describe your edit
-            </h2>
-            <AIPromptBox onEdit={() => setStage('processing')} />
-          </div>
-        )}
+              {/* ── Upload error banner ── */}
+              {uploadError && (
+                <div style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 10,
+                  padding: '12px 16px',
+                  background: 'rgba(248,113,113,0.07)',
+                  border: '1px solid rgba(248,113,113,0.25)',
+                  borderRadius: 10,
+                  marginTop: 12,
+                  animation: 'slide-up 0.3s cubic-bezier(0.22,1,0.36,1)',
+                }}>
+                  <AlertCircle size={16} style={{ color: '#f87171', flexShrink: 0, marginTop: 1 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontFamily: "'Inter Tight', sans-serif", fontSize: 13, fontWeight: 600,
+                      color: '#f87171', margin: '0 0 2px', letterSpacing: '-0.01em' }}>
+                      Upload failed
+                    </p>
+                    <p style={{ fontFamily: "'Inter Tight', sans-serif", fontSize: 12, fontWeight: 400,
+                      color: '#fca5a5', margin: 0, lineHeight: 1.5 }}>
+                      {uploadError}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setUploadError(null)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer',
+                      color: '#f87171', display: 'flex', padding: 2, flexShrink: 0,
+                      opacity: 0.7, transition: 'opacity 120ms' }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity = '1'; }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = '0.7'; }}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+
+              {/* Quick presets */}
+              <p style={{ fontSize: 11, color: '#4D5664', margin: '16px 0 10px', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Quick edits</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                {PRESETS.map((p, i) => (
+                  <button key={i} onClick={() => setPrompt(p.fill)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 13px', fontSize: 12, color: prompt === p.fill ? '#4F8CFF' : '#444', background: prompt === p.fill ? 'rgba(79,140,255,0.08)' : 'transparent', border: `1px solid ${prompt === p.fill ? 'rgba(79,140,255,0.22)' : '#1a1a1a'}`, borderRadius: 9999, cursor: 'pointer', transition: 'all 200ms' }}
+                    onMouseEnter={e => { if (prompt !== p.fill) { e.currentTarget.style.color = '#FFFFFF'; e.currentTarget.style.borderColor = '#2e2e2e'; } }}
+                    onMouseLeave={e => { if (prompt !== p.fill) { e.currentTarget.style.color = '#444'; e.currentTarget.style.borderColor = '#1a1a1a'; } }}
+                  >
+                    <p.Icon size={11} strokeWidth={1.75} /><span>{p.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -15,10 +15,10 @@ export function FAQSection() {
   const [open, setOpen] = useState<number | null>(0);
 
   return (
-    <section style={{ padding: '112px 24px', background: 'rgba(5,5,5,0.93)', backdropFilter: 'blur(2px)' }}>
-      <div style={{ maxWidth: 680, margin: '0 auto' }}>
+    <section className="section-pad" style={{ background: 'rgba(5,5,5,0.93)', backdropFilter: 'blur(2px)', paddingLeft: 24, paddingRight: 24 }}>
+      <div className="faq-grid">
         <div style={{ marginBottom: 48 }}>
-          <p style={{ fontSize: 11, color: '#666', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 16 }}>FAQ</p>
+          <p style={{ fontSize: 11, color: '#737D8D', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 16 }}>FAQ</p>
           <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(24px,4vw,40px)', letterSpacing: '-0.04em', lineHeight: 1.1, color: '#FFFFFF', margin: 0 }}>
             Common questions.
           </h2>
@@ -27,7 +27,7 @@ export function FAQSection() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {faqs.map((faq, i) => (
             <div key={i} style={{
-              border: `1px solid ${open === i ? '#333' : '#242424'}`,
+              border: `1px solid ${open === i ? '#1a1a1a' : '#141414'}`,
               borderRadius: 16,
               background: open === i ? '#111111' : '#0A0A0A',
               overflow: 'hidden',
@@ -44,8 +44,8 @@ export function FAQSection() {
               >
                 <span style={{ fontSize: 14, fontWeight: 500, color: '#FFFFFF' }}>{faq.q}</span>
                 {open === i
-                  ? <Minus size={16} style={{ color: '#666', flexShrink: 0 }} />
-                  : <Plus  size={16} style={{ color: '#666', flexShrink: 0 }} />
+                  ? <Minus size={16} style={{ color: '#737D8D', flexShrink: 0 }} />
+                  : <Plus  size={16} style={{ color: '#737D8D', flexShrink: 0 }} />
                 }
               </button>
               {open === i && (

@@ -34,13 +34,13 @@ export function Timeline() {
       {/* Header */}
       <div style={{ height: 32, borderBottom: '1px solid #1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 10, color: '#666', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Timeline</span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: '#666' }}>
+          <span style={{ fontSize: 10, color: '#737D8D', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Timeline</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: '#737D8D' }}>
             <span style={{ width: 8, height: 8, borderRadius: 2, background: 'rgba(79,140,255,0.5)', border: '1px solid rgba(79,140,255,0.4)', display: 'inline-block' }} />
             AI cuts
           </span>
         </div>
-        <span style={{ fontSize: 10, color: '#444' }}>3:32 total</span>
+        <span style={{ fontSize: 10, color: '#737D8D' }}>3:32 total</span>
       </div>
 
       {/* Body */}
@@ -58,7 +58,7 @@ export function Timeline() {
             { label: 'Captions', clips: captionClips, h: 11, baseBg: '#141421', baseBorder: '#1a1a2a', aiBg: '', aiBorder: '' },
           ].map((track, ti) => (
             <div key={ti} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <div style={{ position: 'absolute', left: -LABEL_W, width: LABEL_W - 4, textAlign: 'right', fontSize: 9, color: '#444' }}>
+              <div style={{ position: 'absolute', left: -LABEL_W, width: LABEL_W - 4, textAlign: 'right', fontSize: 9, color: '#737D8D' }}>
                 {track.label}
               </div>
               <div
@@ -111,7 +111,7 @@ export function Timeline() {
                 pointerEvents: 'none', animation: 'fade-in 0.15s ease',
               }}>
                 <p style={{ fontSize: 11, fontWeight: 600, color: '#FFFFFF', margin: '0 0 3px' }}>AI removed {cut.duration}s</p>
-                <p style={{ fontSize: 10, color: '#666', margin: 0 }}>&ldquo;{cut.reason}&rdquo;</p>
+                <p style={{ fontSize: 10, color: '#737D8D', margin: 0 }}>&ldquo;{cut.reason}&rdquo;</p>
               </div>
             )}
           </div>
@@ -135,7 +135,7 @@ export function Timeline() {
                 pointerEvents: 'none', animation: 'fade-in 0.15s ease',
               }}>
                 <p style={{ fontSize: 11, fontWeight: 600, color: '#4F8CFF', margin: '0 0 3px' }}>AI kept this section</p>
-                <p style={{ fontSize: 10, color: '#666', margin: 0 }}>&ldquo;{keep.reason}&rdquo;</p>
+                <p style={{ fontSize: 10, color: '#737D8D', margin: 0 }}>&ldquo;{keep.reason}&rdquo;</p>
               </div>
             )}
           </div>

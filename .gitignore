@@ -1,3 +1,9 @@
 node_modules/
 .next/
 *.env.local
+
+# Runtime data store
+data/
+
+# Scratch image downloads
+image-search/

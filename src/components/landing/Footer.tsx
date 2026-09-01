@@ -76,13 +76,13 @@ export function Footer() {
       borderTop: '1px solid #141414',
     }}>
       {/* Top section */}
-      <div style={{ maxWidth: 1160, margin: '0 auto', padding: '72px 32px 48px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: 32 }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: 'clamp(40px,6vw,80px) clamp(16px,3vw,48px) clamp(32px,4vw,56px)' }}>
+        <div className="footer-grid">
 
           {/* Brand column */}
-          <div style={{ gridColumn: '1', display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div className="footer-brand-col" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <FooterLogo />
-            <p style={{ fontSize: 13, color: '#3a3a3a', lineHeight: 1.65, maxWidth: 200, margin: 0 }}>
+            <p style={{ fontSize: 13, color: '#737D8D', lineHeight: 1.5, letterSpacing: '-0.01em', maxWidth: 200, margin: 0 }}>
               Upload your footage.<br />Tell AI how to edit it.
             </p>
 
@@ -93,10 +93,10 @@ export function Footer() {
                   width: 34, height: 34, borderRadius: 8,
                   background: '#0f0f0f', border: '1px solid #1e1e1e',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#444', textDecoration: 'none', transition: 'all 200ms ease',
+                  color: '#737D8D', textDecoration: 'none', transition: 'all 200ms ease',
                 }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#161616'; e.currentTarget.style.borderColor = '#2a2a2a'; e.currentTarget.style.color = '#FFFFFF'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#0f0f0f'; e.currentTarget.style.borderColor = '#1e1e1e'; e.currentTarget.style.color = '#444'; }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#111'; e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#FFFFFF'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#0a0a0a'; e.currentTarget.style.borderColor = '#141414'; e.currentTarget.style.color = '#737D8D'; }}
                 >
                   <span dangerouslySetInnerHTML={{ __html: s.svg }} />
                 </a>
@@ -119,18 +119,18 @@ export function Footer() {
           {/* Nav columns */}
           {NAV_COLS.map(col => (
             <div key={col.heading} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <p style={{ fontSize: 11, fontWeight: 600, color: '#2e2e2e', letterSpacing: '0.1em', textTransform: 'uppercase', margin: 0 }}>
+              <p style={{ fontSize: 11, fontWeight: 600, color: '#4D5664', letterSpacing: '0.06em', textTransform: 'uppercase', margin: 0 }}>
                 {col.heading}
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {col.links.map(link => (
                   <a key={link.label} href={link.href} style={{
-                    fontSize: 14, color: '#3a3a3a', textDecoration: 'none',
+                    fontSize: 14, color: '#737D8D', textDecoration: 'none',
                     display: 'inline-flex', alignItems: 'center', gap: 7,
                     transition: 'color 200ms ease',
                   }}
                     onMouseEnter={e => { e.currentTarget.style.color = '#A1A1A1'; }}
-                    onMouseLeave={e => { e.currentTarget.style.color = '#3a3a3a'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = '#737D8D'; }}
                   >
                     {link.label}
                     {'badge' in link && link.badge && (
@@ -147,15 +147,15 @@ export function Footer() {
       </div>
 
       {/* Hairline */}
-      <div style={{ maxWidth: 1160, margin: '0 auto', padding: '0 32px' }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 clamp(16px,3vw,48px)' }}>
         <div style={{ height: 1, background: 'linear-gradient(to right, transparent, #181818 20%, #181818 80%, transparent)' }} />
       </div>
 
       {/* Bottom bar */}
-      <div style={{ maxWidth: 1160, margin: '0 auto', padding: '20px 32px' }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: 'clamp(16px,2vw,24px) clamp(16px,3vw,48px)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <p style={{ fontSize: 12, color: '#2a2a2a', margin: 0 }}>
-            © {new Date().getFullYear()} Modaya. All rights reserved.
+          <p style={{ fontSize: 12, color: '#4D5664', margin: 0 }}>
+            © 2026 Modaya. All rights reserved.
           </p>
           <p style={{ fontSize: 12, color: '#222', margin: 0 }}>
             Made for creators who have footage, not time.

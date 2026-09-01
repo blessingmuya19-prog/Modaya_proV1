@@ -65,11 +65,11 @@ export function PricingSection() {
   const [hovered, setHovered] = useState<string | null>(null);
 
   return (
-    <section id="pricing" style={{ padding:'128px 24px', position:'relative', zIndex:0, background:'linear-gradient(180deg,#050505 0%,#070710 50%,#050505 100%)', overflow:'hidden' }}>
+    <section id="pricing" className="section-pad" style={{ position:'relative', zIndex:0, background:'linear-gradient(180deg,#050505 0%,#070710 50%,#050505 100%)', overflow:'hidden' }}>
 
       <div style={{ position:'absolute', top:'30%', left:'50%', transform:'translateX(-50%)', width:900, height:500, pointerEvents:'none', background:'radial-gradient(ellipse at center, rgba(79,140,255,0.05) 0%, transparent 70%)', filter:'blur(60px)' }} />
 
-      <div style={{ maxWidth:1120, margin:'0 auto', position:'relative', zIndex:1 }}>
+      <div className="section-inner" style={{ position:'relative', zIndex:1 }}>
 
         {/* Header */}
         <div style={{ textAlign:'center', marginBottom:64 }}>
@@ -77,11 +77,11 @@ export function PricingSection() {
             <span style={{ width:5, height:5, borderRadius:'50%', background:'#4F8CFF', display:'inline-block' }} />
             <span style={{ fontSize:11, color:'#4F8CFF', fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase' }}>Pricing</span>
           </div>
-          <h2 style={{ fontFamily:"'Inter Tight',sans-serif", fontWeight:700, fontSize:'clamp(30px,5vw,52px)', letterSpacing:'-0.045em', lineHeight:1.05, color:'#FFFFFF', margin:'0 0 18px' }}>
+          <h2 style={{ fontFamily:"'Inter Tight',sans-serif", fontWeight:700, fontSize:'clamp(30px,5vw,52px)', letterSpacing:'-0.025em', lineHeight:1.05, color:'#FFFFFF', margin:'0 0 18px' }}>
             Simple pricing.<br />
             <span style={{ color:'rgba(255,255,255,0.28)' }}>No surprises.</span>
           </h2>
-          <p style={{ fontSize:17, color:'#555', maxWidth:400, margin:'0 auto 32px', lineHeight:1.65 }}>
+          <p style={{ fontSize:'clamp(15px,1.2vw,17px)', color:'#9AA2AE', maxWidth:400, margin:'0 auto 32px', lineHeight:1.65 }}>
             Start free. Upgrade when you need more.
           </p>
 
@@ -96,7 +96,7 @@ export function PricingSection() {
         </div>
 
         {/* Cards */}
-        <div ref={ref} style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:14, alignItems:'stretch' }}>
+        <div ref={ref} className="pricing-grid" style={{ alignItems:'stretch' }}>
           {PLANS.map((plan, i) => {
             const isHov = hovered === plan.id;
             return (
@@ -119,22 +119,22 @@ export function PricingSection() {
                 )}
 
                 {/* Plan name */}
-                <p style={{ fontSize:11, letterSpacing:'0.1em', textTransform:'uppercase', color: plan.highlight ? '#4F8CFF' : '#444', fontWeight:600, margin:'0 0 16px' }}>{plan.name}</p>
+                <p style={{ fontSize:11, letterSpacing:'0.1em', textTransform:'uppercase', color: plan.highlight ? '#4F8CFF' : '#737D8D', fontWeight:600, margin:'0 0 16px' }}>{plan.name}</p>
 
                 {/* Price */}
                 <div style={{ display:'flex', alignItems:'flex-end', gap:4, marginBottom:6 }}>
                   <span style={{ fontFamily:"'Inter Tight',sans-serif", fontWeight:800, fontSize:48, letterSpacing:'-0.05em', color:'#FFFFFF', lineHeight:1 }}>
                     ${annual ? plan.annual : plan.monthly}
                   </span>
-                  {plan.monthly > 0 && <span style={{ fontSize:13, color:'#444', marginBottom:8 }}>/mo</span>}
+                  {plan.monthly > 0 && <span style={{ fontSize:13, color:'#737D8D', marginBottom:8 }}>/mo</span>}
                 </div>
-                <p style={{ fontSize:13, color:'#3a3a3a', margin:'0 0 24px' }}>{plan.desc}</p>
+                <p style={{ fontSize:13, color:'#737D8D', margin:'0 0 24px' }}>{plan.desc}</p>
 
                 {/* Features */}
                 <ul style={{ flex:1, listStyle:'none', padding:0, margin:'0 0 24px', display:'flex', flexDirection:'column', gap:10 }}>
                   {plan.features.map((f, fi) => (
                     <li key={f} style={{ display:'flex', alignItems:'flex-start', gap:10, opacity: inView ? 1 : 0, transform: inView ? 'none' : 'translateX(-8px)', transition:`all 400ms cubic-bezier(0.22,1,0.36,1) ${i * 90 + fi * 40 + 200}ms` }}>
-                      <Check size={13} style={{ color: plan.highlight ? '#4F8CFF' : '#3a3a3a', marginTop:3, flexShrink:0 }} />
+                      <Check size={13} style={{ color: plan.highlight ? '#4F8CFF' : '#737D8D', marginTop:3, flexShrink:0 }} />
                       <span style={{ fontSize:13, color:'#6B6B6B', lineHeight:1.5 }}>{f}</span>
                     </li>
                   ))}
@@ -151,7 +151,7 @@ export function PricingSection() {
         </div>
 
         {/* Footnote */}
-        <p style={{ textAlign:'center', fontSize:12, color:'#2a2a2a', marginTop:32 }}>7-day free trial on Starter and Pro. No credit card required to start. Cancel anytime.</p>
+        <p style={{ textAlign:'center', fontSize:12, color:'#4D5664', marginTop:32 }}>7-day free trial on Starter and Pro. No credit card required to start. Cancel anytime.</p>
       </div>
     </section>
   );

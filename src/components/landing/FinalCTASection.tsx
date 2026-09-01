@@ -11,7 +11,7 @@ const SOCIAL_PROOF = [
 
 export function FinalCTASection() {
   return (
-    <section style={{ padding:'160px 24px', position:'relative', zIndex:0, overflow:'hidden', background:'linear-gradient(180deg,#050505 0%,#06060f 50%,#050505 100%)' }}>
+    <section className="section-pad" style={{ position:'relative', zIndex:0, overflow:'hidden', background:'linear-gradient(180deg,#050505 0%,#06060f 50%,#050505 100%)' }}>
 
       {/* Large radial glow */}
       <div style={{ position:'absolute', top:'50%', left:'50%', transform:'translate(-50%,-50%)', width:1000, height:600, pointerEvents:'none', background:'radial-gradient(ellipse at center, rgba(79,140,255,0.1) 0%, rgba(79,140,255,0.03) 40%, transparent 70%)', filter:'blur(50px)' }} />
@@ -33,13 +33,13 @@ export function FinalCTASection() {
           <span style={{ color:'rgba(255,255,255,0.25)' }}>We&apos;ll handle the edit.</span>
         </h2>
 
-        <p style={{ fontSize:18, color:'#555', margin:'0 0 52px', lineHeight:1.6, maxWidth:480, marginLeft:'auto', marginRight:'auto' }}>
+        <p style={{ fontSize:'clamp(15px,1.3vw,19px)', color:'#9AA2AE', margin:'0 0 52px', lineHeight:1.6, maxWidth:'min(560px,80vw)', marginLeft:'auto', marginRight:'auto' }}>
           No timeline. No manual cuts. No hours in editing software. Drop your footage — AI does the rest.
         </p>
 
         {/* CTA button */}
         <Link href="/upload">
-          <button style={{ display:'inline-flex', alignItems:'center', gap:10, padding:'0 40px', height:60, fontSize:17, fontWeight:700, background:'linear-gradient(135deg,#4F8CFF 0%,#326FEA 100%)', color:'#FFFFFF', border:'none', borderRadius:14, cursor:'pointer', boxShadow:'0 0 50px rgba(79,140,255,0.3),0 12px 32px rgba(0,0,0,0.5)', transition:'all 250ms ease' } as React.CSSProperties}
+          <button style={{ display:'inline-flex', alignItems:'center', gap:10, padding:'0 clamp(24px,3vw,48px)', height:'clamp(48px,5vh,64px)', fontSize:17, fontWeight:700, background:'linear-gradient(135deg,#4F8CFF 0%,#326FEA 100%)', color:'#FFFFFF', border:'none', borderRadius:14, cursor:'pointer', boxShadow:'0 0 50px rgba(79,140,255,0.3),0 12px 32px rgba(0,0,0,0.5)', transition:'all 250ms ease' } as React.CSSProperties}
             onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#6EA3FF,#4F8CFF)'; e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 0 70px rgba(79,140,255,0.4),0 20px 40px rgba(0,0,0,0.5)'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#4F8CFF,#326FEA)'; e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 0 50px rgba(79,140,255,0.3),0 12px 32px rgba(0,0,0,0.5)'; }}
           >
@@ -47,7 +47,7 @@ export function FinalCTASection() {
           </button>
         </Link>
 
-        <p style={{ marginTop:18, fontSize:13, color:'#333' }}>No credit card required · Cancel anytime</p>
+        <p style={{ marginTop:18, fontSize:13, color:'#737D8D' }}>No credit card required · Cancel anytime</p>
 
         {/* Social proof stats */}
         <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:0, marginTop:56 }}>
@@ -55,7 +55,7 @@ export function FinalCTASection() {
             <React.Fragment key={i}>
               <div style={{ padding:'0 32px', textAlign:'center' }}>
                 <p style={{ fontFamily:"'Inter Tight',sans-serif", fontSize:'clamp(22px,3.5vw,32px)', fontWeight:800, color:'#FFFFFF', letterSpacing:'-0.04em', margin:'0 0 4px' }}>{s.stat}</p>
-                <p style={{ fontSize:12, color:'#333', margin:0 }}>{s.label}</p>
+                <p style={{ fontSize:12, color:'#737D8D', margin:0 }}>{s.label}</p>
               </div>
               {i < SOCIAL_PROOF.length - 1 && <div style={{ width:1, height:36, background:'rgba(255,255,255,0.07)' }} />}
             </React.Fragment>
