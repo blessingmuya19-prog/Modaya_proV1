@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { db, Clip } from '@/lib/db';
 import { v4 as uuid } from 'uuid';
+import { describeLoudness } from '@/lib/ai/highlights';
 import { chatDetailed, explainFailure, extractJson, detectProvider, FailureReason } from '@/lib/ai/llm';
 import { validateOperations, applyOperations, Operation, TimelineClip } from '@/lib/ai/operations';
 
@@ -178,7 +179,22 @@ Rules:
 - Use the SILENT SPANS provided when the user asks to cut pauses or dead air.
 - Never invent timestamps beyond the video duration.
 - Prefer few, large operations over many small ones.
-- If the request is unclear, use "none" and ask a clarifying question in reply.`;
+- If the request is unclear, use "none" and ask a clarifying question in reply.
+
+Choosing the "best", "strongest" or "highlight" part:
+- Use the LOUDNESS block. It is measured from the real audio of this file.
+- Never default to the opening of the video. The start is not the highlight
+  unless the loudness says it is.
+- Emit keep_ranges for the window you chose, not trim_to, so the kept section
+  is the interesting one rather than the first N seconds.
+- Say in your reply roughly where it falls ("around 0:38") and that you picked
+  it by loudness, which tracks crowd noise and impact but not meaning.
+
+What you cannot do — say so plainly instead of pretending:
+- You cannot see the picture. You do not know who is on screen or what happens.
+- You cannot hear speech. There is no transcript, so you cannot quote anyone,
+  write real captions, or remove filler words.
+- Do not infer content from the file name. A title is not evidence.`;
 
 interface Plan { reply: string; operations: unknown }
 
@@ -198,6 +214,7 @@ async function planWithLlm(opts: {
   durationS: number;
   clips:     Clip[];
   silences:  [number, number][];
+  energy:    number[];
   style?:    string;
   history:   { role: 'user' | 'ai'; text: string }[];
 }): Promise<{
@@ -217,6 +234,7 @@ async function planWithLlm(opts: {
     `VIDEO DURATION: ${opts.durationS.toFixed(1)}s`,
     `TIMELINE:\n${clipSummary}`,
     `SILENT SPANS: ${silenceSummary}`,
+    `LOUDNESS:\n${describeLoudness(opts.energy, opts.durationS)}`,
     opts.style ? `REFERENCE STYLE LEARNED: ${opts.style}` : null,
   ].filter(Boolean).join('\n\n');
 
@@ -285,7 +303,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (provider.ready) {
     const attempt = await planWithLlm({
-      message, durationS, clips, silences, style,
+      message, durationS, clips, silences, energy, style,
       history: (project?.aiHistory ?? []).map(m => ({ role: m.role, text: m.text })),
     });
     const plan = attempt.plan;

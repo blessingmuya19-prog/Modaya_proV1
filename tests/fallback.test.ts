@@ -143,3 +143,62 @@ describe('configured key, provider unreachable', () => {
     expect(d.engine.failure).toBeUndefined();
   });
 });
+
+/**
+ * The model has no eyes and no ears. Everything it knows about the footage
+ * arrives in the prompt, so the measured loudness must actually be in there —
+ * otherwise "the best 30 seconds" can only ever mean "the first 30 seconds".
+ */
+describe('what the model is told', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** The fixture project is 100s. Quiet throughout, with a burst at 40-50s. */
+  const energy = Array.from({ length: 1000 }, (_, i) =>
+    (i / 10 >= 40 && i / 10 < 50 ? 0.9 : 0.05));
+
+  const capturePrompt = async (message: string) => {
+    process.env.GROQ_API_KEY = 'gsk_test_prompt_capture';
+    let body = '';
+    vi.stubGlobal('fetch', vi.fn(async (_u: string, init: RequestInit) => {
+      body = String(init.body);
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: '{"reply":"ok","operations":[{"op":"none"}]}' } }],
+      }), { status: 200 });
+    }));
+    await ask({ message, silences: [], energy });
+    return body;
+  };
+
+  it('sends the measured loudness curve', async () => {
+    const body = await capturePrompt('find the best 30 seconds');
+    expect(body).toMatch(/LOUDNESS/);
+    expect(body).toMatch(/loudest continuous window/i);
+    // the burst sits at 40-50s, so the 10s window must land on it
+    expect(body).toMatch(/10s -> \[4\d\.\d, /);
+    expect(body).toMatch(/loudness 0-9 across the whole video/);
+  });
+
+  it('tells the model not to default to the opening', async () => {
+    const body = await capturePrompt('find the best 30 seconds');
+    expect(body).toMatch(/[Nn]ever default to the opening/);
+  });
+
+  it('tells the model it cannot see the picture or read the file name as evidence', async () => {
+    const body = await capturePrompt('what happens in this video');
+    expect(body).toMatch(/cannot see the picture/i);
+    expect(body).toMatch(/title is not evidence/i);
+  });
+
+  it('says plainly when no audio has been measured', async () => {
+    process.env.GROQ_API_KEY = 'gsk_test_prompt_capture';
+    let body = '';
+    vi.stubGlobal('fetch', vi.fn(async (_u: string, init: RequestInit) => {
+      body = String(init.body);
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: '{"reply":"ok","operations":[{"op":"none"}]}' } }],
+      }), { status: 200 });
+    }));
+    await ask({ message: 'best bit', silences: [], energy: [] });
+    expect(body).toMatch(/no audio measured/i);
+  });
+});
