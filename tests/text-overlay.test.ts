@@ -317,6 +317,78 @@ describe('reading the target out of the message when the model left it off', () 
   });
 });
 
+describe('the Subscribe conversation', () => {
+  /** Replayed from a real session where a correction deleted the overlay. */
+  const withSub = (): TimelineClip[] => ([
+    ...clips(),
+    { id: 'txt-0', trackId: 'text', label: 'Subscribe', startS: 0, endS: 53,
+      type: 'text', textPosition: 'top', textAlign: 'centre' },
+  ]);
+
+  it('reads "at top write" as the top right corner', () => {
+    const out = applyOperations(withSub(),
+      groundOperations([{ op: 'move_text', match: 'Subscribe' }], 'at top write'), ctx);
+    const sub = out.clips.find(c => c.id === 'txt-0');
+    expect(sub?.textPosition).toBe('top');
+    expect(sub?.textAlign, '"write" was not read as "right"').toBe('right');
+  });
+
+  it('does not delete anything for "no top write"', () => {
+    const out = applyOperations(withSub(),
+      groundOperations([{ op: 'remove_text' }], 'no top write'), ctx);
+    const sub = out.clips.find(c => c.id === 'txt-0');
+    expect(sub, 'a correction was read as a deletion').toBeTruthy();
+    expect(sub?.textPosition).toBe('top');
+    expect(sub?.textAlign).toBe('right');
+  });
+
+  it('asks first when a removal was never actually asked for', () => {
+    const out = applyOperations(withSub(),
+      groundOperations([{ op: 'remove_text', match: 'Subscribe' }], 'hmm not sure'), ctx);
+    expect(out.clips.find(c => c.id === 'txt-0')).toBeTruthy();
+    expect(out.summary).toMatch(/say "remove it"/i);
+  });
+
+  it('still deletes when the words do ask for it', () => {
+    const out = applyOperations(withSub(),
+      groundOperations([{ op: 'remove_text', match: 'Subscribe' }],
+                       'remove the subscribe text'), ctx);
+    expect(out.clips.find(c => c.id === 'txt-0')).toBeFalsy();
+  });
+
+  it('puts it back instead of saying there is nothing to move', () => {
+    const out = applyOperations(clips(),
+      [{ op: 'move_text', match: 'Subscribe', position: 'top', align: 'right' }],
+      { durationS: 53, previousClips: withSub() });
+    const sub = out.clips.find(c => c.label === 'Subscribe');
+    expect(sub, 'the editor refused instead of restoring it').toBeTruthy();
+    expect(sub?.textPosition).toBe('top');
+    expect(sub?.textAlign).toBe('right');
+    expect(out.summary).toMatch(/back/i);
+  });
+
+  it('adds the words when there is nothing to put back either', () => {
+    const out = applyOperations(clips(),
+      [{ op: 'move_text', match: 'Subscribe', position: 'top', align: 'right' }],
+      { durationS: 53 });
+    const sub = out.clips.find(c => c.label === 'Subscribe');
+    expect(sub?.textPosition).toBe('top');
+    expect(out.summary).toMatch(/no "Subscribe" on screen, so I added it/i);
+  });
+
+  it('describes a restore as a restore, in words a person can check', () => {
+    const out = applyOperations(clips(),
+      [{ op: 'move_text', match: 'Subscribe', position: 'top', align: 'left' }],
+      { durationS: 53, previousClips: withSub() });
+    expect(out.summary).toMatch(/^put "Subscribe" back in the top left corner/);
+  });
+
+  it('still says so when there is nothing at all to go on', () => {
+    const out = applyOperations(clips(), [{ op: 'move_text', position: 'top' }], ctx);
+    expect(out.summary).toMatch(/no text on screen to move/i);
+  });
+});
+
 describe('typos', () => {
   it('reads the ways people actually spell bottom', () => {
     for (const w of ['bottom', 'buttom', 'bottum', 'buttom corner', 'at the botom'])

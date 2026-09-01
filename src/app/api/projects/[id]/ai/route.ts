@@ -20,6 +20,12 @@ type Intent =
   | 'move_text' | 'remove_text'
   | 'vertical' | 'highlights' | 'cut_silence' | 'unknown';
 
+/** Capitalise a summary and end it properly, leaving a question mark be. */
+function sentence(s: string): string {
+  const capped = `${s.charAt(0).toUpperCase()}${s.slice(1)}`;
+  return /[.!?]$/.test(capped) ? capped : `${capped}.`;
+}
+
 function detectIntent(text: string): Intent {
   const p = text.toLowerCase();
   if (p.match(/pause|dead.?air|silence|gap|tighten|pace/))         return 'cut_silence';
@@ -34,9 +40,17 @@ function detectIntent(text: string): Intent {
                                                                    return 'remove_text';
   /* "move it to the top corner" is about text already on screen. Adding it
      again is what left two names on the video with no way to say which. */
-  if (p.match(/\b(move|put|place|shift|reposition|drag)\b|corner/) &&
-      p.match(/\b(top|bottom|lower|upper|corner|left|right|middle|centre|center|up|down)\b/) &&
+  const placeWord =
+    /\b(top|b[ou]tt?[ou]m|lower|upper|corner|left|lft|right|write|wright|rite|ryt|middle|centre|center|up|down)\b/;
+  if (p.match(/\b(move|put|place|shift|reposition|drag)\b|corner/) && placeWord.test(p) &&
       !p.match(/\bcaptions?\b|\bsubtitles?\b/))                   return 'move_text';
+  /* "at top write", "no top right", "bottom left" — nothing but a placement
+     and filler is someone correcting where the text they can see is sitting.
+     If they name anything else ("write subscribe at top") it is new text. */
+  const FILLER = /^(at|the|on|in|to|of|no|not|nope|its|it|that|this|text|title|please|now|make|ok|okay|go|be|sit|put|move|place|shift|and|a|i|want|need|there)$/;
+  const tokens = p.replace(/[^a-z0-9\s]/g, ' ').trim().split(/\s+/).filter(Boolean);
+  if (tokens.length > 0 && tokens.length <= 6 && placeWord.test(p) &&
+      tokens.every(w => placeWord.test(w) || FILLER.test(w)))       return 'move_text';
   if (p.match(/\btext\b|\btitle\b|\bname\b|overlay|watermark|lower.?third/))
                                                                    return 'text_overlay';
   if (p.match(/highlight|best moment|standout|top (?:moment|part|bit|clip|section)|\bmoments?\b/))
@@ -105,12 +119,16 @@ function applyEdit(
     /** What the person actually typed — needed to read a position, a font or
      *  the words they want on screen without an AI model to interpret them. */
     message?: string;
+    /** The timeline before the last edit, so a move can put back something
+     *  that was taken off by mistake. */
+    previousClips?: Clip[];
   },
 ): EditResult {
 
   const run = (ops: Operation[]) =>
-    applyOperations(clips as TimelineClip[], ops,
-      { durationS, silences: ctx.silences, transcript: ctx.transcript ?? null });
+    applyOperations(clips as TimelineClip[], groundOperations(ops, ctx.message ?? ''),
+      { durationS, silences: ctx.silences, transcript: ctx.transcript ?? null,
+        previousClips: (ctx.previousClips ?? []) as TimelineClip[] });
 
   const nothing = (reply: string): EditResult => ({
     reply, summary: 'No change', savedS: 0, affectedIds: [], newClips: clips, intent,
@@ -259,7 +277,7 @@ function applyEdit(
       const asking  = out.summary.startsWith('there is more than one');
       return {
         reply: removed || asking
-          ? `${out.summary.charAt(0).toUpperCase()}${out.summary.slice(1)}${asking ? '' : '.'}`
+          ? sentence(out.summary)
           : `${out.summary.charAt(0).toUpperCase()}${out.summary.slice(1)} — ` +
             'tell me the words or whereabouts it sits and I\'ll take that one off.',
         summary: out.summary, savedS: 0, affectedIds: out.affectedIds,
@@ -360,6 +378,12 @@ Text style — the "style" object, every field optional:
   "Put it top left", "move it up", "no, the other corner" are all move_text
   with a match on the words that are already there. Adding again leaves two
   copies on screen and the user then has to ask you to delete one.
+- A message beginning "no" is almost always a correction of what you just
+  did, not a request to delete. "no top right", "no not there", "no bigger"
+  are move_text or style_text. Only remove when the words say remove, delete,
+  take it off, get rid of it.
+- People type fast: "write"/"rite"/"ryt" mean right, "buttom" means bottom.
+  Read what they meant.
 - remove_text takes text off: match on its words, or position:"lower" for
   "remove the one at the bottom", or all:true for every overlay. You CAN
   remove one and keep another — never claim you can only remove all text.
@@ -538,6 +562,35 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       clientTranscript.segments.length > (project.transcript?.segments.length ?? 0)) {
     db.projects.update(id, { transcript: clientTranscript });
   }
+  /* Undo is not a thing to ask a model about. One step back, always
+     available, because this editor has already deleted someone's title on a
+     misread and "oh my god" is not a repair tool. */
+  if (/^\s*(undo|revert|put (it|that) back|ctrl\s*\+?\s*z)\b/i.test(message)) {
+    const back = project?.previousClips;
+    const now  = new Date().toISOString();
+    const userMsg = { role: 'user' as const, text: message, ts: now };
+    const reply = back
+      ? 'Put it back the way it was.'
+      : 'There is nothing to undo yet — this is as far back as I go.';
+    const aiMsg = { role: 'ai' as const, text: reply, ts: new Date(Date.now() + 100).toISOString() };
+
+    if (project) {
+      db.projects.update(id, {
+        aiHistory: [...(project.aiHistory ?? []), userMsg, aiMsg],
+        ...(back ? { clips: back, previousClips: project.clips } : {}),
+      });
+    }
+    return NextResponse.json({
+      userMessage: userMsg,
+      aiMessage:   aiMsg,
+      edit: {
+        summary: back ? 'undone' : 'nothing to undo', savedS: 0, affectedIds: [],
+        intent: 'undo', newClips: back ?? clips,
+      },
+      engine: { source: 'rules', provider: 'none', model: 'undo', build: buildTag() },
+    });
+  }
+
   const provider = detectProvider();
   let edit: EditResult | null = null;
   let source: 'llm' | 'rules' = 'rules';
@@ -553,9 +606,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     failure = attempt.failure;
 
     if (plan) {
-      const outcome = applyOperations(clips as TimelineClip[],
-                                      groundOperations(plan.operations, message),
-                                      { durationS, silences, transcript });
+      const grounded = groundOperations(plan.operations, message);
+      const rewritten = grounded.some((g, i) => g.op !== plan.operations[i]?.op);
+
+      const outcome = applyOperations(clips as TimelineClip[], grounded,
+                                      { durationS, silences, transcript,
+                                        previousClips: (project?.previousClips ?? []) as TimelineClip[] });
       source = 'llm';
 
       /* The model writes its reply before knowing whether the edit was
@@ -563,9 +619,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
          untrue — say what actually happened instead. */
       const didNothing = outcome.applied.length === 0 && outcome.summary !== 'No change';
 
+      /* If the plan had to be corrected — a deletion read back as the move it
+         actually was — the model's sentence describes something that never
+         happened. Report the edit, not the intention. */
+      const misdescribed = rewritten && outcome.summary !== 'No change';
+
+      /* Restoring something that had been deleted, or adding words that were
+         never there, is not what "I moved it" says. Tell them what happened. */
+      const surprising = /^(put "|there was no )/.test(outcome.summary);
+
       edit = {
-        reply:       didNothing
-                       ? `${outcome.summary.charAt(0).toUpperCase()}${outcome.summary.slice(1)}`
+        reply:       didNothing || misdescribed || surprising
+                       ? sentence(outcome.summary)
                        : plan.reply,
         summary:     outcome.summary,
         savedS:      Math.round(outcome.removedS),
@@ -588,7 +653,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       : "I'm running without an AI model, so I only understand a few set phrases: cut the dead air, " +
         'pick the highlights, or add captions. No provider key reached this deployment ' +
         `(${buildTag()}) — if you have just added one, it only takes effect on a build made afterwards.`;
-    edit = applyEdit(intent, clips, durationS, { silences, energy, modelNote, transcript, message });
+    edit = applyEdit(intent, clips, durationS, {
+      silences, energy, modelNote, transcript, message,
+      previousClips: project?.previousClips ?? [],
+    });
   }
 
   const now    = new Date().toISOString();
@@ -604,6 +672,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
          empty list as "nothing happened" meant taking the last clip off
          never stuck. */
       clips: edit.newClips,
+      /* Keep one step of history so "undo" and "put it back" mean something. */
+      ...(JSON.stringify(edit.newClips) !== JSON.stringify(clips)
+            ? { previousClips: clips }
+            : {}),
     });
   }
 

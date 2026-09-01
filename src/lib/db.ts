@@ -60,6 +60,9 @@ export interface Project {
   thumbnail:   string;
   /** Speech recognition output, once it has run. */
   transcript?: Transcript;
+  /** The timeline as it stood before the last AI edit, so one step can be
+      undone and so a deletion the editor got wrong can be put back. */
+  previousClips?: Clip[];
 }
 
 // ── Filesystem helpers — dev-only ─────────────────────────────────────────────

@@ -54,7 +54,9 @@ export type Operation =
   | { op: 'add_text';      text: string; position: TextPosition; align?: TextAlign;
                            startS: number; endS: number; style?: TextStyle }
   | { op: 'move_text';     match?: string; position?: TextPosition; align?: TextAlign }
-  | { op: 'remove_text';   match?: string; position?: TextPosition; all?: boolean }
+  | { op: 'remove_text';   match?: string; position?: TextPosition; all?: boolean;
+                           /** set when the wording did not actually ask for a deletion */
+                           confirm?: boolean }
   | { op: 'style_text';    target: 'captions' | 'all'; style: TextStyle }
   | { op: 'punch_in';      rate: number }
   | { op: 'grade';         brightness: number; contrast: number; saturation: number }
@@ -66,6 +68,9 @@ export interface OperationContext {
   silences?: [number, number][];
   /** Speech recognition output, when it has run. Gives captions real words. */
   transcript?: { segments: { startS: number; endS: number; text: string }[] } | null;
+  /** The timeline as it was before the last edit — lets a move put back
+      something that was taken off by mistake, and backs "undo". */
+  previousClips?: TimelineClip[];
 }
 
 export interface EditOutcome {
@@ -126,8 +131,10 @@ const POSITIONS: TextPosition[] = ['top', 'centre', 'lower'];
 export function parseAlign(raw: unknown, fallback: TextAlign = 'centre'): TextAlign {
   const v = String(raw ?? '').trim().toLowerCase();
   if (!v) return fallback;
-  if (/\bleft\b/.test(v))  return 'left';
-  if (/\bright\b/.test(v)) return 'right';
+  /* "at top write" is a person typing quickly, not a request to write
+     anything. Same for rite/ryt/rght. Read them as the side they mean. */
+  if (/\b(left|lft)\b/.test(v))                      return 'left';
+  if (/\b(right|write|wright|rite|ryt|rght)\b/.test(v)) return 'right';
   if (/\b(centre|center|middle)\b/.test(v)) return 'centre';
   return fallback;
 }
@@ -213,12 +220,18 @@ export function parseStyle(raw: unknown): TextStyle | undefined {
  * repaired by guesswork.
  */
 /**
- * Fill in what the model left off from what the person actually typed.
+ * Fill in what the model left off, and refuse to read a correction as a
+ * deletion.
  *
- * A model that answers "remove the one on the buttom" with a bare
- * {"op":"remove_text"} is asking to delete every overlay, which is not what
- * was said. The words are right there in the message, so read them.
+ * Two things went wrong in front of a user. A bare {"op":"remove_text"} for
+ * "remove the one on the buttom" means delete everything, which is not what
+ * was said. Worse, "no top write" — a person correcting the placement they
+ * had just asked for — came back as remove_text and their overlay was gone.
+ * Nothing gets deleted here unless the words actually asked for it.
  */
+const REMOVAL_WORDS =
+  /\b(remove|delete|get rid|take (it|them|that|the .+) off|take off|erase|clear|drop|hide|no more)\b/i;
+
 export function groundOperations(ops: Operation[], message: string): Operation[] {
   const said = message ?? '';
   const spot: TextPosition | undefined =
@@ -226,13 +239,32 @@ export function groundOperations(ops: Operation[], message: string): Operation[]
     : /\b(top|upper|above)\b/i.test(said)                    ? 'top'
     : /\b(middle|centre|center)\b/i.test(said)               ? 'centre'
     : undefined;
+  const side: TextAlign | undefined =
+      /\b(left|lft)\b/i.test(said)                            ? 'left'
+    : /\b(right|write|wright|rite|ryt|rght)\b/i.test(said)     ? 'right'
+    : /\bcorner\b/i.test(said)                                ? 'right'
+    : undefined;
   const everything = /\b(all|both|every|everything)\b/i.test(said);
+  const asksRemoval = REMOVAL_WORDS.test(said);
 
-  return ops.map(op => {
-    if (op.op === 'remove_text' && !op.match && !op.position && !op.all)
-      return everything ? { ...op, all: true } : { ...op, position: spot };
-    if (op.op === 'move_text' && !op.match && !op.position)
-      return { ...op, position: spot };
+  return ops.map((op): Operation => {
+    if (op.op === 'remove_text') {
+      /* "no, top right" is a correction of the last instruction. Reading it
+         as a deletion loses work the person cannot get back. */
+      if (!asksRemoval && (spot || side))
+        return { op: 'move_text', match: op.match, position: spot, align: side };
+      if (!asksRemoval)
+        return { ...op, confirm: true };
+      if (!op.match && !op.position && !op.all)
+        return everything ? { ...op, all: true } : { ...op, position: spot };
+      return op;
+    }
+    /* Where the person said, not where the model guessed. "at top write" is
+       the top RIGHT corner however confidently the model answered centre. */
+    if (op.op === 'move_text')
+      return { ...op, position: spot ?? op.position, align: side ?? op.align };
+    if (op.op === 'add_text' && (spot || side))
+      return { ...op, position: spot ?? op.position, align: side ?? op.align };
     return op;
   });
 }
@@ -283,6 +315,7 @@ export function validateOperations(raw: unknown, ctx: OperationContext): Operati
           match: String(o.match ?? '').trim().slice(0, 120) || undefined,
           position: o.position === undefined ? undefined : parsePosition(o.position),
           all: o.all === true,
+          confirm: o.confirm === true,
         });
         break;
       }
@@ -546,7 +579,50 @@ export function applyOperations(
 
       case 'move_text': {
         const targets = textTargets(working, op.match, undefined);
-        if (!targets.length) { notes.push('no text on screen to move'); break; }
+
+        if (!targets.length) {
+          /* It was on screen a moment ago and something took it off — very
+             likely this editor misreading a correction. Put it back where
+             they are now asking for rather than answering "there is no text
+             on screen", which leaves them retyping it from scratch. */
+          const gone = textTargets(ctx.previousClips ?? [], op.match, undefined)
+            .map(id => (ctx.previousClips ?? []).find(c => c.id === id))
+            .filter((c): c is TimelineClip => Boolean(c));
+
+          if (gone.length) {
+            const back = gone.map(c => ({
+              ...c,
+              textPosition: op.position ?? c.textPosition ?? 'lower',
+              textAlign:    op.align    ?? c.textAlign,
+            }));
+            working = [...working, ...back];
+            back.forEach(c => affected.add(c.id));
+            applied.push(op);
+            notes.push(`put \"${back[0].label.slice(0, 40)}\" back ` +
+                       placeSaid(back[0].textPosition ?? 'lower', back[0].textAlign));
+            break;
+          }
+
+          /* Never on screen, but they named the words — add them. */
+          const words = (op.match ?? '').trim();
+          if (words) {
+            const id = `txt-${working.filter(c => c.id.startsWith('txt-')).length}`;
+            working.push({
+              id, trackId: 'text', label: words, startS: 0, endS: ctx.durationS,
+              type: 'text',
+              textPosition: op.position ?? 'lower',
+              ...(op.align ? { textAlign: op.align } : {}),
+            });
+            applied.push(op);
+            affected.add(id);
+            notes.push(`there was no \"${words.slice(0, 40)}\" on screen, so I added it ` +
+                       placeSaid(op.position ?? 'lower', op.align));
+            break;
+          }
+
+          notes.push('no text on screen to move');
+          break;
+        }
         working = working.map(c => targets.includes(c.id) ? {
           ...c,
           textPosition: op.position ?? c.textPosition,
@@ -581,6 +657,13 @@ export function applyOperations(
             .map(c => `"${c.label.slice(0, 30)}" (${placeSaid(c.textPosition ?? 'lower', c.textAlign ?? 'centre')})`)
             .join(' and ');
           notes.push(`there is more than one: ${list} — which should go?`);
+          break;
+        }
+
+        if (op.confirm) {
+          const names = working.filter(c => targets.includes(c.id))
+            .map(c => `\"${c.label.slice(0, 30)}\"`).join(' and ');
+          notes.push(`I read that as taking ${names} off — say "remove it" and it goes`);
           break;
         }
 
