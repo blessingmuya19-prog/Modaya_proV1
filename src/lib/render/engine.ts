@@ -47,6 +47,7 @@ export class PreviewEngine {
 
   private timeListeners  = new Set<TimeListener>();
   private stateListeners = new Set<StateListener>();
+  private endListeners   = new Set<() => void>();
 
   stats: EngineStats = { drawn: 0, dropped: 0, decoded: 0, activeClip: null, buffering: false };
 
@@ -114,8 +115,23 @@ export class PreviewEngine {
 
   onTime (fn: TimeListener)  { this.timeListeners.add(fn);  return () => this.timeListeners.delete(fn); }
   onState(fn: StateListener) { this.stateListeners.add(fn); return () => this.stateListeners.delete(fn); }
+  /**
+   * Fired only when playback stops because the programme finished — never on a
+   * user pause. The two need different handling: reaching the end rewinds, a
+   * pause must stay exactly where it is.
+   */
+  onEnd(fn: () => void) { this.endListeners.add(fn); return () => this.endListeners.delete(fn); }
 
   private emitTime() { this.timeListeners.forEach(fn => { try { fn(this._time); } catch {} }); }
+
+  /** Stop at the very end of the programme and say so. */
+  private finish() {
+    if (!this.seq) return;
+    this._time = this.seq.durationS;
+    this.emitTime();
+    this.pause();
+    this.endListeners.forEach(fn => { try { fn(); } catch {} });
+  }
 
   async play() {
     if (this._playing || !this.seq) return;
@@ -125,7 +141,7 @@ export class PreviewEngine {
     // Starting inside a cut section? Jump to the next real clip first.
     const gap = resolveGap(this.seq, this._time);
     if (gap.inGap) {
-      if (gap.jumpTo == null) { this.pause(); return; }
+      if (gap.jumpTo == null) { this.finish(); return; }
       this.seek(gap.jumpTo);
     }
 
@@ -230,7 +246,7 @@ export class PreviewEngine {
       this.stats.buffering = v.readyState < 3;
     } else {
       const gap = resolveGap(this.seq, this._time);
-      if (gap.jumpTo == null) { this.pause(); this.emitTime(); return; }
+      if (gap.jumpTo == null) { this.finish(); return; }
       this.seek(gap.jumpTo);
       void this.el().play().catch(() => {});
     }
@@ -247,9 +263,7 @@ export class PreviewEngine {
     if (!next) {
       const gap = resolveGap(this.seq, t);
       if (gap.jumpTo == null) {           // end of programme
-        this._time = this.seq.durationS;
-        this.emitTime();
-        this.pause();
+        this.finish();
         return;
       }
       this.seek(gap.jumpTo);

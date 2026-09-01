@@ -101,6 +101,43 @@ describe('editor timeline', () => {
     expect(parseFloat(ph.style.left), 'playhead ignored the video clock').toBeGreaterThan(0);
   });
 
+  it('returns the playhead to the start when the video ends', async () => {
+    const { container } = mount([]);
+    const btn = Array.from(container.querySelectorAll('button'))
+      .find(b => (b as HTMLElement).style.background === 'rgb(255, 255, 255)') as HTMLElement;
+
+    await act(async () => { btn.click(); });
+    (globalThis as any).__setVideoTime(120);
+    await act(async () => { await new Promise(r => setTimeout(r, 150)); });
+    const ph = container.querySelector('[data-modaya-playhead]') as HTMLElement;
+    expect(parseFloat(ph.style.left), 'playhead never moved off zero').toBeGreaterThan(0);
+
+    // the element runs out of footage
+    (globalThis as any).__setVideoTime(300);
+    await act(async () => { await new Promise(r => setTimeout(r, 300)); });
+
+    const after = container.querySelector('[data-modaya-playhead]') as HTMLElement;
+    expect(parseFloat(after.style.left), 'playhead was left parked at the end').toBe(0);
+  });
+
+  it('leaves the playhead alone on an ordinary pause', async () => {
+    const { container } = mount([]);
+    const btn = Array.from(container.querySelectorAll('button'))
+      .find(b => (b as HTMLElement).style.background === 'rgb(255, 255, 255)') as HTMLElement;
+
+    await act(async () => { btn.click(); });
+    (globalThis as any).__setVideoTime(120);
+    await act(async () => { await new Promise(r => setTimeout(r, 150)); });
+
+    const pauseBtn = Array.from(container.querySelectorAll('button'))
+      .find(b => (b as HTMLElement).style.background === 'rgb(255, 255, 255)') as HTMLElement;
+    await act(async () => { pauseBtn.click(); });
+    await act(async () => { await new Promise(r => setTimeout(r, 120)); });
+
+    const ph = container.querySelector('[data-modaya-playhead]') as HTMLElement;
+    expect(parseFloat(ph.style.left), 'pause rewound the playhead').toBeGreaterThan(0);
+  });
+
   it('scrolls the timeline to follow the playhead off-screen', async () => {
     const { container } = mount([]);
     const scroller = container.querySelector('[data-modaya-timeline]') as HTMLElement;

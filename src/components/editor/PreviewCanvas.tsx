@@ -18,12 +18,15 @@ interface Props {
   playing:   boolean;
   playheadS: number;
   onTime:    (t: number) => void;
+  /** The engine paused — mirror it, but leave the playhead alone. */
+  onPaused:  () => void;
+  /** Playback reached the end of the programme. */
   onEnded:   () => void;
   style?:    React.CSSProperties;
 }
 
 export default function PreviewCanvas({
-  sequence, sourceUrl, sourceId, playing, playheadS, onTime, onEnded, style,
+  sequence, sourceUrl, sourceId, playing, playheadS, onTime, onPaused, onEnded, style,
 }: Props) {
   const hostRef   = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -31,8 +34,10 @@ export default function PreviewCanvas({
   const echoed    = useRef(-1);
   const onTimeRef = useRef(onTime);
   const onEndRef  = useRef(onEnded);
-  onTimeRef.current = onTime;
-  onEndRef.current  = onEnded;
+  const onPauseRef = useRef(onPaused);
+  onTimeRef.current  = onTime;
+  onEndRef.current   = onEnded;
+  onPauseRef.current = onPaused;
 
   // Create once
   useEffect(() => {
@@ -46,9 +51,10 @@ export default function PreviewCanvas({
       echoed.current = t;
       onTimeRef.current(t);
     });
-    const offState = engine.onState(p => { if (!p) onEndRef.current(); });
+    const offState = engine.onState(p => { if (!p) onPauseRef.current(); });
+    const offEnd   = engine.onEnd(() => onEndRef.current());
 
-    return () => { offTime(); offState(); engine.destroy(); engineRef.current = null; };
+    return () => { offTime(); offState(); offEnd(); engine.destroy(); engineRef.current = null; };
   }, []);
 
   useEffect(() => { engineRef.current?.setSequence(sequence); }, [sequence]);

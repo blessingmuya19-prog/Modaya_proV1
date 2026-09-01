@@ -1094,9 +1094,9 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
 /* ──────────────── VIDEO PREVIEW ──────────────── */
 const AIChatPanel = React.memo(AIChatPanelBase);
 
-function VideoPreview({ playheadS, playing, onToggle, onSeek, onStop, totalS, videoUrl, aspectRatio,
+function VideoPreview({ playheadS, playing, onToggle, onSeek, onStop, onEnd, totalS, videoUrl, aspectRatio,
   sequence, projectId }:
-  { playheadS:number; playing:boolean; onToggle:()=>void; onSeek:(s:number)=>void; onStop:()=>void;
+  { playheadS:number; playing:boolean; onToggle:()=>void; onSeek:(s:number)=>void; onStop:()=>void; onEnd:()=>void;
     totalS:number; videoUrl?:string|null; aspectRatio?:string;
     sequence:Sequence; projectId?:string }) {
 
@@ -1133,7 +1133,8 @@ function VideoPreview({ playheadS, playing, onToggle, onSeek, onStop, totalS, vi
               playing={playing}
               playheadS={playheadS}
               onTime={onSeek}
-              onEnded={onStop}
+              onPaused={onStop}
+              onEnded={onEnd}
             />
           ) : (
             /* ── Mockup canvas (no video available) ── */
@@ -1586,6 +1587,9 @@ export function EditorShell({
   const [styledDur,    setStyledDur   ] = useState<number | null>(null);
 
   const totalS = styledDur ?? baseTotalS;
+  /** Read by togglePlay, which is created before totalS exists. */
+  const totalSRef = useRef(0);
+  totalSRef.current = totalS;
 
   const handleStyleApplied = useCallback((plan: EditPlan) => {
     setLiveClips(plan.clips.map(c => ({
@@ -1631,8 +1635,15 @@ export function EditorShell({
   }, []);
 
   const [tab,    setTab   ] = useState('Text');
-  const togglePlay = useCallback(() => setPlaying(p => !p), []);
+  /** Pressing play at the very end restarts, rather than sitting there stuck. */
+  const togglePlay = useCallback(() => setPlaying(p => {
+    if (!p) setPhS(cur => (cur >= totalSRef.current - 0.05 ? 0 : cur));
+    return !p;
+  }), []);
+  /** A pause leaves the playhead exactly where it is. */
   const stopPlay   = useCallback(() => setPlaying(false), []);
+  /** Reaching the end rewinds to the start, like every other player. */
+  const endPlay    = useCallback(() => { setPlaying(false); setPhS(0); }, []);
   const [expOpen,setExpOpen] = useState(false);
   const [playing,setPlaying] = useState(false);
   const [phS,    setPhS   ] = useState(0);
@@ -1729,7 +1740,7 @@ export function EditorShell({
               </div>
             </FadeUp>
             <FadeUp delay={360} style={{ flex:1, minWidth:0, display:'flex' }}>
-              <VideoPreview playheadS={phS} playing={playing} onToggle={togglePlay} onStop={stopPlay} onSeek={setPhS} totalS={totalS} videoUrl={videoUrl} aspectRatio={videoAspect} sequence={sequence} projectId={projectId} />
+              <VideoPreview playheadS={phS} playing={playing} onToggle={togglePlay} onStop={stopPlay} onEnd={endPlay} onSeek={setPhS} totalS={totalS} videoUrl={videoUrl} aspectRatio={videoAspect} sequence={sequence} projectId={projectId} />
             </FadeUp>
           </div>
 

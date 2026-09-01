@@ -170,3 +170,68 @@ describe('PreviewEngine', () => {
     expect(document.querySelectorAll('video').length).toBe(before - 2);
   });
 });
+
+/**
+ * Reaching the end and pausing are different events. Conflating them meant the
+ * playhead sat at the end of the video after playback finished, with no way
+ * back to the start except dragging it.
+ */
+describe('end of playback', () => {
+  it('announces the end, distinctly from a pause', async () => {
+    const { engine } = setup(CLIPS, 100);
+    const ended: number[] = [];
+    const paused: boolean[] = [];
+    engine.onEnd(() => ended.push(engine.time));
+    engine.onState(p => paused.push(p));
+
+    engine.seek(99);
+    await engine.play();
+    videoTime = 100;                 // element runs out
+    await frames(6);
+
+    expect(ended.length).toBeGreaterThan(0);
+    expect(engine.playing).toBe(false);
+    expect(paused).toContain(false);
+  });
+
+  it('reports the very end as the final time, not a value short of it', async () => {
+    const { engine } = setup(CLIPS, 100);
+    let last = -1;
+    engine.onTime(t => { last = t; });
+    engine.onEnd(() => {});
+
+    engine.seek(99);
+    await engine.play();
+    videoTime = 100;                 // element runs out
+    await frames(6);
+
+    expect(last).toBeCloseTo(100, 1);
+  });
+
+  it('does NOT announce the end on an ordinary pause', async () => {
+    const { engine } = setup(CLIPS, 100);
+    let ends = 0;
+    engine.onEnd(() => { ends++; });
+
+    engine.seek(10);
+    await engine.play();
+    await frames(2);
+    engine.pause();
+
+    expect(ends).toBe(0);
+    expect(engine.time).toBeCloseTo(10, 0);   // a pause leaves the playhead alone
+  });
+
+  it('fires the end once, not on every frame afterwards', async () => {
+    const { engine } = setup(CLIPS, 100);
+    let ends = 0;
+    engine.onEnd(() => { ends++; });
+
+    engine.seek(99);
+    await engine.play();
+    videoTime = 100;
+    await frames(8);
+
+    expect(ends).toBe(1);
+  });
+});
