@@ -39,11 +39,21 @@ const KNOWN = [
 function diagnostics() {
   const present = KNOWN.filter(k => (process.env[k] ?? '').trim() !== '');
 
+  /* "I added the key to Vercel" fails in three ways: saved for the wrong
+     environment, spelled differently, or saved after this build was made.
+     Naming each provider variable and whether it arrived answers all three
+     at a glance — and it is names only, never values. */
+  const providers = {
+    groq:       (process.env.GROQ_API_KEY ?? '').trim() !== '',
+    gemini:     (process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? '').trim() !== '',
+    openrouter: (process.env.OPENROUTER_API_KEY ?? '').trim() !== '',
+  };
+
   // Anything key-shaped the app does not read — catches GROK_API_KEY,
   // GROQ_KEY, or a trailing space in the name.
   const lookalike = Object.keys(process.env)
     .filter(k => !KNOWN.includes(k))
-    .filter(k => /GROQ|GROK|GEMINI|OPENROUTER|OPEN_ROUTER|CLAUDE|OPENAI|LLM|AI_KEY|API_KEY/i.test(k))
+    .filter(k => /GROQ|GROK|GEMINI|GOOGLE|AISTUDIO|AI_STUDIO|VISION|OPENROUTER|OPEN_ROUTER|CLAUDE|OPENAI|LLM|AI_KEY|API_KEY/i.test(k))
     .map(k => (k !== k.trim() ? `"${k}" (has whitespace in the name)` : k))
     .slice(0, 12);
 
@@ -59,6 +69,7 @@ function diagnostics() {
     present,
     lookalike,
     keyShapedName,
+    providers,
     // 'preview' here with an empty `present` means the variable was saved for
     // Production only — the single most common mistake.
     vercelEnv: process.env.VERCEL_ENV ?? null,

@@ -168,6 +168,7 @@ export default function SettingsPage() {
     note?: string;
     diagnostics?: {
       present: string[]; lookalike: string[]; keyShapedName: string[];
+      providers?: { groq: boolean; gemini: boolean; openrouter: boolean };
       vercelEnv: string | null; onVercel: boolean; commit: string | null;
     };
   } | null>(null);
@@ -344,8 +345,9 @@ export default function SettingsPage() {
                 An API key appears to have been typed into the <em>name</em> field:{' '}
                 <code>{aiStatus.diagnostics.keyShapedName.join(', ')}</code>.
                 {' '}On Vercel the field labelled &ldquo;Key&rdquo; means the variable&rsquo;s name.
-                {' '}Delete that entry and add one with the name{' '}
-                <code>GROQ_API_KEY</code> and your key as the <em>value</em>.
+                {' '}Delete that entry and add one whose <em>name</em> is{' '}
+                <code>GROQ_API_KEY</code>, <code>GEMINI_API_KEY</code> or{' '}
+                <code>OPENROUTER_API_KEY</code>, with your key as the <em>value</em>.
               </div>
             )}
 
@@ -353,7 +355,9 @@ export default function SettingsPage() {
               <div style={{ marginTop: 8, color: C.dim }}>
                 Similar names the app does not read:{' '}
                 <code style={{ color: C.text }}>{aiStatus.diagnostics.lookalike.join(', ')}</code>.
-                {' '}The name must be exactly <code style={{ color: C.text }}>GROQ_API_KEY</code>.
+                {' '}The name must be exactly <code style={{ color: C.text }}>GROQ_API_KEY</code>,{' '}
+                <code style={{ color: C.text }}>GEMINI_API_KEY</code> or{' '}
+                <code style={{ color: C.text }}>OPENROUTER_API_KEY</code>.
               </div>
             )}
             <div style={{ marginTop: 8, color: C.dim }}>
@@ -380,6 +384,22 @@ export default function SettingsPage() {
                 {aiStatus.model}{aiStatus.keyHint ? ` · key ${aiStatus.keyHint}` : ''}
                 {aiStatus.persisted ? ' · saved locally' : ' · this session only'}
               </div>
+              {aiStatus.diagnostics && (
+                <div style={{ fontFamily: F, fontSize: 12, color: C.dim, marginTop: 2 }}>
+                  Keys this build can see:{' '}
+                  <code style={{ color: C.text }}>
+                    {aiStatus.diagnostics.present.filter(n => /KEY|TOKEN|URL/.test(n)).join(', ') || 'none'}
+                  </code>
+                  {aiStatus.diagnostics.onVercel && (
+                    <> · {aiStatus.diagnostics.vercelEnv ?? 'unknown'} build
+                      {aiStatus.diagnostics.commit ? ` ${aiStatus.diagnostics.commit}` : ''}</>
+                  )}
+                  {!aiStatus.vision && (
+                    <> · nothing here can see the video. Variables are read when the build is
+                       made, so if you have just added one, redeploy</>
+                  )}
+                </div>
+              )}
               <div style={{ fontFamily: F, fontSize: 12, color: C.dim, marginTop: 2 }}>
                 {aiStatus.vision
                   ? `Can see the video · ${aiStatus.vision.model}` +

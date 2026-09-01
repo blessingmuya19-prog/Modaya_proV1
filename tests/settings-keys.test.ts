@@ -140,6 +140,49 @@ describe('what the settings screen is told about sight', () => {
   });
 });
 
+describe('did my Vercel key actually arrive', () => {
+  it('names each provider variable and whether this build has it', async () => {
+    process.env.GROQ_API_KEY = GROQ;
+    const out = await read();
+    expect(out.diagnostics.providers).toEqual({ groq: true, gemini: false, openrouter: false });
+  });
+
+  it('counts GOOGLE_API_KEY as the Google key', async () => {
+    process.env.GOOGLE_API_KEY = GOOGLE;
+    const out = await read();
+    expect(out.diagnostics.providers.gemini).toBe(true);
+  });
+
+  it('lists the variable names, never the values', async () => {
+    process.env.GROQ_API_KEY   = GROQ;
+    process.env.GEMINI_API_KEY = GOOGLE;
+    const out = await read();
+
+    expect(out.diagnostics.present).toContain('GEMINI_API_KEY');
+    const body = JSON.stringify(out);
+    expect(body).not.toContain(GOOGLE);
+    expect(body).not.toContain(GROQ);
+  });
+
+  it('flags a Google key saved under a name the app does not read', async () => {
+    process.env.GROQ_API_KEY = GROQ;
+    process.env.GOOGLE_AI_STUDIO_KEY = GOOGLE;
+    const out = await read();
+    expect(out.diagnostics.lookalike).toContain('GOOGLE_AI_STUDIO_KEY');
+    delete process.env.GOOGLE_AI_STUDIO_KEY;
+  });
+
+  it('flags a key typed into the name field, by shape only', async () => {
+    process.env[GOOGLE] = '';
+    process.env[`${GOOGLE}_X`] = 'v';
+    const out = await read();
+    expect(out.diagnostics.keyShapedName.join(' ')).toMatch(/^AIza… \(/);
+    expect(JSON.stringify(out)).not.toContain(GOOGLE);
+    delete process.env[GOOGLE];
+    delete process.env[`${GOOGLE}_X`];
+  });
+});
+
 describe('a key pasted into the wrong provider', () => {
   it('spots a Groq key offered as a Google one', async () => {
     const { status, body } = await save('gemini', GROQ);
