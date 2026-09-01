@@ -79,11 +79,19 @@ by deterministic code (`src/lib/ai/operations.ts`):
 - **Punch-ins** (push to a tighter framing) and **colour grade** hints.
 - Undo restores the previous timeline state.
 
-### Reference-style editing
-Upload a reference video; the app **measures** its editing style (cut rhythm,
-  grade, push-in frequency, caption presence, beat sync — `styleProfile.ts`)
-and re-cuts your footage to match (`styleTransfer.ts`). This is heuristic
-analysis of real pixels/audio, not a neural style transfer.
+### Reference-style editing & the EditPlan brain
+Drop footage plus an optional reference and Modaya makes the whole creative
+decision as data (`src/lib/studio/editPlan.ts`): it measures the reference
+(`styleProfile.ts`), measures the source's energy/transcript, then chooses the
+strongest **moments** (the best one leads as the **hook**), cuts dead air to the
+reference's pace, adds **punch-ins**, burns in **real captions** (Whisper via a
+free key; silent without one), fits the **target format** automatically
+(9:16 vertical with cover-crop for shorts, 16:9 for long-form re-cuts), and
+inserts silent **B-roll cutaways** from other strong parts of the source while
+the talk track keeps playing. Plain-language refinements ("faster", "more
+punch-ins", "use captions more") regenerate the plan. This is heuristic analysis
+of real pixels/audio, not a neural style transfer, and cutaway footage is drawn
+from the same source today (separate B-roll upload is future work).
 
 ### The clipping engine (the headline feature)
 Turns one long video into several standalone short-form clips. Two stages:
@@ -229,6 +237,8 @@ branch deploys), then **redeploy** — variables are read at build time.
 | `src/app/api/projects/[id]/clips/route.ts` | Clips API: viral detection + Pegasus ranking |
 | `src/components/editor/EditorShell.tsx` | The live editor (timeline, preview, AI chat) |
 | `src/components/studio/Studio.tsx` + `src/app/studio/[id]` | The default simple experience: drop footage/reference → guided pipeline → result/export |
+| `src/lib/studio/editPlan.ts` | The EditPlan brain: hook-first moment selection, 9:16/16:9 format, real captions, punch-ins, B-roll cutaways |
+| `src/lib/studio/refine.ts` | Maps "make it faster / more punch-ins / more captions" onto the StyleProfile and regenerates the plan |
 | `src/lib/studio/pipeline.ts` | Pure Studio spine: ordered stages, progress, grounded reference-match score |
 | `src/lib/db.ts` / `mediaDb.ts` | Server store (ephemeral on Vercel) / browser media |
 
