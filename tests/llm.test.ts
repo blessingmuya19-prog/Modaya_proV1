@@ -163,21 +163,27 @@ describe('operation execution', () => {
     expect(caps.every(c => c.type === 'subtitle')).toBe(true);
   });
 
-  it('moving captions to the bottom removes the ones in the middle', () => {
+  /* Where words sit in the frame is a property of the caption, not of which
+     row of the timeline holds it. Conflating the two is what made "put them
+     at the top" move captions to the text track and change nothing on screen. */
+  it('moves the captions in the frame, not to another track', () => {
     const centred = applyOperations(clips(), [{ op: 'add_captions', position: 'centre', everyS: 10 }], ctx);
-    expect(centred.clips.filter(c => c.trackId === 'text').length).toBeGreaterThan(0);
+    const caps = centred.clips.filter(c => c.id.startsWith('cap-'));
+    expect(caps.every(c => c.textPosition === 'centre')).toBe(true);
+    expect(caps.every(c => c.trackId === 'subs'), 'captions left the subs track').toBe(true);
 
     const moved = applyOperations(centred.clips, [{ op: 'add_captions', position: 'lower', everyS: 10 }], ctx);
-    const leftBehind = moved.clips.filter(c => c.trackId === 'text' && c.id.startsWith('cap-'));
-    expect(leftBehind, 'the centred captions were still on screen').toHaveLength(0);
-    expect(moved.clips.filter(c => c.trackId === 'subs').length).toBe(10);
+    const after = moved.clips.filter(c => c.id.startsWith('cap-'));
+    expect(after).toHaveLength(10);
+    expect(after.every(c => c.textPosition === 'lower')).toBe(true);
   });
 
-  it('and moving them back to the middle clears the bottom set', () => {
-    const lower = applyOperations(clips(), [{ op: 'add_captions', position: 'lower', everyS: 10 }], ctx);
-    const back  = applyOperations(lower.clips, [{ op: 'add_captions', position: 'centre', everyS: 10 }], ctx);
-    expect(back.clips.filter(c => c.trackId === 'subs')).toHaveLength(0);
-    expect(back.clips.filter(c => c.trackId === 'text').length).toBe(10);
+  it('can put captions at the top, which used to be impossible', () => {
+    const out = applyOperations(clips(), [{ op: 'add_captions', position: 'top', everyS: 10 }], ctx);
+    const caps = out.clips.filter(c => c.id.startsWith('cap-'));
+    expect(caps.length).toBe(10);
+    expect(caps.every(c => c.textPosition === 'top')).toBe(true);
+    expect(out.summary).toMatch(/top/i);
   });
 
   it('re-running captions does not pile up duplicates', () => {

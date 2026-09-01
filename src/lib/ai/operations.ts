@@ -8,6 +8,25 @@
  * or dropped rather than corrupting the timeline.
  */
 
+/** Where words sit in the frame. Nothing to do with which track holds them:
+ *  the timeline is a list of tracks, the frame is a picture, and confusing
+ *  the two is why asking for captions at the top used to move them to the
+ *  text track and change nothing on screen. */
+export type TextPosition = 'top' | 'centre' | 'lower';
+
+/** How words look. Deliberately a short list of choices rather than free CSS:
+ *  every font here is one the browser already has, so nothing has to be
+ *  downloaded and captions can never render in a fallback face. */
+export interface TextStyle {
+  font?:       'sans' | 'serif' | 'mono' | 'display' | 'handwritten';
+  size?:       'small' | 'medium' | 'large';
+  /** #rgb or #rrggbb, or one of a few plain colour names. */
+  colour?:     string;
+  background?: 'box' | 'shadow' | 'none';
+  bold?:       boolean;
+  uppercase?:  boolean;
+}
+
 export interface TimelineClip {
   id:      string;
   trackId: string;
@@ -15,13 +34,18 @@ export interface TimelineClip {
   startS:  number;
   endS:    number;
   type:    'video' | 'audio' | 'text' | 'subtitle';
+  /** Text clips only. */
+  textPosition?: TextPosition;
+  textStyle?:    TextStyle;
 }
 
 export type Operation =
   | { op: 'remove_ranges'; ranges: [number, number][] }
   | { op: 'keep_ranges';   ranges: [number, number][] }
   | { op: 'trim_to';       targetS: number }
-  | { op: 'add_captions';  position: 'lower' | 'centre'; everyS: number }
+  | { op: 'add_captions';  position: TextPosition; everyS: number; style?: TextStyle }
+  | { op: 'add_text';      text: string; position: TextPosition; startS: number; endS: number; style?: TextStyle }
+  | { op: 'style_text';    target: 'captions' | 'all'; style: TextStyle }
   | { op: 'punch_in';      rate: number }
   | { op: 'grade';         brightness: number; contrast: number; saturation: number }
   | { op: 'none' };
@@ -42,11 +66,76 @@ export interface EditOutcome {
   applied:     Operation[];
 }
 
+const WHERE_SAID: Record<TextPosition, string> = {
+  top: 'across the top', centre: 'in the middle', lower: 'along the bottom',
+};
+
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const num = (v: unknown, fallback: number): number =>
   typeof v === 'number' && isFinite(v) ? v : fallback;
 
 /* ─────────────── validation ─────────────── */
+
+const POSITIONS: TextPosition[] = ['top', 'centre', 'lower'];
+
+/** Words people actually use for a position, mapped to the three we render. */
+export function parsePosition(raw: unknown, fallback: TextPosition = 'lower'): TextPosition {
+  const v = String(raw ?? '').trim().toLowerCase();
+  if (!v) return fallback;
+  if (POSITIONS.includes(v as TextPosition)) return v as TextPosition;
+  if (/^(top|upper|above|head)/.test(v))            return 'top';
+  if (/(middle|center|centre|mid)/.test(v))         return 'centre';
+  if (/(bottom|lower|below|under|subtitle)/.test(v))return 'lower';
+  return fallback;
+}
+
+const COLOUR_NAMES: Record<string, string> = {
+  white:'#ffffff', black:'#000000', yellow:'#ffd400', red:'#ff3b30', green:'#34c759',
+  blue:'#0a84ff', orange:'#ff9f0a', pink:'#ff2d55', purple:'#bf5af2', grey:'#8e8e93',
+  gray:'#8e8e93', cyan:'#32ade6',
+};
+
+function parseColour(raw: unknown): string | undefined {
+  const v = String(raw ?? '').trim().toLowerCase();
+  if (!v) return undefined;
+  if (/^#[0-9a-f]{3}$/.test(v)) return '#' + v.slice(1).split('').map(c => c + c).join('');
+  if (/^#[0-9a-f]{6}$/.test(v)) return v;
+  return COLOUR_NAMES[v];
+}
+
+/** Keep only style choices we can actually render; drop the rest silently. */
+export function parseStyle(raw: unknown): TextStyle | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const o = raw as Record<string, unknown>;
+  const out: TextStyle = {};
+
+  const font = String(o.font ?? '').trim().toLowerCase();
+  if (font) {
+    if (/(serif)$|^serif|georgia|times/.test(font) && !/sans/.test(font)) out.font = 'serif';
+    else if (/mono|courier|code|typewriter/.test(font))                   out.font = 'mono';
+    else if (/display|impact|bold ?title|headline|meme/.test(font))       out.font = 'display';
+    else if (/hand|script|cursive|marker|brush/.test(font))               out.font = 'handwritten';
+    else if (/sans|inter|helvetica|arial|default/.test(font))             out.font = 'sans';
+  }
+
+  const size = String(o.size ?? '').trim().toLowerCase();
+  if (/small|tiny|little/.test(size))       out.size = 'small';
+  else if (/large|big|huge|xl/.test(size))  out.size = 'large';
+  else if (/medium|normal|regular/.test(size)) out.size = 'medium';
+
+  const colour = parseColour(o.colour ?? o.color);
+  if (colour) out.colour = colour;
+
+  const bg = String(o.background ?? '').trim().toLowerCase();
+  if (/box|band|block|plate/.test(bg))        out.background = 'box';
+  else if (/shadow|outline|glow/.test(bg))    out.background = 'shadow';
+  else if (/none|clear|transparent|off/.test(bg)) out.background = 'none';
+
+  if (typeof o.bold === 'boolean')      out.bold = o.bold;
+  if (typeof o.uppercase === 'boolean') out.uppercase = o.uppercase;
+
+  return Object.keys(out).length ? out : undefined;
+}
 
 /**
  * Coerce whatever the model returned into operations we are willing to run.
@@ -76,10 +165,32 @@ export function validateOperations(raw: unknown, ctx: OperationContext): Operati
       case 'add_captions':
         out.push({
           op: 'add_captions',
-          position: o.position === 'centre' ? 'centre' : 'lower',
+          position: parsePosition(o.position, 'lower'),
           everyS:   clamp(num(o.everyS, 3), 1, 15),
+          style:    parseStyle(o.style),
         });
         break;
+      case 'add_text': {
+        // A text overlay is only as good as its words: no words, no operation.
+        const text = String(o.text ?? '').trim().slice(0, 200);
+        if (!text) break;
+        const startS = clamp(num(o.startS, 0), 0, ctx.durationS);
+        const endS   = clamp(num(o.endS, ctx.durationS), 0, ctx.durationS);
+        if (endS - startS < 0.1) break;
+        out.push({
+          op: 'add_text', text,
+          position: parsePosition(o.position, 'centre'),
+          startS, endS,
+          style: parseStyle(o.style),
+        });
+        break;
+      }
+      case 'style_text': {
+        const style = parseStyle(o.style ?? o);
+        if (!style) break;
+        out.push({ op: 'style_text', target: o.target === 'all' ? 'all' : 'captions', style });
+        break;
+      }
       case 'punch_in':
         out.push({ op: 'punch_in', rate: clamp(num(o.rate, 0.3), 0, 1) });
         break;
@@ -206,9 +317,12 @@ export function applyOperations(
         break;
       }
       case 'add_captions': {
-        const lower = op.position === 'lower';
-        const track = lower ? 'subs' : 'text';
-        const kind: TimelineClip['type'] = lower ? 'subtitle' : 'text';
+        /* The track is bookkeeping; the position is what you see. Captions
+           live on the subs track wherever they sit in the frame, because
+           that is where captions belong on a timeline. */
+        const track = 'subs';
+        const kind: TimelineClip['type'] = 'subtitle';
+        const where = op.position;
         /* Clear the previous captions from BOTH caption tracks, not just the
            one being written. Asking for captions lower down used to leave the
            old middle-of-the-frame set behind, so the screen still showed
@@ -235,11 +349,17 @@ export function applyOperations(
               startS: Number(startS.toFixed(3)),
               endS:   Number(endS.toFixed(3)),
               type:   kind,
+              textPosition: where,
+              ...(op.style ? { textStyle: op.style } : {}),
             });
             n++;
             if (n >= 800) break;
           }
-          notes.push(`${n} captions written from the transcript, ${lower ? 'along the bottom' : 'centred'}`);
+          notes.push(n > 0
+            ? `${n} captions written from the transcript, ${WHERE_SAID[where]}`
+            : video.length === 0
+              ? 'no clips on the timeline to caption yet'
+              : 'the transcript does not overlap any clip left on the timeline');
         } else {
           for (const v of video) {
             for (let t = v.startS; t < v.endS - 0.4; t += op.everyS) {
@@ -248,15 +368,54 @@ export function applyOperations(
                 startS: Number(t.toFixed(3)),
                 endS:   Number(Math.min(v.endS, t + op.everyS * 0.9).toFixed(3)),
                 type:   kind,
+                textPosition: where,
+                ...(op.style ? { textStyle: op.style } : {}),
               });
               n++;
               if (n > 400) break;
             }
             if (n > 400) break;
           }
-          notes.push(`${n} caption slots added, ${lower ? 'along the bottom' : 'centred'}`);
+          notes.push(`${n} caption slots added, ${WHERE_SAID[where]}`);
         }
         applied.push(op);
+        break;
+      }
+      case 'add_text': {
+        /* Words the person supplied, on screen for a span of their choosing.
+           Separate from captions: captions come from the transcript and get
+           rewritten every time they are regenerated, whereas a name or a
+           title is yours and must survive that. */
+        const id = `txt-${working.filter(c => c.id.startsWith('txt-')).length}`;
+        working.push({
+          id, trackId: 'text', label: op.text,
+          startS: Number(op.startS.toFixed(3)),
+          endS:   Number(op.endS.toFixed(3)),
+          type:   'text',
+          textPosition: op.position,
+          ...(op.style ? { textStyle: op.style } : {}),
+        });
+        applied.push(op);
+        affected.add(id);
+        notes.push(`"${op.text.slice(0, 40)}" ${WHERE_SAID[op.position]} from ${fmt(op.startS)} to ${fmt(op.endS)}`);
+        break;
+      }
+      case 'style_text': {
+        /* Restyle what is already there, rather than rewriting the words —
+           so "same captions, different font" does not re-run recognition. */
+        let touched = 0;
+        working = working.map(c => {
+          const isText = c.type === 'text' || c.type === 'subtitle';
+          if (!isText) return c;
+          if (op.target === 'captions' && !c.id.startsWith('cap-')) return c;
+          touched++;
+          affected.add(c.id);
+          return { ...c, textStyle: { ...(c.textStyle ?? {}), ...op.style } };
+        });
+        applied.push(op);
+        notes.push(touched > 0
+          ? `restyled ${touched} text ${touched === 1 ? 'clip' : 'clips'}`
+          : 'no text on the timeline to restyle');
         break;
       }
       case 'punch_in':

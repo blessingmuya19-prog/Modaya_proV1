@@ -11,26 +11,61 @@ import { v4 as uuid } from 'uuid';
 import { describeLoudness } from '@/lib/ai/highlights';
 import { transcriptForPrompt, fillerRanges, sanitiseSegments, Transcript } from '@/lib/ai/transcript';
 import { chatDetailed, explainFailure, extractJson, detectProvider, FailureReason } from '@/lib/ai/llm';
-import { validateOperations, applyOperations, Operation, TimelineClip } from '@/lib/ai/operations';
+import { validateOperations, applyOperations, parseStyle, Operation, TimelineClip } from '@/lib/ai/operations';
 
 // ── Intent detection ──────────────────────────────────────────────────────────
 
 type Intent =
-  | 'tighten' | 'clean' | 'moments' | 'captions'
+  | 'tighten' | 'clean' | 'moments' | 'captions' | 'text_overlay' | 'restyle'
   | 'vertical' | 'highlights' | 'cut_silence' | 'unknown';
 
 function detectIntent(text: string): Intent {
   const p = text.toLowerCase();
   if (p.match(/pause|dead.?air|silence|gap|tighten|pace/))         return 'cut_silence';
   if (p.match(/filler|um+|uh+|stutter|repeat|clean/))              return 'clean';
-  if (p.match(/highlight|best|moment|standout|top|clip/))          return 'moments';
+  /* Captions before highlights: "captions at the top" is about captions, and
+     a bare "top" used to be read as "top moment" and pick highlights. */
   if (p.match(/caption|subtitle|transcri/))                        return 'captions';
+  if (p.match(/\bfont\b|typeface|\bstyle\b|colour|color|bigger|smaller|bold|uppercase/))
+                                                                   return 'restyle';
+  if (p.match(/\btext\b|\btitle\b|\bname\b|overlay|watermark|lower.?third/))
+                                                                   return 'text_overlay';
+  if (p.match(/highlight|best moment|standout|top (?:moment|part|bit|clip|section)|\bmoments?\b/))
+                                                                   return 'moments';
   if (p.match(/vertical|9.?:?.?16|portrait|tiktok|reels|shorts/)) return 'vertical';
   if (p.match(/tighten|shorter|concise|trim|cut/))                 return 'tighten';
   return 'unknown';
 }
 
+/** The words someone wants on screen, taken from what they actually wrote —
+ *  never invented. Returns null when the request does not contain them. */
+export function wordsForOverlay(message: string): string | null {
+  const quoted = message.match(/["“'']([^"”'']{2,120})["”'']/);
+  if (quoted) return quoted[1].trim();
+
+  const patterns = [
+    /\bmy name is\s+(.{2,80})$/i,
+    /\bname[:\s]+(?:is\s+)?(.{2,80})$/i,
+    /\bthat says\s+(.{2,80})$/i,
+    /\bsaying\s+(.{2,80})$/i,
+    /\btext (?:on (?:the )?screen|overlay)[,:]?\s+(.{2,80})$/i,
+    /\b(?:title|caption|text)[:]\s*(.{2,80})$/i,
+  ];
+  for (const re of patterns) {
+    const m = message.match(re);
+    if (m) {
+      const words = m[1].trim().replace(/[.]+$/, '');
+      if (words.length >= 2) return words;
+    }
+  }
+  return null;
+}
+
 // ── Reply & edit generation ───────────────────────────────────────────────────
+
+const WHERE_WORDS: Record<'top'|'centre'|'lower', string> = {
+  top: 'across the top', centre: 'in the middle', lower: 'along the bottom',
+};
 
 function fmtS(s: number) {
   const m = Math.floor(s / 60);
@@ -58,6 +93,9 @@ function applyEdit(
   ctx: {
     silences: [number, number][]; energy: number[]; modelNote?: string;
     transcript?: Transcript | null;
+    /** What the person actually typed — needed to read a position, a font or
+     *  the words they want on screen without an AI model to interpret them. */
+    message?: string;
   },
 ): EditResult {
 
@@ -124,13 +162,19 @@ function applyEdit(
     }
 
     case 'captions': {
-      const out = run([{ op: 'add_captions', position: 'lower', everyS: 3 }]);
-      const count = out.clips.filter(c => c.type === 'text').length;
+      const msg   = ctx.message ?? '';
+      const where: 'top'|'centre'|'lower' =
+          /\b(top|upper|above)\b/i.test(msg)      ? 'top'
+        : /\b(middle|centre|center)\b/i.test(msg) ? 'centre'
+        : 'lower';
+      const out = run([{ op: 'add_captions', position: where, everyS: 3 }]);
+      const count = out.clips.filter(c => c.id.startsWith('cap-')).length;
       const spoken = ctx.transcript?.segments?.length ?? 0;
 
       return {
         reply: spoken > 0
-          ? `Added ${count} captions with the words from the transcript, timed to when they were said.`
+          ? `Added ${count} captions with the words from the transcript, ${WHERE_WORDS[where]}, ` +
+            'timed to when they were said.'
           : `Added ${count} empty caption slots across the timeline, spaced every 3 seconds. ` +
             "This project hasn't been transcribed yet, so the text is blank and ready for you to fill in.",
         summary:     spoken > 0 ? `${count} captions written` : `${count} caption slots added`,
@@ -158,6 +202,59 @@ function applyEdit(
         affectedIds: out.affectedIds,
         newClips:    out.clips as Clip[],
         intent,
+      };
+    }
+
+    case 'text_overlay': {
+      const words = wordsForOverlay(ctx.message ?? '');
+      if (!words) {
+        return nothing(
+          'I can put text on screen — tell me the exact words and I\'ll place them. ' +
+          'For example: put text on screen "Blessing Muya".');
+      }
+      const where = /\b(top|upper|above)\b/i.test(ctx.message ?? '') ? 'top'
+                  : /\b(bottom|lower|below)\b/i.test(ctx.message ?? '') ? 'lower'
+                  : 'centre';
+      const out = run([{ op: 'add_text', text: words, position: where, startS: 0, endS: durationS }]);
+      return {
+        reply: `Put "${words}" on screen ${WHERE_WORDS[where]}, for the whole clip. ` +
+               'Say when it should appear, or ask for a different font, size or colour.',
+        summary: out.summary, savedS: 0, affectedIds: out.affectedIds,
+        newClips: out.clips as Clip[], intent,
+      };
+    }
+
+    case 'restyle': {
+      const msg   = ctx.message ?? '';
+      const style = parseStyle({
+        font:       msg.match(/\b(serif|mono|monospace|typewriter|display|impact|handwritten|script|cursive|sans)\b/i)?.[1],
+        size:       msg.match(/\b(small|smaller|tiny|large|larger|big|bigger|huge|medium)\b/i)?.[1]
+                      ?.replace(/er$/, '').replace(/tiny/, 'small').replace(/huge/, 'large'),
+        colour:     msg.match(/\b(white|black|yellow|red|green|blue|orange|pink|purple|grey|gray|cyan|#[0-9a-f]{3,6})\b/i)?.[1],
+        background: msg.match(/\b(box|band|shadow|outline|no background|none)\b/i)?.[1],
+        ...(/\bbold\b/i.test(msg)      ? { bold: true }      : {}),
+        ...(/\buppercase|caps\b/i.test(msg) ? { uppercase: true } : {}),
+      });
+
+      if (!style) {
+        return nothing(
+          'I can change the font, size, colour and background of the text. ' +
+          'Fonts are sans, serif, mono, display or handwritten — which would you like?');
+      }
+      const out = run([{ op: 'style_text', target: 'captions', style }]);
+      const bits = [
+        style.font   && `${style.font} font`,
+        style.size   && `${style.size} size`,
+        style.colour && `in ${style.colour}`,
+        style.background && `${style.background} background`,
+        style.bold && 'bold', style.uppercase && 'uppercase',
+      ].filter(Boolean).join(', ');
+      return {
+        reply: out.summary.includes('no text')
+          ? "There's no text on the timeline yet to restyle — add captions or a title first."
+          : `Restyled the captions: ${bits}.`,
+        summary: out.summary, savedS: 0, affectedIds: out.affectedIds,
+        newClips: out.clips as Clip[], intent,
       };
     }
 
@@ -193,10 +290,29 @@ Available operations:
   {"op":"remove_ranges","ranges":[[startS,endS], ...]}   remove these spans
   {"op":"keep_ranges","ranges":[[startS,endS], ...]}     keep only these spans
   {"op":"trim_to","targetS":number}                      shorten to a length
-  {"op":"add_captions","position":"lower"|"centre","everyS":number}
+  {"op":"add_captions","position":"top"|"centre"|"lower","everyS":number,"style":{...}}
+  {"op":"add_text","text":"the words","position":"top"|"centre"|"lower",
+   "startS":number,"endS":number,"style":{...}}     put the user's own words on screen
+  {"op":"style_text","target":"captions"|"all","style":{...}}   restyle existing text
   {"op":"punch_in","rate":0..1}                          push in on some shots
   {"op":"grade","brightness":n,"contrast":n,"saturation":n}   around 1.0
   {"op":"none"}                                          nothing to change
+
+Text style — the "style" object, every field optional:
+  font: sans | serif | mono | display | handwritten
+  size: small | medium | large
+  colour: a hex value or a plain colour name
+  background: box | shadow | none
+  bold: true|false, uppercase: true|false
+- position is where the words sit in the FRAME. It has nothing to do with
+  which track holds them, so "captions at the top" is position:"top" — never
+  a different track and never a refusal.
+- add_text is for words the user gives you: a name, a title, a label. Use
+  their exact wording. Default to the whole clip unless they say when.
+- style_text changes how existing text looks without rewriting it, so
+  "same captions, different font" does not need recognition to run again.
+- If someone asks for a font you cannot name above, pick the closest of the
+  five and say which one you chose.
 
 Rules:
 - Use the SILENT SPANS provided when the user asks to cut pauses or dead air.
@@ -226,6 +342,8 @@ What you cannot do — say so plainly instead of pretending:
   visually, only what was said.
 - Without a TRANSCRIPT you cannot quote anyone, write real captions, or remove
   filler words. Say the video has not been transcribed yet.
+- You CAN put text on screen anywhere in the frame, in five fonts, any colour,
+  three sizes. Never say you cannot add text or cannot change the font.
 - Do not infer content from the file name. A title is not evidence.`;
 
 interface Plan { reply: string; operations: unknown }
@@ -405,7 +523,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       : "I'm running without an AI model, so I only understand a few set phrases: cut the dead air, " +
         'pick the highlights, or add captions. No provider key reached this deployment ' +
         `(${buildTag()}) — if you have just added one, it only takes effect on a build made afterwards.`;
-    edit = applyEdit(intent, clips, durationS, { silences, energy, modelNote, transcript });
+    edit = applyEdit(intent, clips, durationS, { silences, energy, modelNote, transcript, message });
   }
 
   const now    = new Date().toISOString();

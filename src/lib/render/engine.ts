@@ -29,6 +29,34 @@ type StateListener = (playing: boolean) => void;
 
 const SEEK_EPSILON = 0.04;   // ~1 frame at 25fps
 
+/* Fonts the browser already has. Nothing is fetched, so a caption can never
+   render in a substitute face while a webfont loads — or fail to change at
+   all because the requested font was never available. */
+const FONT_STACKS: Record<string, string> = {
+  sans:        "'Inter Tight', Inter, system-ui, -apple-system, sans-serif",
+  serif:       "Georgia, 'Times New Roman', Times, serif",
+  mono:        "ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
+  display:     "Impact, Haettenschweiler, 'Arial Black', sans-serif",
+  handwritten: "'Segoe Script', 'Bradley Hand', 'Brush Script MT', cursive",
+};
+
+/** Break a line at word boundaries so long captions stay inside the frame. */
+export function wrapText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const lines: string[] = [];
+  let line = words[0];
+
+  for (const w of words.slice(1)) {
+    const next = `${line} ${w}`;
+    if (ctx.measureText(next).width <= maxW) line = next;
+    else { lines.push(line); line = w; }
+    if (lines.length >= 3) break;              // never more than four lines
+  }
+  lines.push(line);
+  return lines;
+}
+
 export class PreviewEngine {
   private canvas:  HTMLCanvasElement | null = null;
   private ctx:     CanvasRenderingContext2D | null = null;
@@ -329,32 +357,60 @@ export class PreviewEngine {
   }
 
   private drawText(ctx: CanvasRenderingContext2D, clip: SequenceClip, W: number, H: number) {
-    const text = clip.label ?? '';
+    const style = clip.textStyle ?? {};
+    const raw   = clip.label ?? '';
+    const text  = style.uppercase ? raw.toUpperCase() : raw;
     if (!text) return;
 
-    /* Where the caption sits. 'lower' is carried two ways: as the clip kind
-       and as the track it lives on ('subs'). Reading only the kind is what
-       put captions in the middle of the frame however often they were asked
-       for at the bottom — the operation that writes them tracks position by
-       track, and projects captioned before this fix are stored that way. */
-    const lower = clip.kind === 'subtitle' || clip.trackId === 'subs';
-    const size = Math.round(H * (lower ? 0.045 : 0.06));
-    ctx.font         = `700 ${size}px 'Inter Tight', Inter, system-ui, sans-serif`;
+    /* Where in the frame. Older projects have no textPosition — they encoded
+       it as the clip kind and the track — so fall back to reading those. */
+    const where = clip.textPosition
+      ?? (clip.kind === 'subtitle' || clip.trackId === 'subs' ? 'lower' : 'centre');
+
+    const scale = style.size === 'small' ? 0.034 : style.size === 'large' ? 0.075 : 0.048;
+    const size  = Math.round(H * scale);
+    const weight = style.bold === false ? 400 : 700;
+
+    ctx.font         = `${weight} ${size}px ${FONT_STACKS[style.font ?? 'sans']}`;
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'alphabetic';
     ctx.globalAlpha  = clip.effects.opacity;
 
-    const y = lower ? H - Math.round(H * 0.08) : Math.round(H * 0.5);
-    const m = ctx.measureText(text);
+    /* Long lines are wrapped rather than run off both edges of the frame. */
+    const maxW  = W * 0.86;
+    const lines = wrapText(ctx, text, maxW);
+    const lineH = Math.round(size * 1.22);
+    const block = lineH * lines.length;
+
+    const margin = Math.round(H * 0.08);
+    const firstBaseline =
+        where === 'top'   ? margin + size
+      : where === 'lower' ? H - margin - block + size
+      :                     Math.round(H / 2 - block / 2) + size;
+
+    const bg   = style.background ?? 'box';
     const padX = size * 0.5, padY = size * 0.32;
 
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(W / 2 - m.width / 2 - padX, y - size - padY * 0.4,
-                 m.width + padX * 2, size + padY * 1.4);
+    if (bg === 'box') {
+      const widest = Math.max(...lines.map(l => ctx.measureText(l).width));
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(W / 2 - widest / 2 - padX, firstBaseline - size - padY * 0.4,
+                   widest + padX * 2, block + padY * 1.4 - (lineH - size));
+    }
 
-    ctx.fillStyle = '#fff';
-    ctx.fillText(text, W / 2, y);
-    ctx.globalAlpha = 1;
+    if (bg === 'shadow') {
+      ctx.shadowColor   = 'rgba(0,0,0,0.85)';
+      ctx.shadowBlur    = Math.round(size * 0.35);
+      ctx.shadowOffsetY = Math.round(size * 0.06);
+    }
+
+    ctx.fillStyle = style.colour ?? '#fff';
+    lines.forEach((line, i) => ctx.fillText(line, W / 2, firstBaseline + i * lineH));
+
+    ctx.shadowColor   = 'transparent';
+    ctx.shadowBlur    = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.globalAlpha   = 1;
   }
 
   /* ─────────── export hook ─────────── */

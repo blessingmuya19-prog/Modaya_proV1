@@ -10,7 +10,7 @@ interface DrawCall { x: number; y: number; w: number; h: number }
 
 let draws: DrawCall[] = [];
 let texts: string[] = [];
-let textDraws: { t: string; x: number; y: number }[] = [];
+let textDraws: { t: string; x: number; y: number; font?: string }[] = [];
 let filters: string[] = [];
 let videoTime = 0;
 let paused = true;
@@ -24,7 +24,10 @@ function fakeCtx() {
     save() {}, restore() {},
     fillRect() {},
     measureText: () => ({ width: 100 }),
-    fillText: (t: string, x: number, y: number) => { texts.push(t); textDraws.push({ t, x, y }); },
+    fillText: (t: string, x: number, y: number) => {
+      texts.push(t);
+      textDraws.push({ t, x, y, font: (globalThis as never as { __lastFont: string }).__lastFont });
+    },
     drawImage: (_img: unknown, x: number, y: number, w: number, h: number) => {
       draws.push({ x, y, w, h });
       filters.push((globalThis as never as { __lastFilter: string }).__lastFilter);
@@ -40,6 +43,7 @@ function setup(clips: Parameters<typeof buildSequence>[0], durationS = 100,
   const proxy = new Proxy(ctx, {
     set(t, k, v) {
       if (k === 'filter') (globalThis as never as { __lastFilter: string }).__lastFilter = v;
+      if (k === 'font')   (globalThis as never as { __lastFont: string }).__lastFont = v;
       return Reflect.set(t, k, v);
     },
   });
@@ -276,6 +280,68 @@ describe('caption position', () => {
       { id:'v', trackId:'video', label:'V', startS:0, endS:100, type:'video' as const },
       { id:'cap-0', trackId:'text', label:'the spoken words', startS:1, endS:5, type:'text' as const },
     ], 2);
-    expect(y).toBeCloseTo(H * 0.5, 0);
+    // the block of text straddles the middle of the frame
+    expect(y).toBeGreaterThan(H * 0.45);
+    expect(y).toBeLessThan(H * 0.6);
+  });
+});
+
+
+/**
+ * The frame position and the look of the words, as actually drawn.
+ */
+describe('text position and style on the canvas', () => {
+  const draw = (clip: Record<string, unknown>, t = 2) => {
+    const { engine, canvas } = setup([
+      { id:'v', trackId:'video', label:'V', startS:0, endS:100, type:'video' as const },
+      { id:'x', trackId:'text', label:'Blessing Muya', startS:1, endS:5, type:'text' as const, ...clip },
+    ] as never, 100);
+    textDraws = [];
+    engine.seek(t);
+    return { hit: textDraws.find(d => /blessing/i.test(d.t)), H: canvas.height, W: canvas.width };
+  };
+
+  it('draws across the top when asked for the top', () => {
+    const { hit, H } = draw({ textPosition: 'top' });
+    expect(hit, 'nothing was drawn').toBeTruthy();
+    expect(hit!.y).toBeLessThan(H * 0.3);
+  });
+
+  it('draws along the bottom when asked for the bottom', () => {
+    const { hit, H } = draw({ textPosition: 'lower' });
+    expect(hit!.y).toBeGreaterThan(H * 0.8);
+  });
+
+  it('draws in the middle when asked for the middle', () => {
+    const { hit, H } = draw({ textPosition: 'centre' });
+    expect(hit!.y).toBeGreaterThan(H * 0.45);
+    expect(hit!.y).toBeLessThan(H * 0.6);
+  });
+
+  it('uses the font that was asked for', () => {
+    expect(draw({ textStyle: { font: 'serif' } }).hit!.font).toMatch(/Georgia|serif/i);
+    expect(draw({ textStyle: { font: 'mono' } }).hit!.font).toMatch(/mono|Menlo|Consolas/i);
+    expect(draw({ textStyle: { font: 'display' } }).hit!.font).toMatch(/Impact|Arial Black/i);
+    expect(draw({ textStyle: { font: 'handwritten' } }).hit!.font).toMatch(/Script|Hand|cursive/i);
+  });
+
+  it('sizes the text as asked', () => {
+    const px = (f?: string) => parseFloat((f ?? '').match(/(\d+(?:\.\d+)?)px/)?.[1] ?? '0');
+    const small  = px(draw({ textStyle: { size: 'small'  } }).hit!.font);
+    const medium = px(draw({ textStyle: { size: 'medium' } }).hit!.font);
+    const large  = px(draw({ textStyle: { size: 'large'  } }).hit!.font);
+    expect(small).toBeGreaterThan(0);
+    expect(medium).toBeGreaterThan(small);
+    expect(large).toBeGreaterThan(medium);
+  });
+
+  it('puts the words in upper case only when asked', () => {
+    expect(draw({ textStyle: { uppercase: true } }).hit!.t).toBe('BLESSING MUYA');
+    expect(draw({}).hit!.t).toBe('Blessing Muya');
+  });
+
+  it('still reads the old track-and-kind rule when a clip has no position', () => {
+    const { hit, H } = draw({ trackId: 'subs', type: 'subtitle' });
+    expect(hit!.y, 'a caption from before the fix moved').toBeGreaterThan(H * 0.8);
   });
 });
