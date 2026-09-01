@@ -2107,7 +2107,14 @@ export function EditorShell({
         </FadeUp>
       </div>
 
-      <ExportModal open={expOpen} onClose={()=>setExpOpen(false)} />
+      <ExportModal
+        open={expOpen}
+        onClose={() => setExpOpen(false)}
+        sequence={sequence}
+        sourceUrl={videoUrl}
+        sourceId={projectId || 'main'}
+        projectName={projectName}
+      />
       <DebugHud projectId={projectId} />
     </div>
   );

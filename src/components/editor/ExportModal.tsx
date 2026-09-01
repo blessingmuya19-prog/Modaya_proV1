@@ -1,6 +1,10 @@
 'use client';
-import React, { useState, useEffect, useRef } from 'react';
-import { Download, CheckCircle, X, ChevronDown } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Download, CheckCircle, X, ChevronDown, AlertTriangle } from 'lucide-react';
+import {
+  renderToFile, downloadBlob, describeBytes, exportSupported,
+} from '@/lib/render/exporter';
+import type { Sequence } from '@/lib/render/sequence';
 
 /* ── design tokens (mirrors EditorShell) ── */
 const C = {
@@ -14,52 +18,31 @@ const F = "'Inter Tight', Inter, system-ui, sans-serif";
 
 /* ── Export options ── */
 type Format   = 'MP4' | 'MOV' | 'WebM';
-type Res      = '4K' | '1080p' | '720p' | '480p';
-type Ratio    = '16:9' | '9:16' | '1:1' | '4:5';
-type Quality  = 'max' | 'high' | 'balanced' | 'small';
+type Res      = '1080p' | '720p' | '480p';
+type Quality  = 'high' | 'balanced' | 'small';
 
-interface Preset {
-  format:   Format;
-  res:      Res;
-  ratio:    Ratio;
-  quality:  Quality;
-  fps:      number;
-  captions: boolean;
-  desc:     string;
-}
-
-
-
-const QUALITY_INFO: Record<Quality, { label: string; bitrate: string; note: string }> = {
-  max:      { label: 'Maximum',  bitrate: '~50 Mbps', note: 'Largest file, best for archiving' },
-  high:     { label: 'High',     bitrate: '~16 Mbps', note: 'Recommended for most platforms'   },
-  balanced: { label: 'Balanced', bitrate: '~8 Mbps',  note: 'Good quality, smaller file'       },
-  small:    { label: 'Small',    bitrate: '~4 Mbps',  note: 'Smallest file, some quality loss' },
+const QUALITY_INFO: Record<Quality, { label: string; note: string; videoBits: number }> = {
+  high:     { label: 'High',     note: 'Recommended for posting',        videoBits: 12_000_000 },
+  balanced: { label: 'Balanced', note: 'Good quality, smaller file',     videoBits: 7_000_000  },
+  small:    { label: 'Small',    note: 'Smallest file, some softness',   videoBits: 3_500_000  },
 };
-
-const RES_LABEL: Record<Res, string> = { '4K':'3840 × 2160', '1080p':'1920 × 1080', '720p':'1280 × 720', '480p':'854 × 480' };
-const FILE_SIZE: Record<Quality, Record<Res, string>> = {
-  max:      { '4K':'~1.8 GB', '1080p':'~820 MB', '720p':'~440 MB', '480p':'~240 MB' },
-  high:     { '4K':'~650 MB', '1080p':'~260 MB', '720p':'~140 MB', '480p':'~75 MB'  },
-  balanced: { '4K':'~320 MB', '1080p':'~130 MB', '720p':'~70 MB',  '480p':'~38 MB'  },
-  small:    { '4K':'~160 MB', '1080p':'~64 MB',  '720p':'~34 MB',  '480p':'~18 MB'  },
-};
+/** Longest-edge pixel target for each resolution choice. */
+const RES_LONG_EDGE: Record<Res, number> = { '1080p': 1920, '720p': 1280, '480p': 854 };
 
 type ExportState = 'configure' | 'rendering' | 'done';
 
 const RENDER_STEPS = [
-  'Analysing clip boundaries',
-  'Applying colour grade',
-  'Burning in captions',
+  'Compositing cuts, text and grade',
   'Encoding video stream',
-  'Muxing audio',
-  'Finalising container',
+  'Capturing source audio',
+  'Muxing audio + video',
+  'Finalising file',
 ];
 
 /* ── sub-components ── */
 
 function Divider() {
-  return <div style={{ height: 1, background: C.b2, margin: '20px 0' }} />;
+  return <div style={{ height: 1, background: C.b2, margin: '18px 0' }} />;
 }
 
 function Label({ children }: { children: React.ReactNode }) {
@@ -86,18 +69,17 @@ function OptBtn({ active, onClick, children }: { active: boolean; onClick: () =>
 }
 
 function FormatSelect({ value, onChange }: { value: Format; onChange: (f: Format) => void }) {
-  const formats: Format[] = ['MP4', 'MOV', 'WebM'];
+  const formats: Format[] = ['MP4', 'WebM', 'MOV'];
   const [open, setOpen] = React.useState(false);
 
   const FORMAT_DESC: Record<Format, string> = {
-    MP4:  'Most compatible · H.264',
-    MOV:  'Apple ProRes · macOS',
-    WebM: 'Web-optimised · VP9',
+    MP4:  'Most compatible · H.264 (browser records MP4 where supported)',
+    WebM: 'VP9/Opus · works everywhere recording does',
+    MOV:  'QuickTime · exported as MP4 here',
   };
 
   return (
     <div style={{ position: 'relative' }}>
-      {/* Trigger */}
       <button
         onClick={() => setOpen(o => !o)}
         style={{
@@ -113,32 +95,23 @@ function FormatSelect({ value, onChange }: { value: Format; onChange: (f: Format
           <span style={{
             fontFamily: F, fontSize: 10, fontWeight: 600, letterSpacing: '0.04em',
             padding: '2px 7px', borderRadius: 4,
-            background: C.accent + '18', border: `1px solid ${C.accent}33`,
-            color: C.accent,
+            background: C.accent + '18', border: `1px solid ${C.accent}33`, color: C.accent,
           }}>{value}</span>
           <span style={{ fontFamily: F, fontSize: 12, fontWeight: 400, color: C.muted }}>
             {FORMAT_DESC[value]}
           </span>
         </span>
-        <ChevronDown
-          size={13} color={C.muted}
-          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 180ms', flexShrink: 0 }}
-        />
+        <ChevronDown size={13} color={C.muted}
+          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 180ms', flexShrink: 0 }} />
       </button>
 
-      {/* Dropdown list */}
       {open && (
         <>
-          {/* Click-away backdrop */}
-          <div
-            onClick={() => setOpen(false)}
-            style={{ position: 'fixed', inset: 0, zIndex: 10 }}
-          />
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 10 }} />
           <div style={{
             position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20,
             background: C.s2, border: `1px solid ${C.accent + '44'}`,
-            borderTop: 'none', borderRadius: '0 0 8px 8px',
-            overflow: 'hidden',
+            borderTop: 'none', borderRadius: '0 0 8px 8px', overflow: 'hidden',
             boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
           }}>
             {formats.map((f, i) => (
@@ -146,13 +119,10 @@ function FormatSelect({ value, onChange }: { value: Format; onChange: (f: Format
                 key={f}
                 onClick={() => { onChange(f); setOpen(false); }}
                 style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '10px 12px',
+                  width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
                   background: f === value ? C.accent + '10' : 'transparent',
-                  border: 'none',
-                  borderTop: i > 0 ? `1px solid ${C.b2}` : 'none',
-                  fontFamily: F, cursor: 'pointer', textAlign: 'left',
-                  transition: 'background 100ms',
+                  border: 'none', borderTop: i > 0 ? `1px solid ${C.b2}` : 'none',
+                  fontFamily: F, cursor: 'pointer', textAlign: 'left', transition: 'background 100ms',
                 }}
                 onMouseEnter={e => { if (f !== value) e.currentTarget.style.background = C.s3; }}
                 onMouseLeave={e => { if (f !== value) e.currentTarget.style.background = 'transparent'; }}
@@ -164,13 +134,11 @@ function FormatSelect({ value, onChange }: { value: Format; onChange: (f: Format
                   border: `1px solid ${f === value ? C.accent + '44' : C.b4}`,
                   color: f === value ? C.accent : C.muted,
                 }}>{f}</span>
-                <span style={{ fontFamily: F, fontSize: 12, fontWeight: 400,
-                  color: f === value ? C.text : C.sec }}>
+                <span style={{ fontFamily: F, fontSize: 12, fontWeight: 400, color: f === value ? C.text : C.sec }}>
                   {FORMAT_DESC[f]}
                 </span>
                 {f === value && (
-                  <span style={{ marginLeft: 'auto', fontFamily: F, fontSize: 10,
-                    fontWeight: 600, color: C.accent }}>✓</span>
+                  <span style={{ marginLeft: 'auto', fontFamily: F, fontSize: 10, fontWeight: 600, color: C.accent }}>✓</span>
                 )}
               </button>
             ))}
@@ -181,120 +149,116 @@ function FormatSelect({ value, onChange }: { value: Format; onChange: (f: Format
   );
 }
 
-function RenderingScreen({ resolution, ratio, quality, captions, onDone }:
-  { resolution: Res; ratio: Ratio; quality: Quality; captions: boolean; onDone: () => void }) {
-  const [progress, setProgress] = useState(0);
-  const [stepIdx,  setStepIdx ] = useState(0);
-  const raf = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    let p = 0;
-    raf.current = setInterval(() => {
-      const inc = Math.random() * 4 + 1.5;
-      p = Math.min(100, p + inc);
-      setProgress(p);
-      setStepIdx(Math.min(RENDER_STEPS.length - 1, Math.floor((p / 100) * RENDER_STEPS.length)));
-      if (p >= 100) {
-        clearInterval(raf.current!);
-        setTimeout(onDone, 600);
-      }
-    }, 180);
-    return () => { if (raf.current) clearInterval(raf.current); };
-  }, [onDone]);
-
-  const pct = Math.round(progress);
+function RenderingScreen({ resolution, quality, progress, error, onBack }: {
+  resolution: Res; quality: Quality; progress: number; error: string | null; onBack: () => void;
+}) {
+  const pct = Math.round(progress * 100);
+  const stepIdx = error ? -1 : Math.min(RENDER_STEPS.length - 1, Math.floor(progress * RENDER_STEPS.length));
 
   return (
     <div style={{ padding: '4px 0' }}>
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
         <div style={{ width: 7, height: 7, borderRadius: '50%', background: C.accent,
           boxShadow: `0 0 8px ${C.accent}`, animation: 'pulse-dot 1.4s ease-in-out infinite' }} />
         <span style={{ fontFamily: F, fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
-          textTransform: 'uppercase', color: C.accent }}>Rendering</span>
+          textTransform: 'uppercase', color: C.accent }}>
+          {error ? 'Failed' : 'Recording'}
+        </span>
         <span style={{ fontFamily: F, fontSize: 11, fontWeight: 500, color: C.muted, marginLeft: 'auto',
-          fontVariantNumeric: 'tabular-nums' }}>{pct}%</span>
+          fontVariantNumeric: 'tabular-nums' }}>{error ? '' : `${pct}%`}</span>
       </div>
 
-      <h3 style={{ fontFamily: F, fontWeight: 700, fontSize: 22, letterSpacing: '-0.025em',
-        color: C.text, margin: '0 0 6px' }}>
-        Exporting your video
+      <h3 style={{ fontFamily: F, fontWeight: 700, fontSize: 22, letterSpacing: '-0.025em', color: C.text, margin: '0 0 6px' }}>
+        {error ? 'Export failed' : 'Exporting your video'}
       </h3>
       <p style={{ fontFamily: F, fontSize: 13, fontWeight: 400, color: C.muted, margin: '0 0 28px' }}>
-        {resolution} · {ratio} · {QUALITY_INFO[quality].label}{captions ? ' · Captions' : ''}
+        {resolution} · {QUALITY_INFO[quality].label}
       </p>
 
-      {/* Progress bar */}
-      <div style={{ height: 3, background: C.b2, borderRadius: 9999, marginBottom: 24, overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${progress}%`, borderRadius: 9999,
-          background: `linear-gradient(90deg, ${C.accent}, ${C.accentH})`,
-          transition: 'width 200ms linear', boxShadow: `0 0 8px ${C.accent}66` }} />
-      </div>
+      {error ? (
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ width: 44, height: 44, borderRadius: '50%',
+            background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+            <AlertTriangle size={20} color="#ef4444" />
+          </div>
+          <p style={{ fontFamily: F, fontSize: 12, fontWeight: 400, color: C.muted, margin: '0 0 18px' }}>{error}</p>
+          <button onClick={onBack} style={{
+            padding: '10px 22px', fontFamily: F, fontSize: 13, fontWeight: 600,
+            background: C.s3, color: C.text, border: `1px solid ${C.b3}`, borderRadius: 8, cursor: 'pointer',
+          }}>
+            Back to settings
+          </button>
+        </div>
+      ) : (
+        <>
+          <div style={{ height: 3, background: C.b2, borderRadius: 9999, marginBottom: 24, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${pct}%`, borderRadius: 9999,
+              background: `linear-gradient(90deg, ${C.accent}, ${C.accentH})`,
+              transition: 'width 200ms linear', boxShadow: `0 0 8px ${C.accent}66` }} />
+          </div>
 
-      {/* Step timeline */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {RENDER_STEPS.map((step, i) => {
-          const done    = i < stepIdx;
-          const current = i === stepIdx;
-          return (
-            <div key={step} style={{ display: 'flex', alignItems: 'center', gap: 10,
-              opacity: i > stepIdx + 1 ? 0.28 : 1, transition: 'opacity 300ms' }}>
-              {/* dot */}
-              <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-                background: done ? C.green : current ? C.accent : C.b4,
-                boxShadow: current ? `0 0 6px ${C.accent}` : 'none',
-                transition: 'all 300ms' }} />
-              <span style={{ fontFamily: F, fontSize: 12, fontWeight: current ? 600 : 400,
-                letterSpacing: '-0.01em', lineHeight: 1.3,
-                color: done ? C.muted : current ? C.text : C.dim,
-                transition: 'all 300ms' }}>
-                {step}
-              </span>
-              {done && (
-                <span style={{ fontFamily: F, fontSize: 10, fontWeight: 600, color: C.green,
-                  marginLeft: 'auto', letterSpacing: '0.02em' }}>✓</span>
-              )}
-            </div>
-          );
-        })}
-      </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {RENDER_STEPS.map((step, i) => {
+              const done = i < stepIdx;
+              const current = i === stepIdx;
+              return (
+                <div key={step} style={{ display: 'flex', alignItems: 'center', gap: 10,
+                  opacity: i > stepIdx + 1 ? 0.28 : 1, transition: 'opacity 300ms' }}>
+                  <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                    background: done ? C.green : current ? C.accent : C.b4,
+                    boxShadow: current ? `0 0 6px ${C.accent}` : 'none', transition: 'all 300ms' }} />
+                  <span style={{ fontFamily: F, fontSize: 12, fontWeight: current ? 600 : 400,
+                    letterSpacing: '-0.01em', lineHeight: 1.3,
+                    color: done ? C.muted : current ? C.text : C.dim, transition: 'all 300ms' }}>
+                    {step}
+                  </span>
+                  {done && (
+                    <span style={{ fontFamily: F, fontSize: 10, fontWeight: 600, color: C.green,
+                      marginLeft: 'auto', letterSpacing: '0.02em' }}>✓</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
 
-      <p style={{ fontFamily: F, fontSize: 11, fontWeight: 400, color: C.dim,
-        margin: '24px 0 0', textAlign: 'center' }}>
-        Estimated time remaining: {Math.max(0, Math.round((100 - progress) / 18))}s
-      </p>
+          <p style={{ fontFamily: F, fontSize: 11, fontWeight: 400, color: C.dim, margin: '24px 0 0', textAlign: 'center' }}>
+            Recording in real time — it takes about as long as the finished clip. Keep this tab in the foreground.
+          </p>
+        </>
+      )}
     </div>
   );
 }
 
-function DoneScreen({ resolution, ratio, quality, format, onClose }:
-  { resolution: Res; ratio: Ratio; quality: Quality; format: Format; onClose: () => void }) {
-  const size = FILE_SIZE[quality][resolution];
+function DoneScreen({ result, filename, onDownload, onClose }: {
+  result: { extension: string; mimeType: string; blob: Blob; durationS: number };
+  filename: string;
+  onDownload: () => void;
+  onClose: () => void;
+}) {
+  const mm = Math.floor(result.durationS / 60);
+  const ss = String(Math.floor(result.durationS % 60)).padStart(2, '0');
   return (
     <div style={{ textAlign: 'center', padding: '8px 0' }}>
-      {/* Success icon */}
-      <div style={{ width: 52, height: 52, borderRadius: '50%',
-        background: C.greenBg, border: `1px solid ${C.greenBorder}`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      <div style={{ width: 52, height: 52, borderRadius: '50%', background: C.greenBg,
+        border: `1px solid ${C.greenBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center',
         margin: '0 auto 20px', animation: 'scale-in 0.35s cubic-bezier(0.22,1,0.36,1)' }}>
         <CheckCircle size={24} color={C.green} />
       </div>
 
-      <h3 style={{ fontFamily: F, fontWeight: 700, fontSize: 22, letterSpacing: '-0.025em',
-        color: C.text, margin: '0 0 6px' }}>
-        Ready to download
+      <h3 style={{ fontFamily: F, fontWeight: 700, fontSize: 22, letterSpacing: '-0.025em', color: C.text, margin: '0 0 6px' }}>
+        Your video is ready
       </h3>
       <p style={{ fontFamily: F, fontSize: 13, fontWeight: 400, color: C.muted, margin: '0 0 28px' }}>
-        Podcast Episode 14 · {resolution} · {ratio} · {format}
+        {filename}
       </p>
 
-      {/* File info row */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
         {[
-          { label: 'Duration', value: '3:32'     },
-          { label: 'Format',   value: format      },
-          { label: 'Size',     value: size        },
-          { label: 'Quality',  value: QUALITY_INFO[quality].label },
+          { label: 'Duration', value: `${mm}:${ss}` },
+          { label: 'Format',   value: result.extension.toUpperCase() },
+          { label: 'Size',     value: describeBytes(result.blob.size) },
         ].map(({ label, value }) => (
           <div key={label} style={{ flex: 1, padding: '10px 6px', background: C.s3,
             border: `1px solid ${C.b3}`, borderRadius: 8 }}>
@@ -306,129 +270,150 @@ function DoneScreen({ resolution, ratio, quality, format, onClose }:
         ))}
       </div>
 
-      {/* Actions */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-        <button style={{
+        <button onClick={onDownload} style={{
           flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
           padding: '13px', fontFamily: F, fontSize: 13, fontWeight: 600, letterSpacing: '-0.01em',
           background: C.accent, color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer',
           boxShadow: `0 4px 16px ${C.accent}44`, transition: 'all 150ms',
         }}
-          onMouseEnter={e => { e.currentTarget.style.background = C.accentH; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = C.accent;  e.currentTarget.style.transform = ''; }}
+          onMouseEnter={e => { e.currentTarget.style.background = C.accentH; }}
+          onMouseLeave={e => { e.currentTarget.style.background = C.accent; }}
         >
-          <Download size={14} /> Download
+          <Download size={14} /> Download again
         </button>
         <button onClick={onClose} style={{
           flex: 1, padding: '13px', fontFamily: F, fontSize: 13, fontWeight: 500, letterSpacing: '-0.01em',
           background: C.s3, color: C.sec, border: `1px solid ${C.b3}`, borderRadius: 10, cursor: 'pointer',
           transition: 'all 150ms',
-        }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = C.b4; e.currentTarget.style.color = C.text; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = C.b3; e.currentTarget.style.color = C.sec; }}
-        >
+        }}>
           Done
         </button>
       </div>
-
       <p style={{ fontFamily: F, fontSize: 11, fontWeight: 400, color: C.dim, margin: 0 }}>
-        Link expires in 48 hours
+        Saved straight to your downloads — the file lives only on this device.
       </p>
     </div>
   );
 }
 
 /* ── Main modal ── */
-export function ExportModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [state,    setState   ] = useState<ExportState>('configure');
-  const [format,   setFormat  ] = useState<Format>('MP4');
-  const [res,      setRes     ] = useState<Res>('1080p');
-  const [ratio,    setRatio   ] = useState<Ratio>('16:9');
-  const [quality,  setQuality ] = useState<Quality>('high');
-  const [fps,      setFps     ] = useState(30);
-  const [captions, setCaptions] = useState(true);
+export interface ExportModalProps {
+  open:       boolean;
+  onClose:    () => void;
+  /** Required for a real export; absent only in non-live shell mockups. */
+  sequence?:  Sequence | null;
+  sourceUrl?: string | null;
+  sourceId?:  string;
+  projectName?: string;
+}
 
-  const handleClose = () => { setState('configure'); onClose(); };
+export function ExportModal({ open, onClose, sequence = null, sourceUrl = null, sourceId = 'main', projectName }: ExportModalProps) {
+  const [state,    setState]    = useState<ExportState>('configure');
+  const [format,   setFormat]   = useState<Format>('MP4');
+  const [res,      setRes]      = useState<Res>('1080p');
+  const [quality,  setQuality]  = useState<Quality>('high');
+  const [fps]      = useState(30);
+  const [progress, setProgress] = useState(0);
+  const [error,    setError]    = useState<string | null>(null);
+  const [result,   setResult]   = useState<{ blob: Blob; extension: string; mimeType: string; durationS: number } | null>(null);
+
+  const supported = useMemo(() => exportSupported(), []);
+  const ready = !!sequence && !!sourceUrl;
+
+  const filename = useMemo(() => {
+    const base = (projectName || 'modaya-export').replace(/\.[a-z0-9]+$/i, '').replace(/[^\w\- ]+/g, '').trim() || 'modaya-export';
+    return `${base.replace(/\s+/g, '-').toLowerCase()}.${result?.extension ?? 'mp4'}`;
+  }, [projectName, result]);
+
+  const reset = () => { setState('configure'); setError(null); setProgress(0); setResult(null); };
+  const handleClose = () => { reset(); onClose(); };
+
+  const startExport = async () => {
+    if (!sequence || !sourceUrl) return;
+    setError(null);
+    setProgress(0);
+    setState('rendering');
+    try {
+      const r = await renderToFile({
+        sequence,
+        sourceUrl,
+        sourceId,
+        resLongEdge: RES_LONG_EDGE[res],
+        fps,
+        videoBits: QUALITY_INFO[quality].videoBits,
+        preferFormat: format === 'WebM' ? 'webm' : 'mp4',
+        onProgress: setProgress,
+      });
+      setResult(r);
+      downloadBlob(r.blob, `${(projectName || 'modaya').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'modaya'}.${r.extension}`);
+      setState('done');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong while recording.');
+    }
+  };
 
   if (!open) return null;
 
   return (
-    /* Backdrop */
     <div onClick={handleClose} style={{
       position: 'fixed', inset: 0, zIndex: 9000,
       background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(6px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: 20,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
     }}>
-      {/* Sheet */}
       <div onClick={e => e.stopPropagation()} style={{
-        width: '100%', maxWidth: 480,
-        background: C.surface, border: `1px solid ${C.b3}`,
-        borderRadius: 16, padding: '28px 28px 24px',
-        boxShadow: '0 32px 80px rgba(0,0,0,0.8)',
-        animation: 'scale-in 0.25s cubic-bezier(0.22,1,0.36,1)',
-        maxHeight: '90vh', overflowY: 'auto',
-        position: 'relative',
+        width: '100%', maxWidth: 480, background: C.surface, border: `1px solid ${C.b3}`,
+        borderRadius: 16, padding: '28px 28px 24px', boxShadow: '0 32px 80px rgba(0,0,0,0.8)',
+        animation: 'scale-in 0.25s cubic-bezier(0.22,1,0.36,1)', maxHeight: '90vh', overflowY: 'auto', position: 'relative',
       }}>
-        {/* Close button */}
         {state !== 'rendering' && (
           <button onClick={handleClose} style={{
-            position: 'absolute', top: 16, right: 16,
-            width: 28, height: 28, borderRadius: 8,
-            background: C.s3, border: `1px solid ${C.b3}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            position: 'absolute', top: 16, right: 16, width: 28, height: 28, borderRadius: 8,
+            background: C.s3, border: `1px solid ${C.b3}`, display: 'flex', alignItems: 'center', justifyContent: 'center',
             cursor: 'pointer', color: C.muted, transition: 'all 120ms',
-          }}
-            onMouseEnter={e => { e.currentTarget.style.color = C.text; e.currentTarget.style.borderColor = C.b4; }}
-            onMouseLeave={e => { e.currentTarget.style.color = C.muted; e.currentTarget.style.borderColor = C.b3; }}
-          >
+          }}>
             <X size={13} />
           </button>
         )}
 
-        {/* ── Configure ── */}
         {state === 'configure' && (
           <div>
-            <h3 style={{ fontFamily: F, fontWeight: 700, fontSize: 22, letterSpacing: '-0.025em',
-              color: C.text, margin: '0 0 4px' }}>
+            <h3 style={{ fontFamily: F, fontWeight: 700, fontSize: 22, letterSpacing: '-0.025em', color: C.text, margin: '0 0 4px' }}>
               Export
             </h3>
-            <p style={{ fontFamily: F, fontSize: 13, fontWeight: 400, color: C.muted, margin: '0 0 24px' }}>
-              Podcast Episode 14 · 3:32
+            <p style={{ fontFamily: F, fontSize: 13, fontWeight: 400, color: C.muted, margin: '0 0 4px' }}>
+              Renders exactly what the preview shows — cuts, captions, text and grade.
             </p>
+            {(!supported || !ready) && (
+              <div style={{ marginTop: 14, padding: '10px 12px', borderRadius: 8,
+                background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.28)',
+                display: 'flex', gap: 9, alignItems: 'flex-start' }}>
+                <AlertTriangle size={14} color="#ef4444" style={{ flexShrink: 0, marginTop: 2 }} />
+                <span style={{ fontFamily: F, fontSize: 12, fontWeight: 400, color: C.sec, lineHeight: 1.45 }}>
+                  {!supported
+                    ? 'This browser cannot record a video here (needs canvas captureStream + MediaRecorder). Try a current Chrome or Edge.'
+                    : 'Re-upload the media in this browser first — export records the playable preview.'}
+                </span>
+              </div>
+            )}
 
             <Divider />
 
-            {/* Format */}
             <Label>Format</Label>
             <FormatSelect value={format} onChange={setFormat} />
 
             <div style={{ height: 16 }} />
 
-            {/* Resolution */}
             <Label>Resolution</Label>
             <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-              {(['4K','1080p','720p','480p'] as Res[]).map(r => (
-                <OptBtn key={r} active={res === r} onClick={() => setRes(r)}>
-                  <span style={{ display: 'block' }}>{r}</span>
-                  <span style={{ fontFamily: F, fontSize: 9, fontWeight: 400, color: res === r ? C.accent + 'cc' : C.dim,
-                    display: 'block', marginTop: 2 }}>{RES_LABEL[r].split(' × ')[0]}</span>
-                </OptBtn>
+              {(['1080p', '720p', '480p'] as Res[]).map(r => (
+                <OptBtn key={r} active={res === r} onClick={() => setRes(r)}>{r}</OptBtn>
               ))}
             </div>
 
-            {/* Aspect ratio */}
-            <Label>Aspect ratio</Label>
-            <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-              {(['16:9','9:16','1:1','4:5'] as Ratio[]).map(r => (
-                <OptBtn key={r} active={ratio === r} onClick={() => setRatio(r)}>{r}</OptBtn>
-              ))}
-            </div>
-
-            {/* Quality */}
             <Label>Quality</Label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
-              {(['max','high','balanced','small'] as Quality[]).map(q => (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+              {(['high', 'balanced', 'small'] as Quality[]).map(q => (
                 <button key={q} onClick={() => setQuality(q)} style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   padding: '10px 12px', borderRadius: 8, cursor: 'pointer', transition: 'all 120ms',
@@ -437,84 +422,42 @@ export function ExportModal({ open, onClose }: { open: boolean; onClose: () => v
                 }}>
                   <div style={{ textAlign: 'left' }}>
                     <span style={{ fontFamily: F, fontSize: 13, fontWeight: 600, letterSpacing: '-0.01em',
-                      color: quality === q ? C.accent : C.text, display: 'block' }}>
-                      {QUALITY_INFO[q].label}
-                    </span>
+                      color: quality === q ? C.accent : C.text, display: 'block' }}>{QUALITY_INFO[q].label}</span>
                     <span style={{ fontFamily: F, fontSize: 11, fontWeight: 400, color: C.muted, display: 'block', marginTop: 1 }}>
                       {QUALITY_INFO[q].note}
-                    </span>
-                  </div>
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <span style={{ fontFamily: F, fontSize: 11, fontWeight: 500, color: quality === q ? C.accent : C.muted,
-                      display: 'block', fontVariantNumeric: 'tabular-nums' }}>
-                      {QUALITY_INFO[q].bitrate}
-                    </span>
-                    <span style={{ fontFamily: F, fontSize: 10, fontWeight: 400, color: C.dim, display: 'block', marginTop: 1 }}>
-                      {FILE_SIZE[q][res]}
                     </span>
                   </div>
                 </button>
               ))}
             </div>
 
-            {/* FPS + Captions row */}
-            <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
-              {/* FPS */}
-              <div style={{ flex: 1 }}>
-                <Label>Frame rate</Label>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {[24, 30, 60].map(f => (
-                    <OptBtn key={f} active={fps === f} onClick={() => setFps(f)}>{f} fps</OptBtn>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Captions toggle */}
-            <button onClick={() => setCaptions(c => !c)} style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              width: '100%', padding: '11px 12px', borderRadius: 8, cursor: 'pointer',
-              border: `1px solid ${captions ? C.accent + '44' : C.b3}`,
-              background: captions ? C.accent + '08' : C.s3,
-              marginBottom: 24, transition: 'all 120ms',
+            <button onClick={startExport} disabled={!supported || !ready} style={{
+              width: '100%', padding: '14px', fontFamily: F, fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em',
+              background: (!supported || !ready) ? C.b3 : C.accent,
+              color: (!supported || !ready) ? C.dim : '#fff',
+              border: 'none', borderRadius: 10,
+              cursor: (!supported || !ready) ? 'not-allowed' : 'pointer',
+              boxShadow: (!supported || !ready) ? 'none' : `0 4px 20px ${C.accent}44`, transition: 'all 150ms',
             }}>
-              <span style={{ fontFamily: F, fontSize: 13, fontWeight: 500, letterSpacing: '-0.01em',
-                color: captions ? C.text : C.sec }}>Burn in captions</span>
-              {/* toggle */}
-              <div style={{ width: 34, height: 18, borderRadius: 9999, position: 'relative',
-                background: captions ? C.accent : C.b4, transition: 'background 200ms' }}>
-                <div style={{ position: 'absolute', top: 2, left: captions ? 18 : 2, width: 14, height: 14,
-                  borderRadius: '50%', background: '#fff', transition: 'left 200ms',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
-              </div>
+              Export · {res} · {QUALITY_INFO[quality].label}
             </button>
-
-            {/* Export button */}
-            <button onClick={() => setState('rendering')} style={{
-              width: '100%', padding: '14px', fontFamily: F, fontSize: 14, fontWeight: 600,
-              letterSpacing: '-0.01em', background: C.accent, color: '#fff',
-              border: 'none', borderRadius: 10, cursor: 'pointer',
-              boxShadow: `0 4px 20px ${C.accent}44`, transition: 'all 150ms',
-            }}
-              onMouseEnter={e => { e.currentTarget.style.background = C.accentH; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = C.accent;  e.currentTarget.style.transform = ''; }}
-            >
-              Export · {res} {ratio} {QUALITY_INFO[quality].label}
-            </button>
+            <p style={{ fontFamily: F, fontSize: 11, fontWeight: 400, color: C.dim, margin: '10px 0 0', textAlign: 'center' }}>
+              Records in real time ({Math.round((sequence?.durationS ?? 0))}s ≈ that long) and downloads on this device.
+            </p>
           </div>
         )}
 
-        {/* ── Rendering ── */}
         {state === 'rendering' && (
-          <RenderingScreen
-            resolution={res} ratio={ratio} quality={quality} captions={captions}
-            onDone={() => setState('done')}
-          />
+          <RenderingScreen resolution={res} quality={quality} progress={progress} error={error} onBack={reset} />
         )}
 
-        {/* ── Done ── */}
-        {state === 'done' && (
-          <DoneScreen resolution={res} ratio={ratio} quality={quality} format={format} onClose={handleClose} />
+        {state === 'done' && result && (
+          <DoneScreen
+            result={result}
+            filename={filename}
+            onDownload={() => downloadBlob(result.blob, filename)}
+            onClose={handleClose}
+          />
         )}
       </div>
     </div>

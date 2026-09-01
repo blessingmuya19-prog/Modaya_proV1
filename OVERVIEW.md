@@ -90,6 +90,15 @@ Each result is a card with a time range, score, title/tags and a
 **"Cut to this clip"** button that isolates that range on the timeline.
 Clips never overlap, stay within the video, and snap to sentence gaps.
 
+### Real video export
+The Export button **produces a downloadable file** of exactly what the preview
+shows — cuts, on-screen text/captions, grade and the source audio. A hidden
+render of the sequence streams the canvas (`captureStream`) and the media's
+audio (WebAudio tap, recorded silently) into `MediaRecorder`, giving an **MP4**
+on Chrome/Edge desktop or **WebM** elsewhere, at 480p/720p/1080p and a chosen
+bitrate. It records in real time and the file stays on the user's device
+(`src/lib/render/exporter.ts`).
+
 ### Works with no key
 Loudness/excitement curves, silence detection, visual motion and shot-change
 detection (`highlights.ts`, `visualScan.ts`) all run locally — so clip finding,
@@ -111,11 +120,15 @@ Read this section before promising anything to a user.
 
 ### Big-ticket gaps
 
-1. **No real video file export yet.** The Export modal is a *simulated* flow —
-   it shows a progress screen then "Ready to download", but **no MP4 is actually
-   encoded**. The render engine exposes a `captureStream()` hook intended for a
-   `MediaRecorder` (or server-side ffmpeg/WebCodecs) pipeline; wiring that up is
-   the main missing piece. You can preview the edit in-app, but not download it.
+1. **Export records in real time, in the browser.** The Export modal now
+   produces a real downloadable file: a hidden render of the finished sequence
+   streams its canvas (`captureStream`) plus the source media's audio (tapped
+   via WebAudio, silent during recording) into `MediaRecorder`, which muxes an
+   **MP4** where the browser supports it (Chrome/Edge desktop) else **WebM**.
+   Honest limitations of this approach: it runs **in real time** (a 60 s edit
+   takes ~60 s; faster-than-real needs WebCodecs/ffmpeg), resolution never
+   upscales past the source, and it needs the media present in this browser
+   (re-upload if missing). Code: `src/lib/render/exporter.ts`.
 
 2. **Data does not persist on a serverless host.** `db.ts` is an in-process
    store. In development it writes `data/*.json`; **on Vercel the filesystem is
@@ -196,7 +209,8 @@ branch deploys), then **redeploy** — variables are read at build time.
 | `src/lib/ai/transcribe` (`src/app/api/projects/[id]/transcribe`) | Whisper transcription endpoint |
 | `src/lib/ai/styleProfile.ts` / `styleTransfer.ts` / `analyseReference.ts` | Reference-style learning & re-cut |
 | `src/lib/ai/highlights.ts` / `visualScan.ts` | Browser loudness & pixel measurements |
-| `src/lib/render/engine.ts` | Canvas compositor + `captureStream` (export hook) |
+| `src/lib/render/engine.ts` | Canvas compositor + `captureStream`/`wireAudio` (export) |
+| `src/lib/render/exporter.ts` | Real export: canvas+audio → MediaRecorder → MP4/WebM download |
 | `src/app/api/projects/[id]/clips/route.ts` | Clips API: viral detection + Pegasus ranking |
 | `src/components/editor/EditorShell.tsx` | The live editor (timeline, preview, AI chat) |
 | `src/lib/db.ts` / `mediaDb.ts` | Server store (ephemeral on Vercel) / browser media |
@@ -205,11 +219,12 @@ branch deploys), then **redeploy** — variables are read at build time.
 
 ## 7. Suggested next steps (in priority order)
 
-1. **Real export** — wire `captureStream()` + `MediaRecorder` (or ffmpeg) to
-   produce a downloadable MP4, muxing the source audio.
-2. **Durable storage** — managed DB for accounts/projects + object storage for
-   media; this also unlocks a public URL for the TwelveLabs ranker.
-3. **Pegasus upload staging** — a route that hosts/links uploaded video so the
+1. **Durable storage** — managed DB for accounts/projects + object storage for
+   media; this also unlocks a public URL for the TwelveLabs ranker. (Real-time
+   browser export now exists; a future ffmpeg/WebCodecs path could export
+   faster than real time.)
+2. **Pegasus upload staging** — a route that hosts/links uploaded video so the
    visual ranker works on browser uploads.
-4. Make the left-nav edit panels (effects/transitions/text) actually apply
+3. Make the left-nav edit panels (effects/transitions/text) actually apply
    operations, or clearly label them as previews.
+4. Faster-than-real-time export (WebCodecs/ffmpeg-wasm) for long videos.

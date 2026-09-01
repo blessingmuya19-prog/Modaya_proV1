@@ -97,11 +97,14 @@ export class PreviewEngine {
     }
   }
 
-  setSequence(seq: Sequence) {
+  /**
+   * Set the programme. `cap` is the longest edge in pixels the canvas is
+   * rendered at. Preview keeps it small (1280) for speed; export passes the
+   * target resolution (e.g. 1920/1080) and never upscales beyond the source.
+   */
+  setSequence(seq: Sequence, cap = 1280) {
     this.seq = seq;
     if (this.canvas) {
-      // Render at the sequence resolution, capped so preview stays cheap
-      const cap   = 1280;
       const scale = Math.min(1, cap / Math.max(seq.width, seq.height));
       this.canvas.width  = Math.max(2, Math.round(seq.width  * scale));
       this.canvas.height = Math.max(2, Math.round(seq.height * scale));
@@ -432,6 +435,25 @@ export class PreviewEngine {
   captureStream(fps = 30): MediaStream | null {
     const c = this.canvas as (HTMLCanvasElement & { captureStream?: (f: number) => MediaStream }) | null;
     return c?.captureStream ? c.captureStream(fps) : null;
+  }
+
+  /**
+   * Tap the media elements' audio for export. The source nodes are connected
+   * ONLY to the supplied destination (a MediaStreamAudioDestinationNode),
+   * never to the speakers — so a real-time export records the audio without
+   * playing it out loud. Each element may only ever be wrapped once; this is
+   * used on an export-only engine with its own fresh video pool. Returns an
+   * unwire function.
+   */
+  wireAudio(ctx: AudioContext, dest: MediaStreamAudioDestinationNode): () => void {
+    const nodes = this.pool.map(v => {
+      const src = ctx.createMediaElementSource(v);
+      src.connect(dest);
+      return src;
+    });
+    // The wrapped elements must not be muted or their graph carries silence.
+    this.pool.forEach(v => { v.muted = false; });
+    return () => { nodes.forEach(n => { try { n.disconnect(); } catch {} }); };
   }
 
   destroy() {
