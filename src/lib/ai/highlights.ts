@@ -13,7 +13,7 @@
  */
 
 /** Mean energy over a time span, in seconds. */
-function meanOver(energy: number[], durationS: number, fromS: number, toS: number): number {
+export function meanOver(energy: number[], durationS: number, fromS: number, toS: number): number {
   if (energy.length === 0 || durationS <= 0) return 0;
   const perS = energy.length / durationS;
   const a = Math.max(0, Math.floor(fromS * perS));

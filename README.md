@@ -8,7 +8,7 @@ that style.
 ```bash
 npm install
 npm run dev        # http://localhost:3000
-npm test           # 101 tests, no browser required
+npm test           # 395 tests, no browser required
 ```
 
 ## AI setup (optional, free)
@@ -124,6 +124,30 @@ real words at the times they were said, and filler removal cuts only segments
 that are *entirely* filler — a segment carrying meaning is never cut for
 containing one "um".
 
+### Clipping engine (free)
+
+Turn one long video into several short, standalone posts — OpusClip-style —
+with **no key at all**. Ask in the chat ("find me 5 short clips for TikTok
+and Reels") or use the **Find clips** quick action. Each result is a card
+with a time range, a shareability score and a **Cut to this clip** button that
+isolates that range on the timeline.
+
+Like the rest of the editor, it is a free measurement engine with an optional
+AI upgrade:
+
+| | No AI key | With any free key + transcript |
+| --- | --- | --- |
+| Clip boundaries | Loudness + visual motion sliding window, snapped to measured silences | Model reads the transcript for meaning |
+| Bounds | Snapped to sentence edges so a clip never opens/closes mid-word | Same clamp + snap, so a hallucinated timecode can't escape |
+| Title / tags | First spoken line (hook), or an honest time placeholder | Real hook title, topic tags, shareability score |
+| Cost | Nothing, fully local | One LLM call on the same free key |
+
+Every model-returned timestamp is clamped to the video, snapped to the
+nearest sentence gap, de-duplicated and length-checked before it reaches the
+UI. Clips the model didn't find are topped up from the measurement engine so
+you always get the number you asked for. Code: `src/lib/ai/clips.ts`,
+route `POST /api/projects/:id/clips` (the chat route also returns clips inline).
+
 ### How the AI is wired
 
 The model never edits the timeline directly. It receives the timeline state,
@@ -147,6 +171,7 @@ request always produces the same edit.
 | `src/lib/ai/analyseReference.ts` | Browser-side frame sampling and audio analysis |
 | `src/lib/ai/llm.ts` | Provider-agnostic LLM access with graceful fallback |
 | `src/lib/ai/operations.ts` | Validates and executes edit operations |
+| `src/lib/ai/clips.ts` | Clipping engine: measurement-only clip search + meaning-aware AI picks |
 | `src/lib/mediaDb.ts` | IndexedDB persistence for media and thumbnail frames |
 
 ## Data storage — current limitation
