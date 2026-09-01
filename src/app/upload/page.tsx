@@ -119,7 +119,7 @@ export default function UploadPage() {
   const formatBytes = (b: number) => b < 1024*1024 ? `${(b/1024).toFixed(0)} KB` : `${(b/(1024*1024)).toFixed(1)} MB`;
 
   if (stage === 'processing') {
-    return <ProcessingScreen filename={file?.name} onComplete={() => router.push(`/editor/${projectId ?? 'proj-1'}`)} />;
+    return <ProcessingScreen filename={file?.name} onComplete={() => router.push(`/studio/${projectId ?? 'proj-1'}`)} />;
   }
 
   return (

@@ -25,7 +25,7 @@ export function ProjectCard({ project }: { project: Project }) {
   const [hovered, setHovered] = useState(false);
 
   return (
-    <Link href={`/editor/${project.id}`} style={{ textDecoration: 'none' }}>
+    <Link href={`/studio/${project.id}`} style={{ textDecoration: 'none' }}>
       <div
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}

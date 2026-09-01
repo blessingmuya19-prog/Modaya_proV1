@@ -9,10 +9,25 @@ are**. For setup and env vars see [README.md](./README.md).
 
 ## 1. What Modaya is
 
-A **browser-based AI video editor** (Next.js 16 + React 19) in the spirit of
-CapCut/Descript/OpusClip. You upload footage, then talk to an AI editor in a
-chat panel: "cut the silences", "add captions", "find me 5 viral clips", or
-"re-cut this like this reference video".
+A **browser-based AI video editor** (Next.js 16 + React 19) whose guiding
+principle is: *the user supplies footage (and optionally a reference video),
+and Modaya does the editing* — "Lovable for video", not Premiere Pro with AI
+bolted on. The default experience (**Studio**, `/studio/[id]`) is deliberately
+near-empty of technical UI:
+
+> Drop footage → (optionally) drop a reference → **Create edit** → watch Modaya
+> run named creative stages (understand footage → learn reference → find moments
+> → match pacing → captions → build edit → render) → get a finished video with
+> **Export**, **Regenerate**, and a **"Tell Modaya what to change"** box.
+
+There is **no timeline, codec, keyframe or bitrate setting** in that flow. The
+full pro timeline (`/editor/[id]`) still exists and is one click away under
+**"Advanced timeline"** for power users/debugging — it is a power tool, not the
+product. The brain of both is the same (see below); Studio is the simple face.
+
+You can also drive editing conversationally in the pro editor: "cut the
+silences", "add captions", "find me 5 viral clips", or "re-cut this like this
+reference video".
 
 Its central design bargain:
 
@@ -213,6 +228,8 @@ branch deploys), then **redeploy** — variables are read at build time.
 | `src/lib/render/exporter.ts` | Real export: canvas+audio → MediaRecorder → MP4/WebM download |
 | `src/app/api/projects/[id]/clips/route.ts` | Clips API: viral detection + Pegasus ranking |
 | `src/components/editor/EditorShell.tsx` | The live editor (timeline, preview, AI chat) |
+| `src/components/studio/Studio.tsx` + `src/app/studio/[id]` | The default simple experience: drop footage/reference → guided pipeline → result/export |
+| `src/lib/studio/pipeline.ts` | Pure Studio spine: ordered stages, progress, grounded reference-match score |
 | `src/lib/db.ts` / `mediaDb.ts` | Server store (ephemeral on Vercel) / browser media |
 
 ---
