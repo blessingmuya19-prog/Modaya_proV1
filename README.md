@@ -3,12 +3,16 @@
 AI video editor. Point it at a reference video and it re-cuts your footage in
 that style.
 
+> **New here? Read [OVERVIEW.md](./OVERVIEW.md) first** — a plain-English tour of
+> what the app can do today, what is only a shell (e.g. file export is not wired
+> up yet), and the known limitations.
+
 ## Running locally
 
 ```bash
 npm install
 npm run dev        # http://localhost:3000
-npm test           # 395 tests, no browser required
+npm test           # 429 tests, no browser required
 ```
 
 ## AI setup (optional, free)
@@ -133,20 +137,35 @@ with a time range, a shareability score and a **Cut to this clip** button that
 isolates that range on the timeline.
 
 Like the rest of the editor, it is a free measurement engine with an optional
-AI upgrade:
+AI upgrade, run in two stages:
+
+**1. Viral detection (OpenShorts-style).** With a free key + transcript the app
+builds grounded, non-overlapping candidate windows from the real sentences and
+asks the LLM only to **score and title the windows we give it** against a
+virality rubric (hook < 3 s, self-contained, payoff, no filler). The model
+never invents a timestamp. Final score blends `0.72 × virality + 0.28 ×
+measured energy`; windows spread across the video (or cluster at the start when
+asked), snap to sentence gaps and never overlap.
+
+**2. Visual ranking (optional, TwelveLabs Pegasus 1.5).** Set
+`TWELVELABS_API_KEY` (free tier at <https://platform.twelvelabs.io>) and provide
+a public video URL (`TWELVELABS_URL` or per-request `videoUrl`); Pegasus reads
+frames + audio to boost action-heavy moments the text model misses. It is
+strictly additive and **silent when unconfigured, unreachable, or given no
+public URL** (browser IndexedDB blobs can't be sent today).
 
 | | No AI key | With any free key + transcript |
 | --- | --- | --- |
-| Clip boundaries | Loudness + visual motion sliding window, snapped to measured silences | Model reads the transcript for meaning |
+| Clip boundaries | Loudness + visual motion sliding window, snapped to measured silences | Grounded sentence windows scored for virality; bounds still clamped/snapped |
 | Bounds | Snapped to sentence edges so a clip never opens/closes mid-word | Same clamp + snap, so a hallucinated timecode can't escape |
 | Title / tags | First spoken line (hook), or an honest time placeholder | Real hook title, topic tags, shareability score |
-| Cost | Nothing, fully local | One LLM call on the same free key |
+| Cost | Nothing, fully local | One LLM call on the same free key (+ optional Pegasus call) |
 
-Every model-returned timestamp is clamped to the video, snapped to the
-nearest sentence gap, de-duplicated and length-checked before it reaches the
-UI. Clips the model didn't find are topped up from the measurement engine so
-you always get the number you asked for. Code: `src/lib/ai/clips.ts`,
-route `POST /api/projects/:id/clips` (the chat route also returns clips inline).
+Clips the model didn't cover are topped up from the measurement engine so you
+always get the number you asked for, and provenance is reported honestly (a
+useless model score sheet is labelled measurement, not "ai"). Code:
+`src/lib/ai/clips.ts` and `src/lib/ai/twelvelabs.ts`, route
+`POST /api/projects/:id/clips` (the chat route also returns clips inline).
 
 ### How the AI is wired
 
@@ -171,7 +190,8 @@ request always produces the same edit.
 | `src/lib/ai/analyseReference.ts` | Browser-side frame sampling and audio analysis |
 | `src/lib/ai/llm.ts` | Provider-agnostic LLM access with graceful fallback |
 | `src/lib/ai/operations.ts` | Validates and executes edit operations |
-| `src/lib/ai/clips.ts` | Clipping engine: measurement-only clip search + meaning-aware AI picks |
+| `src/lib/ai/clips.ts` | Clipping engine: measurement search + grounded viral detection/scoring |
+| `src/lib/ai/twelvelabs.ts` | Optional TwelveLabs Pegasus visual ranker (fails silent) |
 | `src/lib/mediaDb.ts` | IndexedDB persistence for media and thumbnail frames |
 
 ## Data storage — current limitation
