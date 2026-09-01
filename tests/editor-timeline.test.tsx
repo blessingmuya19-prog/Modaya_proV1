@@ -101,6 +101,32 @@ describe('editor timeline', () => {
     expect(parseFloat(ph.style.left), 'playhead ignored the video clock').toBeGreaterThan(0);
   });
 
+  /**
+   * 464 captions on a 13-minute video used to put ~1400 extra nodes in the
+   * timeline — every one of them two pixels wide — and the editor crawled.
+   */
+  it('stays light when the video is captioned line by line', () => {
+    const captions = Array.from({ length: 464 }, (_, i) => ({
+      id: `cap-${i}`, trackId: 'text', label: `caption line ${i} with real words`,
+      startS: i * 0.64, endS: i * 0.64 + 0.6, type: 'subtitle',
+    }));
+    const plain = mount([{ id: 'v', trackId: 'video', label: 'V', startS: 0, endS: 300, type: 'video' }]);
+    const plainNodes = plain.container.querySelectorAll('*').length;
+    plain.unmount();
+
+    const heavy = mount([
+      { id: 'v', trackId: 'video', label: 'V', startS: 0, endS: 300, type: 'video' },
+      ...captions,
+    ]);
+    const heavyNodes = heavy.container.querySelectorAll('*').length;
+
+    // the captions are on the timeline
+    expect(heavy.container.querySelector('[data-modaya-timeline]')).toBeTruthy();
+    // ...but they cost a handful of nodes, not one each
+    expect(heavyNodes - plainNodes,
+      `captions added ${heavyNodes - plainNodes} DOM nodes`).toBeLessThan(200);
+  });
+
   it('returns the playhead to the start when the video ends', async () => {
     const { container } = mount([]);
     const btn = Array.from(container.querySelectorAll('button'))

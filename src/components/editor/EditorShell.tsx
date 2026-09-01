@@ -6,6 +6,7 @@ import { ExportModal } from './ExportModal';
 import { getMedia, subscribeMedia } from '@/lib/videoStore';
 import DebugHud from './DebugHud';
 import PreviewCanvas from './PreviewCanvas';
+import { packClips } from './packClips';
 import { buildSequence, Sequence, StyleLayer } from '@/lib/render/sequence';
 import { analyseReference, analyseAudio, interestCurve } from '@/lib/ai/analyseReference';
 import { decodeForAsr, chunkForAsr } from '@/lib/ai/audioForAsr';
@@ -129,6 +130,16 @@ export interface EditorAIMsg { role: 'user'|'ai'; text: string; ts: string; }
 /* ── static constants ── */
 const RULER_H   = 28;
 const LABEL_W   = 88;
+
+/* How far beyond the visible window the timeline still builds nodes. A full
+   screen of slack either side means scrolling never shows a gap while the
+   next batch renders. */
+const PAD_PX  = 1200;
+/* Decoration caps. A clip spanning the whole programme is wider than the
+   screen; drawing a filmstrip tile or waveform bar for every 80px/1.5px of it
+   costs hundreds of nodes nobody can see. */
+const TILE_CAP = 60;
+const BAR_CAP  = 400;
 
 const WAVE = Array.from({ length: 400 }, (_, i) =>
   Math.abs(Math.sin(i * 0.28 + 0.9) * Math.cos(i * 0.11)) * 0.8 + 0.12
@@ -1228,26 +1239,54 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
     return Math.max(4, Math.min(80, (containerW.current * 0.75) / totalS));
   });
 
+  /* The slice of the timeline that is actually on screen, in pixels. Only
+     clips inside it are put in the DOM: a 13-minute video captioned line by
+     line has hundreds of clips, and rendering them all made scrolling and
+     playback crawl. Updated from the scroll position, never from the
+     playhead, so it costs nothing during playback. */
+  const [view, setView] = useState({ left: 0, width: 1600 });
+  const viewRaf = useRef(0);
+  const readView = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    const left = node.scrollLeft, width = node.clientWidth;
+    setView(v => (Math.abs(v.left - left) < 24 && v.width === width ? v : { left, width }));
+  }, []);
+  const onTimelineScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const node = e.currentTarget;
+    if (viewRaf.current) return;                 // one read per frame, at most
+    viewRaf.current = requestAnimationFrame(() => { viewRaf.current = 0; readView(node); });
+  }, [readView]);
+  useEffect(() => () => { if (viewRaf.current) cancelAnimationFrame(viewRaf.current); }, []);
+
   const scrollMounted = useCallback((node: HTMLDivElement | null) => {
     if (!node) return;
     (scrollRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
     containerW.current = node.clientWidth - LABEL_W;
+    readView(node);
     setZoom(z => {
       const ideal = Math.max(4, Math.min(80, (containerW.current * 0.75) / totalS));
       return z === 8 && totalS > 0 ? ideal : z;
     });
-  }, [totalS]);
+  }, [totalS, readView]);
 
   const totalPx = totalS * zoom;
 
   const interval = zoom < 0.5 ? 120 : zoom < 1 ? 60 : zoom < 4 ? 30 : zoom < 10 ? 10 : zoom < 20 ? 5 : 1;
-  const ticks: {s:number;major:boolean}[] = [];
-  for (let s = 0; s <= totalS; s += interval/5) ticks.push({s, major: s%interval===0});
+  /* Zoomed right in this is thousands of objects. It depends on zoom and
+     duration only, so it must not be rebuilt on every frame of playback. */
+  const ticks = useMemo(() => {
+    const out: {s:number;major:boolean}[] = [];
+    for (let t = 0; t <= totalS; t += interval/5) out.push({ s: t, major: t % interval === 0 });
+    return out;
+  }, [interval, totalS]);
 
   /* Ruler marks rebuild only on zoom / duration change — not on every frame of
      playback, which is what made the whole timeline re-render at 60fps. */
-  const tickMarks = useMemo(() => ticks.map((t,i)=>(
-    <div key={i} style={{ position:'absolute', left:t.s*zoom, top:0, bottom:0 }}>
+  const tickMarks = useMemo(() => ticks.filter(t => {
+    const px = t.s * zoom;
+    return px >= view.left - PAD_PX && px <= view.left + view.width + PAD_PX;
+  }).map(t=>(
+    <div key={t.s} style={{ position:'absolute', left:t.s*zoom, top:0, bottom:0 }}>
       <div style={{ position:'absolute', bottom:0, width:1,
         height:t.major?10:5, background:t.major?C.b3:C.b2 }} />
       {t.major && t.s>0 && (
@@ -1255,7 +1294,7 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
           ...ty.tick, whiteSpace:'nowrap' as const }}>{fmt(t.s)}</span>
       )}
     </div>
-  )), [zoom, totalS]);   // eslint-disable-line react-hooks/exhaustive-deps
+  )), [zoom, totalS, view]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Convert a clientX to seconds, accounting for scroll */
   const clientXToS = useCallback((clientX: number): number => {
@@ -1320,9 +1359,10 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
                 left:i*60*zoom,width:1,background:'rgba(255,255,255,0.02)',pointerEvents:'none' }} />
             ))}
 
-            {tr.clips.map((clip,ci)=>{
-              const left = clip.s * zoom;
-              const w = (clip.e - clip.s) * zoom;
+            {packClips(tr.clips, zoom, view, { padPx: PAD_PX }).map(pk=>{
+              const { left, w, merged } = pk;
+              const clip = { s: pk.s, e: pk.e, label: pk.label };
+              const ci   = pk.key;
               return (
                 <div key={ci} style={{ position:'absolute', left, top:3,
                   height:`calc(100% - 6px)`, width:w,
@@ -1332,9 +1372,9 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
                   boxShadow: highlightIds && highlightIds.length > 0 && (tr.id==='video'||tr.id==='aud1') ? `0 0 10px ${tr.color}66` : 'none',
                   transition:'box-shadow 400ms ease, border-color 400ms ease' }}>
 
-                  {(tr as any).thumb && (
+                  {merged === 1 && (tr as any).thumb && (
                     <div style={{ position:'absolute',inset:0,display:'flex',overflow:'hidden',borderRadius:4 }}>
-                      {Array.from({length: Math.max(1, Math.ceil(w / 80))}, (_, i) => {
+                      {Array.from({length: Math.max(1, Math.min(TILE_CAP, Math.ceil(w / 80)))}, (_, i) => {
                         const frameIdx = frames.length > 0
                           ? Math.min(frames.length - 1, Math.floor((i / Math.ceil(w / 80)) * frames.length))
                           : -1;
@@ -1355,22 +1395,27 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
                     </div>
                   )}
 
-                  {(tr as any).wave && (
+                  {merged === 1 && (tr as any).wave && (
                     <div style={{ position:'absolute',inset:'3px 0',display:'flex',alignItems:'center',overflow:'hidden' }}>
-                      {WAVE.slice(0,Math.floor(w/1.5)).map((h,i)=>(
+                      {WAVE.slice(0,Math.min(BAR_CAP, Math.floor(w/1.5))).map((h,i)=>(
                         <div key={i} style={{ flex:1,minWidth:1,height:`${h*85}%`,
                           background:'#34D399',borderRadius:1,opacity:0.65 }} />
                       ))}
                     </div>
                   )}
 
-                  <div style={{ position:'absolute',inset:0,display:'flex',alignItems:'center',
-                    padding:'0 6px',gap:3,pointerEvents:'none',zIndex:2 }}>
-                    {w > 60 && <span style={{ ...ty.clip, whiteSpace:'nowrap' as const, overflow:'hidden', textOverflow:'ellipsis' }}>{clip.label}</span>}
-                  </div>
+                  {w > 60 && clip.label && (
+                    <div style={{ position:'absolute',inset:0,display:'flex',alignItems:'center',
+                      padding:'0 6px',gap:3,pointerEvents:'none',zIndex:2 }}>
+                      <span style={{ ...ty.clip, whiteSpace:'nowrap' as const, overflow:'hidden', textOverflow:'ellipsis' }}>{clip.label}</span>
+                    </div>
+                  )}
 
-                  <div style={{ position:'absolute',top:0,right:0,width:5,bottom:0,
-                    cursor:'ew-resize',background:`${tr.color}55`,borderRadius:'0 4px 4px 0' }} />
+                  {/* Nothing to grab on a clip a few pixels wide */}
+                  {w >= 12 && (
+                    <div style={{ position:'absolute',top:0,right:0,width:5,bottom:0,
+                      cursor:'ew-resize',background:`${tr.color}55`,borderRadius:'0 4px 4px 0' }} />
+                  )}
                 </div>
               );
             })}
@@ -1378,7 +1423,7 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
         );
       })}
     </div>
-  ), [tracks, zoom, frames, highlightIds, totalS]);
+  ), [tracks, zoom, frames, highlightIds, totalS, view]);
 
   /* ── Keep the playhead in view ──
      When the playhead moves past either edge of the visible window — during
@@ -1487,7 +1532,7 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
         </div>}
 
         {/* Scrollable track area */}
-        {tracks.length > 0 && <div ref={scrollMounted} data-modaya-timeline style={{ flex:1, overflow:'auto', position:'relative', minWidth:0 }}>
+        {tracks.length > 0 && <div ref={scrollMounted} onScroll={onTimelineScroll} data-modaya-timeline style={{ flex:1, overflow:'auto', position:'relative', minWidth:0 }}>
           <div style={{ width:Math.max(totalPx+40,400), minWidth:'100%', position:'relative' }}>
 
             {/* ── Ruler (sticky) ── */}
