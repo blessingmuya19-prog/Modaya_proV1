@@ -69,8 +69,20 @@ export function loudnessSparkline(
  * The block handed to the model. Names the loudest candidate windows outright
  * so the model does not have to do arithmetic on a sparkline.
  */
-export function describeLoudness(energy: number[], durationS: number): string {
+export function describeLoudness(
+  energy: number[], durationS: number,
+  state: 'pending' | 'ready' | 'failed' = 'ready',
+): string {
   if (energy.length === 0 || durationS <= 0) {
+    if (state === 'pending') {
+      return '(the browser is still decoding this file\'s audio — say it is still measuring and ' +
+             'ask the user to try again in a few seconds; do NOT guess which part is strongest, ' +
+             'and do NOT tell them to reopen the project)';
+    }
+    if (state === 'failed') {
+      return '(this file\'s audio could not be decoded, so there is no loudness to go on — ' +
+             'say so plainly; it may have no audio track or use a codec this browser cannot read)';
+    }
     return '(no audio measured yet — do not guess which part is strongest; ask the user to reopen the project)';
   }
 

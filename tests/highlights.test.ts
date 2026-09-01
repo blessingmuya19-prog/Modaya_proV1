@@ -89,3 +89,35 @@ describe('describeLoudness', () => {
     expect(text).not.toMatch(/60s ->/);
   });
 });
+
+/**
+ * A 13-minute file decodes to ~310 MB at full rate, so the measurement can
+ * still be running — or have failed — when the user asks a question. Each of
+ * those is a different message, and none of them is "reopen the project".
+ */
+describe('describeLoudness while the measurement is incomplete', () => {
+  it('says it is still measuring, and forbids the reopen advice', () => {
+    const t = describeLoudness([], 800, 'pending');
+    expect(t).toMatch(/still decoding/i);
+    expect(t).toMatch(/try again in a few seconds/i);
+    expect(t).toMatch(/do NOT tell them to reopen/i);
+  });
+
+  it('says the audio could not be decoded when it failed', () => {
+    const t = describeLoudness([], 800, 'failed');
+    expect(t).toMatch(/could not be decoded/i);
+    expect(t).toMatch(/no audio track|codec/i);
+  });
+
+  it('never invites a guess, whatever the state', () => {
+    for (const state of ['pending', 'failed', 'ready'] as const) {
+      expect(describeLoudness([], 800, state)).toMatch(/do not guess|do NOT guess|say so plainly|still measuring/i);
+    }
+  });
+
+  it('ignores the state once real data exists', () => {
+    const energy = Array.from({ length: 8000 }, (_, i) => (i / 10 >= 400 && i / 10 < 420 ? 0.9 : 0.05));
+    const t = describeLoudness(energy, 800, 'pending');
+    expect(t).toMatch(/loudest continuous window/i);
+  });
+});

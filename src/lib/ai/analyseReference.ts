@@ -120,11 +120,25 @@ export async function sampleFrames(
 
 /** RMS envelope + onsets + BPM from a media file's audio track. */
 export async function analyseAudio(file: Blob): Promise<AudioEnvelope | null> {
+  const Offline = (window.OfflineAudioContext
+    ?? (window as unknown as { webkitOfflineAudioContext?: typeof OfflineAudioContext })
+      .webkitOfflineAudioContext);
   const Ctor = (window.AudioContext
     ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
-  if (!Ctor) return null;
+  if (!Offline && !Ctor) return null;
 
-  const ctx = new Ctor();
+  /**
+   * Decode at 8 kHz instead of the file's own rate. A loudness envelope needs
+   * nothing finer, and a full-rate decode of a long recording is enormous:
+   * 13 minutes at 48 kHz stereo is ~310 MB of float samples, which is slow at
+   * best and fails outright on phones. At 8 kHz the same file is ~26 MB.
+   * decodeAudioData resamples to the context's rate, so this is free.
+   */
+  const TARGET_RATE = 8000;
+  const ctx: BaseAudioContext = Offline
+    ? new Offline(1, TARGET_RATE, TARGET_RATE)
+    : new Ctor!();
+
   try {
     const buf   = await file.arrayBuffer();
     const audio = await ctx.decodeAudioData(buf);
@@ -138,7 +152,10 @@ export async function analyseAudio(file: Blob): Promise<AudioEnvelope | null> {
       for (let j = i; j < i + hop; j++) sum += ch[j] * ch[j];
       rms.push(Math.sqrt(sum / hop));
     }
-    const peak = Math.max(...rms, 1e-6);
+
+    // A spread here would blow the argument limit on a long file, so loop.
+    let peak = 1e-6;
+    for (const v of rms) if (v > peak) peak = v;
     const norm = rms.map(v => v / peak);
 
     const onsets = detectOnsets(norm, hopS);
@@ -146,7 +163,7 @@ export async function analyseAudio(file: Blob): Promise<AudioEnvelope | null> {
   } catch {
     return null;      // no audio track, or an undecodable codec
   } finally {
-    try { await ctx.close(); } catch { /* already closed */ }
+    try { await (ctx as AudioContext).close?.(); } catch { /* offline contexts have no close */ }
   }
 }
 

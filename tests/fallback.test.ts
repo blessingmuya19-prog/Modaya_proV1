@@ -202,3 +202,28 @@ describe('what the model is told', () => {
     expect(body).toMatch(/no audio measured/i);
   });
 });
+
+describe('audio measurement state reaches the model', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const capture = async (audio: string) => {
+    process.env.GROQ_API_KEY = 'gsk_state_capture';
+    let body = '';
+    vi.stubGlobal('fetch', vi.fn(async (_u: string, init: RequestInit) => {
+      body = String(init.body);
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: '{"reply":"ok","operations":[{"op":"none"}]}' } }],
+      }), { status: 200 });
+    }));
+    await ask({ message: 'strongest 20 seconds', silences: [], energy: [], audio });
+    return body;
+  };
+
+  it('tells the model the decode is still running', async () => {
+    expect(await capture('pending')).toMatch(/still decoding/i);
+  });
+
+  it('tells the model the decode failed', async () => {
+    expect(await capture('failed')).toMatch(/could not be decoded/i);
+  });
+});

@@ -658,17 +658,25 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
      silence rather than a guess. Runs in the background; never blocks typing. */
   const silences = useRef<[number, number][]>([]);
   const energy   = useRef<number[]>([]);
+  /** 'pending' while the decode runs, so the AI can say so instead of guessing. */
+  const audioState = useRef<'pending' | 'ready' | 'failed'>('pending');
   useEffect(() => {
     let cancelled = false;
+    audioState.current = 'pending';
     (async () => {
       try {
         const stored = await loadMediaFile(projectId);
-        if (!stored || cancelled) return;
+        if (!stored || cancelled) { audioState.current = 'failed'; return; }
         const env = await analyseAudio(stored.blob);
-        if (!env || cancelled) return;
+        if (cancelled) return;
+        if (!env) { audioState.current = 'failed'; return; }
         silences.current = detectSilences(env.rms, env.hopS);
         energy.current   = interestCurve(env, stored.durationS || totalS);
-      } catch { /* no audio track — silence detection simply stays empty */ }
+        audioState.current = 'ready';
+      } catch {
+        // no audio track, an undecodable codec, or a file too large to decode
+        if (!cancelled) audioState.current = 'failed';
+      }
     })();
     return () => { cancelled = true; };
   }, [projectId]);
@@ -758,6 +766,7 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
           message:  text.trim(),
           silences: silences.current.slice(0, 200),
           energy:   energy.current.slice(0, 7200),
+          audio:    audioState.current,
           style:    learnedStyle ?? undefined,
         }),
       });

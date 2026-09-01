@@ -215,6 +215,7 @@ async function planWithLlm(opts: {
   clips:     Clip[];
   silences:  [number, number][];
   energy:    number[];
+  audio:     'pending' | 'ready' | 'failed';
   style?:    string;
   history:   { role: 'user' | 'ai'; text: string }[];
 }): Promise<{
@@ -234,7 +235,7 @@ async function planWithLlm(opts: {
     `VIDEO DURATION: ${opts.durationS.toFixed(1)}s`,
     `TIMELINE:\n${clipSummary}`,
     `SILENT SPANS: ${silenceSummary}`,
-    `LOUDNESS:\n${describeLoudness(opts.energy, opts.durationS)}`,
+    `LOUDNESS:\n${describeLoudness(opts.energy, opts.durationS, opts.audio)}`,
     opts.style ? `REFERENCE STYLE LEARNED: ${opts.style}` : null,
   ].filter(Boolean).join('\n\n');
 
@@ -291,6 +292,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     ? body.silences.filter((r: unknown) => Array.isArray(r) && r.length === 2).slice(0, 200)
     : [];
   const style: string | undefined = typeof body.style === 'string' ? body.style : undefined;
+  const audio: 'pending' | 'ready' | 'failed' =
+    body.audio === 'pending' || body.audio === 'failed' ? body.audio : 'ready';
   const energy: number[] = Array.isArray(body.energy)
     ? body.energy.filter((n: unknown) => typeof n === 'number').slice(0, 7200)
     : [];
@@ -303,7 +306,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (provider.ready) {
     const attempt = await planWithLlm({
-      message, durationS, clips, silences, energy, style,
+      message, durationS, clips, silences, energy, audio, style,
       history: (project?.aiHistory ?? []).map(m => ({ role: m.role, text: m.text })),
     });
     const plan = attempt.plan;
