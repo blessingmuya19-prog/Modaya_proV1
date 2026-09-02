@@ -297,7 +297,7 @@ export default function UploadPage() {
                   <div style={{ marginLeft: 'auto' }} className="ml-auto">
                     <button
                       onClick={uploadAndProcess} disabled={uploading || !prompt.trim()}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 20px', fontSize: 13, fontWeight: 600, color: '#FFFFFF', background: prompt.trim() && !uploading ? 'linear-gradient(135deg,#8B5CF6,#A855F7)' : '#111', border: 'none', borderRadius: 9, cursor: prompt.trim() && !uploading ? 'pointer' : 'not-allowed', boxShadow: prompt.trim() && !uploading ? '0 4px 16px rgba(139,92,246,0.28)' : 'none', transition: 'all 200ms' }}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 20px', fontSize: 13, fontWeight: 600, color: '#FFFFFF', background: prompt.trim() && !uploading ? 'linear-gradient(180deg,#8B5CF6,#7C3AED)' : '#111', border: 'none', borderRadius: 10, cursor: prompt.trim() && !uploading ? 'pointer' : 'not-allowed', boxShadow: prompt.trim() && !uploading ? '0 4px 16px rgba(139,92,246,0.28)' : 'none', transition: 'all 200ms' }}
                     >
                       {uploading ? 'Uploading…' : 'Edit video'} <ArrowRight size={13} />
                     </button>

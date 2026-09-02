@@ -117,7 +117,7 @@ export function EmptyProjectState() {
         <button style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: '0 20px', height: 42, fontSize: 13, fontWeight: 600,
-          background: 'linear-gradient(135deg,#8B5CF6,#6E5BFF)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer',
+          background: 'linear-gradient(180deg,#8B5CF6,#7C3AED)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer',
         }}>
           Create video
         </button>

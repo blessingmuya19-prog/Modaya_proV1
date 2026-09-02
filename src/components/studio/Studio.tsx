@@ -1387,9 +1387,10 @@ function defaultPunchyProfile(durationS: number): StyleProfile {
 }
 
 const primaryBtn: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 999,
-  background: GLOW_GRADIENT, color: '#fff', border: 'none', fontFamily: F, fontSize: 14, fontWeight: 700,
-  cursor: 'pointer', boxShadow: '0 10px 30px rgba(139,92,246,0.5)',
+  display: 'flex', alignItems: 'center', gap: 8, padding: '11px 20px', borderRadius: 12,
+  background: 'linear-gradient(180deg,#8B5CF6,#7C3AED)', color: '#fff', border: 'none', fontFamily: F, fontSize: 14, fontWeight: 600,
+  cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(124,58,237,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
+  transition: 'all 150ms ease',
 };
 const ghostBtn: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8, padding: '12px 18px', borderRadius: 10,

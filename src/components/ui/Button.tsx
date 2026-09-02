@@ -10,34 +10,40 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const sizeStyles = {
-  sm: { padding: '0 12px', height: '32px', fontSize: '13px' },
+  sm: { padding: '0 14px', height: '34px', fontSize: '13px' },
   md: { padding: '0 20px', height: '42px', fontSize: '14px' },
-  lg: { padding: '0 24px', height: '48px', fontSize: '15px' },
+  lg: { padding: '0 26px', height: '48px', fontSize: '15px' },
 };
+
+const BTN_SHADOW = '0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(124,58,237,0.35), inset 0 1px 0 rgba(255,255,255,0.18)';
+const BTN_SHADOW_HOVER = '0 2px 4px rgba(0,0,0,0.35), 0 10px 26px rgba(124,58,237,0.45), inset 0 1px 0 rgba(255,255,255,0.22)';
+const BTN_BG = 'linear-gradient(180deg,#8B5CF6,#7C3AED)';
+const BTN_BG_HOVER = 'linear-gradient(180deg,#9669F8,#8B4FF0)';
 
 const variantStyles = {
   primary: {
-    background: '#8B5CF6',
-    color: '#050505',
+    background: BTN_BG,
+    color: '#FFFFFF',
     border: 'none',
     fontWeight: 600,
+    boxShadow: BTN_SHADOW,
   },
   secondary: {
-    background: '#111111',
+    background: '#1E1E26',
     color: '#FFFFFF',
-    border: '1px solid #242424',
+    border: '1px solid #33333D',
     fontWeight: 500,
   },
   ghost: {
     background: 'transparent',
-    color: '#A1A1A1',
+    color: '#A1A1AA',
     border: 'none',
     fontWeight: 500,
   },
   danger: {
-    background: 'rgba(127,29,29,0.3)',
+    background: 'rgba(248,113,113,0.12)',
     color: '#f87171',
-    border: '1px solid rgba(127,29,29,0.6)',
+    border: '1px solid rgba(248,113,113,0.4)',
     fontWeight: 500,
   },
 };
@@ -58,10 +64,10 @@ export function Button({
         alignItems: 'center',
         justifyContent: 'center',
         gap: '8px',
-        borderRadius: '10px',
+        borderRadius: '12px',
         cursor: disabled || loading ? 'not-allowed' : 'pointer',
         opacity: disabled || loading ? 0.5 : 1,
-        transition: 'all 150ms ease',
+        transition: 'transform 120ms ease, box-shadow 150ms ease, background 150ms ease, filter 150ms ease',
         userSelect: 'none',
         flexShrink: 0,
         whiteSpace: 'nowrap',
@@ -73,13 +79,13 @@ export function Button({
         if (!disabled && !loading) {
           const el = e.currentTarget;
           el.style.transform = 'translateY(-1px)';
-          if (variant === 'primary') el.style.background = '#A78BFA';
+          if (variant === 'primary') { el.style.background = BTN_BG_HOVER; el.style.boxShadow = BTN_SHADOW_HOVER; }
         }
       }}
       onMouseLeave={e => {
         const el = e.currentTarget;
         el.style.transform = '';
-        if (variant === 'primary') el.style.background = '#8B5CF6';
+        if (variant === 'primary') { el.style.background = BTN_BG; el.style.boxShadow = BTN_SHADOW; }
       }}
       {...props}
     >
@@ -109,15 +115,16 @@ export function IconButton({
         justifyContent: 'center',
         width: sz,
         height: sz,
-        borderRadius: '8px',
+        borderRadius: '10px',
         cursor: 'pointer',
         transition: 'all 150ms ease',
         flexShrink: 0,
         ...vr,
+        boxShadow: 'none',
         padding: 0,
         ...style,
       }}
-      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = variant === 'ghost' ? '#111111' : ''; }}
+      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = variant === 'ghost' ? '#1E1E26' : ''; }}
       onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = vr.background; }}
       {...props}
     >

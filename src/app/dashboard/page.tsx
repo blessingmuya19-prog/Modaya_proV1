@@ -389,9 +389,9 @@ function EmptyState({ filtered }: { filtered: boolean }) {
       {!filtered && (
         <Link href="/new" style={{ textDecoration: 'none' }}>
           <button style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 22px', height: 42,
-            fontFamily: F, fontSize: 14, fontWeight: 700,
-            background: 'linear-gradient(135deg,#7C3AED,#A855F7)', color: '#fff',
-            border: 'none', borderRadius: 999, cursor: 'pointer', boxShadow: '0 8px 22px rgba(139,92,246,0.5)' }}>
+            fontFamily: F, fontSize: 14, fontWeight: 600,
+            background: 'linear-gradient(180deg,#8B5CF6,#7C3AED)', color: '#fff',
+            border: 'none', borderRadius: 12, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(124,58,237,0.35), inset 0 1px 0 rgba(255,255,255,0.18)', transition: 'all 150ms ease' }}>
             <Plus size={15} strokeWidth={2.7}/> Create video
           </button>
         </Link>
@@ -450,9 +450,9 @@ export default function DashboardPage() {
         </div>
         <Link href="/new" style={{ textDecoration: 'none' }}>
           <button style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 22px', height: 40,
-            fontFamily: F, fontSize: 13.5, fontWeight: 700,
-            background: 'linear-gradient(135deg,#7C3AED,#A855F7)', color: '#fff',
-            border: 'none', borderRadius: 999, cursor: 'pointer', boxShadow: '0 8px 22px rgba(139,92,246,0.5)',
+            fontFamily: F, fontSize: 13.5, fontWeight: 600,
+            background: 'linear-gradient(180deg,#8B5CF6,#7C3AED)', color: '#fff',
+            border: 'none', borderRadius: 12, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(124,58,237,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
             transition: 'all 150ms' }}
             onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.filter = 'brightness(1.05)'; }}
             onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.filter = ''; }}

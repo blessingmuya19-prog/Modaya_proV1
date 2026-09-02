@@ -154,7 +154,7 @@ export function HeroSection() {
             {/* CTA + note */}
             <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:10, marginTop:20 }}>
               <Link href="/new" style={{ textDecoration:'none' }}>
-                <button style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'0 32px', height:52, fontSize:15, fontWeight:700, color:'#FAFAFA', background:'linear-gradient(135deg,#7C3AED,#A855F7)', border:'none', borderRadius:12, cursor:'pointer', boxShadow:'0 4px 24px rgba(139,92,246,0.32)', transition:'all 220ms ease' }}
+                <button style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'0 32px', height:52, fontSize:15, fontWeight:600, color:'#FFFFFF', background:'linear-gradient(180deg,#8B5CF6,#7C3AED)', border:'none', borderRadius:12, cursor:'pointer', boxShadow:'0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(124,58,237,0.35), inset 0 1px 0 rgba(255,255,255,0.18)', transition:'all 200ms ease' }}
                   onMouseEnter={e => { e.currentTarget.style.transform='translateY(-2px)'; e.currentTarget.style.boxShadow='0 14px 44px rgba(139,92,246,0.6)'; }}
                   onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 10px 30px rgba(139,92,246,0.45)'; }}
                 >
@@ -201,7 +201,7 @@ export function HeroSection() {
                   {['9:16','16:9','1:1'].map(r => <button key={r} onClick={() => setActiveRatio(r)} style={{ padding:'3px 8px', fontSize:11, color: r===activeRatio ? '#8B5CF6' : '#A1A1AA', background: r===activeRatio ? 'rgba(139,92,246,0.1)' : 'transparent', border: r===activeRatio ? '1px solid rgba(139,92,246,0.2)' : '1px solid transparent', borderRadius:5, cursor:'pointer', fontWeight:500 }}>{r}</button>)}
                 </div>
                 <Link href="/new" style={{ textDecoration:'none' }}>
-                  <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 16px', fontSize:12, fontWeight:600, color:'#FAFAFA', background:'linear-gradient(135deg,#7C3AED,#A855F7)', border:'none', borderRadius:7, cursor:'pointer', boxShadow:'0 4px 14px rgba(139,92,246,0.28)' }}>Edit video <ArrowRight size={12} /></button>
+                  <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'8px 16px', fontSize:12, fontWeight:600, color:'#FFFFFF', background:'linear-gradient(180deg,#8B5CF6,#7C3AED)', border:'none', borderRadius:8, cursor:'pointer', boxShadow:'0 4px 14px rgba(139,92,246,0.28)' }}>Edit video <ArrowRight size={12} /></button>
                 </Link>
               </div>
             </div>
@@ -275,7 +275,7 @@ function EditorMockup({ isDone }: { isDone: boolean }) {
           <div style={{ display:'flex', gap:6 }}>
             <div style={{ width:44, height:22, background:'#1E1E26', borderRadius:5, border:'1px solid #33333D' }} />
             <div style={{ width:44, height:22, background:'#1E1E26', borderRadius:5, border:'1px solid #33333D' }} />
-            <div style={{ width:56, height:22, background:'linear-gradient(135deg,#7C3AED,#A855F7)', borderRadius:5 }} />
+            <div style={{ width:56, height:22, background:'linear-gradient(180deg,#8B5CF6,#7C3AED)', borderRadius:5 }} />
           </div>
         </div>
 

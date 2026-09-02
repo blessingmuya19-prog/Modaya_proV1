@@ -108,8 +108,8 @@ export function Footer() {
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 padding: '9px 18px', fontSize: 13, fontWeight: 700, color: '#FFFFFF',
-                background: 'linear-gradient(135deg, #7C3AED 0%, #A855F7 100%)',
-                borderRadius: 999, boxShadow: '0 6px 18px rgba(139,92,246,0.35)',
+                background: 'linear-gradient(180deg,#8B5CF6,#7C3AED)',
+                borderRadius: 12, boxShadow: '0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(124,58,237,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
               }}>
                 Start editing free <ArrowUpRight size={13} />
               </span>

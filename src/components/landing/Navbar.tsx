@@ -140,10 +140,10 @@ export function Navbar() {
               <button style={{
                 padding: '9px 20px', fontSize: 14, fontWeight: 600,
                 color: '#FFFFFF',
-                background: 'linear-gradient(135deg, #7C3AED 0%, #A855F7 100%)',
-                border: 'none', borderRadius: 9999, cursor: 'pointer',
+                background: 'linear-gradient(180deg,#8B5CF6,#7C3AED)',
+                border: 'none', borderRadius: 12, cursor: 'pointer',
                 whiteSpace: 'nowrap', letterSpacing: '-0.01em',
-                boxShadow: '0 6px 20px rgba(139,92,246,0.40)',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(124,58,237,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
                 transition: 'all 200ms ease',
               }}
                 onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 10px 28px rgba(139,92,246,0.55)'; }}
@@ -191,7 +191,7 @@ export function Navbar() {
             <Link href="/new" onClick={() => setMenuOpen(false)} style={{ textDecoration: 'none' }}>
               <div style={{
                 padding: '11px 14px', fontSize: 15, fontWeight: 600,
-                color: '#FFFFFF', background: 'linear-gradient(135deg, #7C3AED, #A855F7)',
+                color: '#FFFFFF', background: 'linear-gradient(180deg,#8B5CF6,#7C3AED)',
                 borderRadius: 12, cursor: 'pointer', textAlign: 'center',
               }}>
                 Try it free

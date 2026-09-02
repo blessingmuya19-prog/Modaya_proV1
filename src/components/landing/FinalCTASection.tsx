@@ -39,9 +39,9 @@ export function FinalCTASection() {
 
         {/* CTA button */}
         <Link href="/new">
-          <button style={{ display:'inline-flex', alignItems:'center', gap:10, padding:'0 clamp(24px,3vw,48px)', height:'clamp(48px,5vh,64px)', fontSize:17, fontWeight:700, background:'linear-gradient(135deg,#7C3AED 0%,#A855F7 100%)', color:'#FFFFFF', border:'none', borderRadius:999, cursor:'pointer', boxShadow:'0 10px 34px rgba(139,92,246,0.45),0 12px 32px rgba(0,0,0,0.45)', transition:'all 250ms ease' } as React.CSSProperties}
-            onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#C084FC,#7C3AED)'; e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 0 70px rgba(139,92,246,0.4),0 20px 40px rgba(0,0,0,0.45)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#7C3AED,#A855F7)'; e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 0 50px rgba(139,92,246,0.3),0 12px 32px rgba(0,0,0,0.45)'; }}
+          <button style={{ display:'inline-flex', alignItems:'center', gap:10, padding:'0 clamp(24px,3vw,48px)', height:'clamp(48px,5vh,64px)', fontSize:17, fontWeight:700, background:'linear-gradient(180deg,#8B5CF6,#7C3AED)', color:'#FFFFFF', border:'none', borderRadius:12, cursor:'pointer', boxShadow:'0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(124,58,237,0.35), inset 0 1px 0 rgba(255,255,255,0.18)', transition:'all 250ms ease' } as React.CSSProperties}
+            onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(180deg,#9669F8,#8B4FF0)'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.35), 0 10px 26px rgba(124,58,237,0.45), inset 0 1px 0 rgba(255,255,255,0.22)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(180deg,#8B5CF6,#7C3AED)'; e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(124,58,237,0.35), inset 0 1px 0 rgba(255,255,255,0.18)'; }}
           >
             Start editing free <ArrowRight size={18} />
           </button>

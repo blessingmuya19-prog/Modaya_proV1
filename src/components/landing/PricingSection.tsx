@@ -113,7 +113,7 @@ export function PricingSection() {
                   <>
                     <div style={{ position:'absolute', top:0, left:'8%', right:'8%', height:1, background:'linear-gradient(90deg,transparent,rgba(139,92,246,0.6),transparent)' }} />
                     <div style={{ position:'absolute', top:-14, left:'50%', transform:'translateX(-50%)' }}>
-                      <span style={{ padding:'4px 16px', background:'linear-gradient(135deg,#7C3AED,#A855F7)', color:'#fff', fontSize:11, fontWeight:700, borderRadius:9999, boxShadow:'0 4px 16px rgba(139,92,246,0.35)', whiteSpace:'nowrap' }}>Most popular</span>
+                      <span style={{ padding:'4px 16px', background:'linear-gradient(180deg,#8B5CF6,#7C3AED)', color:'#fff', fontSize:11, fontWeight:700, borderRadius:9999, boxShadow:'0 4px 16px rgba(139,92,246,0.35)', whiteSpace:'nowrap' }}>Most popular</span>
                     </div>
                   </>
                 )}
@@ -141,9 +141,9 @@ export function PricingSection() {
                 </ul>
 
                 {/* CTA */}
-                <button style={{ width:'100%', padding:'13px', fontSize:14, fontWeight:700, borderRadius:999, cursor:'pointer', border:'none', background: plan.highlight ? 'linear-gradient(135deg,#7C3AED,#A855F7)' : '#1E1E26', color: plan.highlight ? '#FFFFFF' : '#D4D4D8', boxShadow: plan.highlight ? '0 0 24px rgba(139,92,246,0.25)' : 'none', transition:'all 200ms ease' } as React.CSSProperties}
-                  onMouseEnter={e => { e.currentTarget.style.background = plan.highlight ? 'linear-gradient(135deg,#C084FC,#A855F7)' : '#33333D'; e.currentTarget.style.color = plan.highlight ? '#fff' : '#FAFAFA'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = plan.highlight ? 'linear-gradient(135deg,#7C3AED,#A855F7)' : '#1E1E26'; e.currentTarget.style.color = plan.highlight ? '#fff' : '#D4D4D8'; }}
+                <button style={{ width:'100%', padding:'13px', fontSize:14, fontWeight:700, borderRadius:999, cursor:'pointer', border:'none', background: plan.highlight ? 'linear-gradient(180deg,#8B5CF6,#7C3AED)' : '#1E1E26', color: plan.highlight ? '#FFFFFF' : '#D4D4D8', boxShadow: plan.highlight ? '0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(124,58,237,0.30), inset 0 1px 0 rgba(255,255,255,0.16)' : 'none', transition:'all 200ms ease' } as React.CSSProperties}
+                  onMouseEnter={e => { e.currentTarget.style.background = plan.highlight ? 'linear-gradient(180deg,#9669F8,#8B4FF0)' : '#33333D'; e.currentTarget.style.color = plan.highlight ? '#fff' : '#FAFAFA'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = plan.highlight ? 'linear-gradient(180deg,#8B5CF6,#7C3AED)' : '#1E1E26'; e.currentTarget.style.color = plan.highlight ? '#fff' : '#D4D4D8'; }}
                 >{plan.cta}</button>
               </div>
             );
