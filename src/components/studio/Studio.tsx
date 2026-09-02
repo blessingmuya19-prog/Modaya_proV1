@@ -17,7 +17,7 @@ import { ArrowLeft, Film, Upload, Wand2, Download, RefreshCw, Sparkles, Send, Sl
 import { LogoMark } from '../ui/Logo';
 import { getMedia, setMedia, subscribeMedia, analyseFile, type MediaEntry } from '@/lib/videoStore';
 import { saveMediaFile } from '@/lib/mediaDb';
-import { getProjectMedia, uploadProjectMedia } from '@/lib/mediaCloud';
+import { getProjectMedia, uploadProjectMedia, getReferenceBlob } from '@/lib/mediaCloud';
 import { analyseAudio, analyseReference, interestCurve } from '@/lib/ai/analyseReference';
 import type { StyleProfile } from '@/lib/ai/styleProfile';
 import { composeStudioPlan, type StudioPlan, type TranscriptLine } from '@/lib/studio/editPlan';
@@ -30,6 +30,8 @@ import {
   type StageState, type StageId,
 } from '@/lib/studio/pipeline';
 import { refineProfile } from '@/lib/studio/refine';
+import { buildEditMap, explainMarker, markerIcon, fmtTime, type EditMarker } from '@/lib/studio/editMap';
+import { addVersion, loadVersions, type EditVersion } from '@/lib/studio/versions';
 import type { EditorClip } from '../editor/EditorShell';
 
 const F = "'Inter Tight', Inter, system-ui, sans-serif";
@@ -114,8 +116,22 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
   const [chats, setChats] = useState<{ role: 'user' | 'ai'; text: string }[]>([]);
   const [input, setInput] = useState('');
   const [chatBusy, setChatBusy] = useState(false);
+
+  // ── result surface: compare / edit-map / versions / reference ──
+  /** 'compare' (reference vs result) or 'iterate' (video + chat + edit map). */
+  const [resultView, setResultView] = useState<'compare' | 'iterate'>('compare');
+  /** In the iterate view: which playback the user sees. */
+  const [showRef, setShowRef] = useState(false);
+  const [versions, setVersions] = useState<EditVersion[]>([]);
+  const [versionOpen, setVersionOpen] = useState(false);
+  const [selectedMarker, setSelectedMarker] = useState<EditMarker | null>(null);
+  /** The learned reference, kept as a playable blob URL for comparison. */
+  const [refUrl, setRefUrl] = useState<string | null>(null);
+  const refVideoRef = useRef<HTMLVideoElement | null>(null);
+  const syncRef = useRef(false);   // lock reference playback to the result
   const refInput = useRef<HTMLInputElement>(null);
   const cancelRef = useRef(false);
+  const bootstrapped = useRef(false);
   /** Everything a regeneration needs, captured on the first run. */
   const ctxRef = useRef<{
     durationS: number; onsets: number[]; interest: number[]; transcript: TranscriptLine[];
@@ -125,6 +141,8 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
   /** The profile currently driving the edit (reference/default, then refined). */
   const profileRef = useRef<StyleProfile | null>(null);
   const seedRef = useRef(1);
+  /** Free-text instruction from the drop screen, used to label Version 1. */
+  const initialNoteRef = useRef('');
 
   /** Compose the EditPlan from the current profile and push it to the preview.
    *  Shared by the first run, Regenerate and every chat refinement. Returns
@@ -168,6 +186,37 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
     return { plan, match: m };
   }, []);
 
+  /** Persist a newly composed plan as the next version (never overwrites). */
+  const saveVersion = useCallback(async (
+    profile: StyleProfile, seed: number, note: string,
+    built: { plan: StudioPlan; match: number },
+  ) => {
+    const ctx = ctxRef.current;
+    if (!ctx) return;
+    try {
+      const { versions: vs } = await addVersion(projectId, {
+        profile, seed, hasRef: ctx.hasRef, refName, note: note || undefined,
+      }, { durationS: built.plan.durationS, cuts: built.plan.cutCount, match: built.match });
+      setVersions(vs);
+    } catch { /* versioning is non-blocking */ }
+  }, [projectId, refName]);
+
+  /** Rebuild a specific past version from its recipe (deterministic). */
+  const restoreVersion = useCallback((v: EditVersion) => {
+    const ctx = ctxRef.current;
+    if (!ctx) return;
+    profileRef.current = v.recipe.profile;
+    seedRef.current = v.recipe.seed;
+    const built = applyPlan(v.recipe.profile, v.recipe.seed);
+    if (built) {
+      setHeadline(resultHeadline({
+        hasReference: ctx.hasRef, match: built.match, durationS: built.plan.durationS,
+      }));
+      setChats(c => [...c, { role: 'ai', text: `Back on ${v.label} (Version ${v.number}). Ask me to change anything from here.` }]);
+    }
+    setSelectedMarker(null);
+  }, [applyPlan]);
+
   const sourceUrl = media?.objectUrl ?? null;
 
   const sequence: Sequence | null = useMemo(() => {
@@ -203,9 +252,19 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
     cancelRef.current = false;
     setHasRef(withRef);
     setRefName(refFile?.name ?? null);
+    setSelectedMarker(null);
+    if (withRef && refFile) {
+      setRefUrl(prev => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(refFile); });
+      // Durable reference copy (role 'ref') so it survives and can be compared
+      // on any device; no-op on hosts without durable storage.
+      void uploadProjectMedia(projectId, 'ref', refFile, refFile.name, 0).catch(() => {});
+    } else {
+      setRefUrl(null);
+    }
     setStages(stagesForRun(withRef));
     setPhase('working');
     setChats([]);
+    setResultView('compare');
 
     const tick = async (id: StageId, work: () => Promise<void> | void) => {
       if (cancelRef.current) return;
@@ -276,6 +335,18 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
       await tick('render', () => {});
 
       if (cancelRef.current) return;
+
+      // Persist this as Version 1 (or the next version when re-run). The
+      // recipe rebuilds the identical cut, so nothing heavy is stored.
+      if (built) {
+        const { versions: vs } = await addVersion(projectId, {
+          profile: baseProfile, seed: 1, hasRef: withRef && !!profile,
+          refName: refFile?.name ?? null, note: initialNoteRef.current || undefined,
+        }, { durationS: built.plan.durationS, cuts: built.plan.cutCount, match: built.match });
+        setVersions(vs);
+        initialNoteRef.current = '';
+      }
+
       setHeadline(resultHeadline({
         hasReference: ctxRef.current?.hasRef ?? false,
         match: built?.match ?? 0,
@@ -288,13 +359,67 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
     }
   }, [projectId, setStage]);
 
-  // Auto-run once footage exists if the user came straight here (e.g. after upload)
+  /** The transparent Edit Map derived from the finished plan. */
+  const editMap = useMemo(() => (plan ? buildEditMap(plan) : []), [plan]);
+
+  /** Explanation for the marker the user clicked (or null). */
+  const markerExplanation = useMemo(() => {
+    if (!selectedMarker || !ctxRef.current) return null;
+    const ctx = ctxRef.current;
+    return explainMarker(selectedMarker, {
+      hasRef: ctx.hasRef,
+      cutsPerMin: ctx.baseProfile.cutsPerMin,
+      punchInRate: ctx.baseProfile.punchInRate,
+    });
+  }, [selectedMarker]);
+
+  // Bootstrap once footage exists: if this project already has versions (the
+  // user is reopening their project) rebuild the latest one straight into the
+  // compare/iterate surface — same project, never reset, reference kept.
+  // Otherwise run the pipeline fresh.
   const autoRan = useRef(false);
   useEffect(() => {
-    if (media && phase === 'drop' && !autoRan.current) {
-      autoRan.current = true;
-      void run();
-    }
+    if (!media || phase !== 'drop' || autoRan.current) return;
+    autoRan.current = true;
+    (async () => {
+      const existing = await loadVersions(projectId).catch(() => [] as EditVersion[]);
+      if (existing.length) {
+        // Rebuild context from the latest version's recipe.
+        const last = existing[existing.length - 1];
+        const stored = await getProjectMedia(projectId);
+        const blob = stored?.blob;
+        if (!blob) { void run(); return; }
+        let env: Awaited<ReturnType<typeof analyseAudio>> = null;
+        try { env = await analyseAudio(blob); } catch { /* silent */ }
+        const durationS = stored.durationS || media.durationS || 60;
+        const interest = interestCurve(env, durationS);
+        ctxRef.current = {
+          durationS, onsets: env?.onsets ?? [], interest, transcript: [],
+          baseProfile: last.recipe.profile, hasRef: last.recipe.hasRef,
+          captionsWanted: last.recipe.profile.captions.present,
+          sourceName: stored.filename || media.filename,
+        };
+        profileRef.current = last.recipe.profile;
+        seedRef.current = last.recipe.seed;
+        setHasRef(last.recipe.hasRef);
+        setRefName(last.recipe.refName ?? null);
+        setVersions(existing);
+        applyPlan(last.recipe.profile, last.recipe.seed);
+        setHeadline(resultHeadline({
+          hasReference: last.recipe.hasRef, match: last.stats?.match ?? 0, durationS: last.stats?.durationS ?? durationS,
+        }));
+        setResultView('iterate');
+        setPhase('result');
+        // Try to surface the stored reference for the reference view.
+        try {
+          const { getReferenceBlob } = await import('@/lib/mediaCloud');
+          const refBlob = await getReferenceBlob(projectId, 0);
+          if (refBlob) setRefUrl(URL.createObjectURL(refBlob.blob));
+        } catch { /* reference is optional */ }
+      } else {
+        void run();
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [media]);
 
@@ -341,11 +466,13 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
       const { profile: next, changed, reply } = refineProfile(current, text);
       if (changed) {
         profileRef.current = next;
-        const built = applyPlan(next, ++seedRef.current);
+        const seed = ++seedRef.current;
+        const built = applyPlan(next, seed);
         if (built) {
           setHeadline(resultHeadline({
             hasReference: ctxRef.current.hasRef, match: built.match, durationS: built.plan.durationS,
           }));
+          void saveVersion(next, seed, text, built);
         }
       }
       setChats(c => [...c, { role: 'ai', text: reply }]);
@@ -356,16 +483,19 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
     }
   };
 
-  /** Regenerate: same creative direction, fresh cut from a new seed. */
+  /** Regenerate: same creative direction, fresh cut from a new seed. Saved as
+   *  a new version so nothing is lost. */
   const regenerate = () => {
     const current = profileRef.current ?? ctxRef.current?.baseProfile;
     if (!current || !ctxRef.current) { void run(); return; }
     setChatBusy(true);
-    const built = applyPlan(current, ++seedRef.current);
+    const seed = ++seedRef.current;
+    const built = applyPlan(current, seed);
     if (built) {
       setHeadline(resultHeadline({
         hasReference: ctxRef.current.hasRef, match: built.match, durationS: built.plan.durationS,
       }));
+      void saveVersion(current, seed, '', built);
       setChats(c => [...c, { role: 'ai', text: 'Done — I recut it with fresh timing choices.' }]);
     }
     setChatBusy(false);
@@ -378,8 +508,8 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
         projectId={projectId} projectName={projectName}
         hasFootage={!!media}
         onFootage={uploadFootage}
-        onReference={(f) => { void run(f); }}
-        onStart={() => { void run(); }}
+        onReference={(f, note) => { initialNoteRef.current = note; void run(f); }}
+        onStart={(note) => { initialNoteRef.current = note; void run(); }}
         refInputRef={refInput}
         error={error}
       />
@@ -394,81 +524,222 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
   /* ─────────── result phase ─────────── */
   const mm = String(Math.floor(totalS / 60));
   const ss = String(Math.floor(totalS % 60)).padStart(2, '0');
+  const currentVersion = versions.length ? versions[versions.length - 1] : null;
+
+  /** Synced playback for side-by-side: scrub/play both by progress fraction. */
+  const syncProgress = useCallback((frac: number, play: boolean) => {
+    const t = Math.max(0, frac) * Math.max(1, totalS);
+    setPlayhead(t);
+    const ref = refVideoRef.current;
+    if (ref && Number.isFinite(ref.duration)) {
+      const rt = frac * ref.duration;
+      try { ref.currentTime = rt; } catch { /* seeking before metadata */ }
+      if (play) { void ref.play().catch(() => {}); } else { ref.pause(); }
+    }
+    setPlaying(play);
+  }, [totalS]);
+
+  const resultVideo = (
+    <div style={{ ...previewBox(plan?.frame.ratio), background: '#000', borderRadius: 14, overflow: 'hidden', position: 'relative', border: `1px solid ${C.b3}`, boxShadow: '0 24px 70px rgba(0,0,0,0.7)' }}>
+      {sequence && sourceUrl ? (
+        <PreviewCanvas
+          sequence={sequence} sourceUrl={sourceUrl} sourceId={projectId || 'main'}
+          playing={playing} playheadS={playhead}
+          onTime={setPlayhead} onPaused={() => setPlaying(false)} onEnded={() => { setPlaying(false); setPlayhead(0); }}
+        />
+      ) : (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, fontSize: 13 }}>Preparing preview…</div>
+      )}
+      <button onClick={() => setPlaying(p => !p)} style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', width: 44, height: 44, borderRadius: '50%', background: 'rgba(0,0,0,0.55)', border: `1px solid rgba(255,255,255,0.25)`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
+        {playing ? '❚❚' : '▶'}
+      </button>
+    </div>
+  );
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.text, fontFamily: F, display: 'flex', flexDirection: 'column' }}>
       <header style={{ height: 54, display: 'flex', alignItems: 'center', gap: 12, padding: '0 18px', borderBottom: `1px solid ${C.b}` }}>
-        <LogoMark size={24} />
-        <span style={{ fontWeight: 600, fontSize: 15, letterSpacing: '-0.02em' }}>Modaya</span>
-        <span style={{ color: C.dim, fontSize: 13, marginLeft: 4 }}>/ {projectName}</span>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+        <Link href="/dashboard" style={{ color: C.muted, display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none', fontSize: 13 }}><ArrowLeft size={15} /> Projects</Link>
+        <span style={{ fontWeight: 600, fontSize: 15, letterSpacing: '-0.02em' }}>{projectName}</span>
+        {currentVersion && (
+          <span style={{ color: C.dim, fontSize: 12, background: C.s3, border: `1px solid ${C.b3}`, borderRadius: 999, padding: '3px 10px' }}>
+            Version {currentVersion.number}{currentVersion.label && currentVersion.number > 1 ? ` · ${currentVersion.label}` : ''}
+          </span>
+        )}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button onClick={() => setVersionOpen(v => !v)} style={ghostBtn}><Sparkles size={13} /> Versions ({versions.length})</button>
+          <button onClick={() => setExpOpen(true)} style={primaryBtn}><Download size={14} /> Export</button>
           <Link href={`/editor/${projectId}`} style={{ textDecoration: 'none' }}>
-            <button style={ghostBtn}><SlidersHorizontal size={13} /> Advanced timeline</button>
+            <button style={ghostBtn}><SlidersHorizontal size={13} /> Advanced</button>
           </Link>
         </div>
       </header>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '22px 16px', gap: 16, overflowY: 'auto' }}>
-        {/* Preview — shaped by the plan's frame format (9:16 short / 16:9) */}
-        <div style={{ ...previewBox(plan?.frame.ratio), background: '#000', borderRadius: 14, overflow: 'hidden', position: 'relative', border: `1px solid ${C.b3}`, boxShadow: '0 24px 70px rgba(0,0,0,0.7)' }}>
-          {sequence && sourceUrl ? (
-            <PreviewCanvas
-              sequence={sequence} sourceUrl={sourceUrl} sourceId={projectId || 'main'}
-              playing={playing} playheadS={playhead}
-              onTime={setPlayhead} onPaused={() => setPlaying(false)} onEnded={() => { setPlaying(false); setPlayhead(0); }}
-            />
-          ) : (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, fontSize: 13 }}>Preparing preview…</div>
+      {/* Compare ⇄ Iterate toggle */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 6, padding: '12px 0 0' }}>
+        {([['compare', 'Reference vs result'], ['iterate', 'Edit & refine']] as const).map(([v, label]) => (
+          <button key={v} onClick={() => setResultView(v)}
+            style={{ padding: '8px 16px', borderRadius: 999, border: `1px solid ${resultView === v ? C.accent : C.b3}`,
+              background: resultView === v ? `${C.accent}1c` : C.s2, color: resultView === v ? C.accent : C.muted,
+              fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: F }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {resultView === 'compare' ? (
+        /* ─────────── comparison screen ─────────── */
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 16px', gap: 14, overflowY: 'auto' }}>
+          <p style={{ margin: 0, color: C.muted, fontSize: 14 }}>{headline}</p>
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', width: '100%' }}>
+            {/* Reference */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+              <CompareBox title="REFERENCE">
+                {refUrl
+                  ? <video ref={refVideoRef} src={refUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
+                  : <div style={{ color: C.dim, fontSize: 12, padding: 16, textAlign: 'center' }}>No reference added.<br/>Your edit uses Modaya&apos;s default punchy style.</div>}
+              </CompareBox>
+              <span style={{ fontSize: 12, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{refName ?? 'Reference'}</span>
+            </div>
+            {/* Result */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+              <div style={{ transform: 'scale(0.92)', transformOrigin: 'top center' }}>{resultVideo}</div>
+              <span style={{ fontSize: 12, color: C.green, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
+                Your video{match > 0 ? ` · ${match}% match` : ''}
+              </span>
+            </div>
+          </div>
+
+          {refUrl && (
+            <button onClick={() => { const frac = playing ? (playhead / Math.max(1, totalS)) : 0; syncProgress(frac, !playing); }}
+              style={{ ...primaryBtn, marginTop: 4 }}>
+              {playing ? '❚❚ Pause both' : '▶ Play together (synced)'}
+            </button>
           )}
-          <button onClick={() => setPlaying(p => !p)} style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', width: 44, height: 44, borderRadius: '50%', background: 'rgba(0,0,0,0.55)', border: `1px solid rgba(255,255,255,0.25)`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
-            {playing ? '❚❚' : '▶'}
-          </button>
-        </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: C.sec, fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>
-          <span>{mm}:{ss}</span>
-          {match > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: C.green }}>
-            <CheckCircle2 size={14} /> Reference match {match}%
-          </span>}
-        </div>
-        <p style={{ margin: 0, color: C.muted, fontSize: 14, textAlign: 'center' }}>{headline}</p>
-        {plan?.summary && <p style={{ margin: 0, color: C.dim, fontSize: 12, textAlign: 'center', maxWidth: 520 }}>{plan.summary}</p>}
+          {plan?.summary && <p style={{ margin: 0, color: C.dim, fontSize: 12, textAlign: 'center', maxWidth: 560 }}>{plan.summary}</p>}
 
-        {/* Primary actions */}
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
-          <button onClick={() => setExpOpen(true)} style={primaryBtn}><Download size={15} /> Export video</button>
-          <button onClick={regenerate} disabled={chatBusy} style={ghostBtn}>
-            {chatBusy ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />} Regenerate
-          </button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button onClick={() => setExpOpen(true)} style={primaryBtn}><Download size={15} /> Export</button>
+            <button onClick={() => setResultView('iterate')} style={ghostBtn}><Sparkles size={14} /> Iterate with Modaya</button>
+          </div>
         </div>
+      ) : (
+        /* ─────────── iterate screen: video + chat, edit map below ─────────── */
+        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 360px', gap: 0, minHeight: 0 }} className="studio-iterate-grid">
+          {/* Left: video + edit map */}
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, padding: '18px 20px', gap: 12, overflowY: 'auto' }}>
+            {/* Reference / Your edit toggle (only when a reference exists) */}
+            {refUrl && (
+              <div style={{ display: 'flex', gap: 6 }}>
+                {([['mine', 'Your edit'], ['ref', 'Reference']] as const).map(([v, label]) => (
+                  <button key={v} onClick={() => setShowRef(v === 'ref')}
+                    style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${showRef === (v === 'ref') ? C.accent : C.b3}`,
+                      background: showRef === (v === 'ref') ? `${C.accent}1c` : C.s2, color: showRef === (v === 'ref') ? C.accent : C.muted,
+                      fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: F }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
 
-        {/* Refinement chat */}
-        <div style={{ width: 'min(92vw, 560px)', marginTop: 6 }}>
-          {chats.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10, maxHeight: 180, overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              {showRef && refUrl ? (
+                <div style={{ ...previewBox(plan?.frame.ratio), background: '#000', borderRadius: 14, overflow: 'hidden', border: `1px solid ${C.b3}` }}>
+                  <video src={refUrl} controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+              ) : resultVideo}
+            </div>
+
+            {/* Time */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: C.sec, fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>
+              <span>{fmtTime(playhead)} / {mm}:{ss}</span>
+              {match > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: C.green }}>
+                <CheckCircle2 size={14} /> Reference match {match}%
+              </span>}
+              {markerExplanation && (
+                <span style={{ marginLeft: 'auto', color: C.accent, fontSize: 12, maxWidth: '52%', textAlign: 'right' }}>{markerExplanation}</span>
+              )}
+            </div>
+
+            {/* Edit Map — Modaya's transparent record of what it did */}
+            <EditMap
+              markers={editMap} durationS={totalS} playheadS={playhead}
+              selectedId={selectedMarker?.id ?? null}
+              onSeek={(t) => { setPlayhead(t); setPlaying(false); }}
+              onSelect={(m) => setSelectedMarker(prev => (prev?.id === m.id ? null : m))}
+            />
+            {selectedMarker && (
+              <div style={{ background: C.s2, border: `1px solid ${C.accent}55`, borderRadius: 10, padding: '10px 14px', fontSize: 13, color: C.sec, lineHeight: 1.5 }}>
+                <span style={{ color: C.accent, fontWeight: 700, marginRight: 6 }}>{fmtTime(selectedMarker.t)} · {selectedMarker.label}</span>
+                {markerExplanation}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button onClick={regenerate} disabled={chatBusy} style={ghostBtn}>
+                {chatBusy ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />} Regenerate
+              </button>
+              <Link href={`/editor/${projectId}`} style={{ textDecoration: 'none' }}>
+                <button style={ghostBtn}><SlidersHorizontal size={13} /> Take full control</button>
+              </Link>
+            </div>
+          </div>
+
+          {/* Right: Modaya conversation */}
+          <div style={{ borderLeft: `1px solid ${C.b}`, display: 'flex', flexDirection: 'column', minHeight: 0, background: C.surface }}>
+            <div style={{ padding: '16px 18px', borderBottom: `1px solid ${C.b}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Sparkles size={17} color={C.accent} />
+              <span style={{ fontWeight: 700, fontSize: 14 }}>Modaya</span>
+              <span style={{ marginLeft: 'auto', color: C.dim, fontSize: 11 }}>Tell it what to change</span>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ alignSelf: 'flex-start', maxWidth: '92%', padding: '10px 14px', borderRadius: 12, background: C.s3, color: C.sec, fontSize: 13.5, lineHeight: 1.5 }}>
+                Your edit is ready. I kept the strongest moment as the hook, cut the dead air{match > 0 ? ` and matched the reference's pacing` : ''}. What would you like to change?
+              </div>
               {chats.map((m, i) => (
-                <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '88%', padding: '8px 12px', borderRadius: 12, background: m.role === 'user' ? C.accent : C.s3, color: m.role === 'user' ? '#fff' : C.sec, fontSize: 13, lineHeight: 1.45 }}>{m.text}</div>
+                <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '92%', padding: '9px 13px', borderRadius: 12, background: m.role === 'user' ? C.accent : C.s3, color: m.role === 'user' ? '#fff' : C.sec, fontSize: 13, lineHeight: 1.45 }}>{m.text}</div>
               ))}
               {chatBusy && <div style={{ color: C.muted, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}><Loader2 size={12} className="spin" /> Modaya is adjusting…</div>}
             </div>
-          )}
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, background: C.s2, border: `1px solid ${C.b3}`, borderRadius: 12, padding: '8px 10px' }}>
-            <Sparkles size={16} color={C.accent} style={{ flexShrink: 0, marginTop: 6 }} />
-            <textarea
-              value={input} onChange={e => setInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendRefinement(); } }}
-              rows={1} placeholder='Tell Modaya what to change…  e.g. "Make the start faster and use more punch-ins."'
-              style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', resize: 'none', color: C.text, fontFamily: F, fontSize: 14, lineHeight: 1.5, maxHeight: 90 }}
-            />
-            <button onClick={() => sendRefinement()} disabled={!input.trim() || chatBusy} style={{ width: 34, height: 34, borderRadius: 9, border: 'none', background: input.trim() && !chatBusy ? C.accent : C.b3, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: input.trim() ? 'pointer' : 'default', flexShrink: 0 }}>
-              <Send size={15} />
-            </button>
+            <div style={{ padding: 12, borderTop: `1px solid ${C.b}` }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, background: C.s2, border: `1px solid ${C.b3}`, borderRadius: 12, padding: '8px 10px' }}>
+                <textarea
+                  value={input} onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendRefinement(); } }}
+                  rows={1} placeholder='Ask Modaya…  e.g. "Make the second half faster."'
+                  style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', resize: 'none', color: C.text, fontFamily: F, fontSize: 13.5, lineHeight: 1.5, maxHeight: 90 }}
+                />
+                <button onClick={() => sendRefinement()} disabled={!input.trim() || chatBusy} style={{ width: 34, height: 34, borderRadius: 9, border: 'none', background: input.trim() && !chatBusy ? C.accent : C.b3, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: input.trim() ? 'pointer' : 'default', flexShrink: 0 }}>
+                  <Send size={15} />
+                </button>
+              </div>
+              <p style={{ color: C.dim, fontSize: 11, margin: '8px 2px 0', lineHeight: 1.5 }}>
+                “Make it more cinematic.” · “Remove the captions.” · “Use the reference’s transitions.”
+              </p>
+            </div>
           </div>
-          <p style={{ textAlign: 'center', color: C.dim, fontSize: 11, margin: '8px 0 0' }}>
-            “The intro is too slow.” · “Use the reference’s captions more.” · “Make it more energetic.”
-          </p>
         </div>
-      </div>
+      )}
+
+      {/* Versions popover */}
+      {versionOpen && (
+        <div style={{ position: 'fixed', top: 58, right: 130, zIndex: 9500, width: 300, background: C.surface, border: `1px solid ${C.b3}`, borderRadius: 12, boxShadow: '0 24px 60px rgba(0,0,0,0.7)', padding: 8, maxHeight: '60vh', overflowY: 'auto' }}>
+          <div style={{ fontSize: 12, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '6px 10px' }}>Versions</div>
+          {[...versions].reverse().map(v => (
+            <button key={v.id} onClick={() => { restoreVersion(v); setVersionOpen(false); }}
+              style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, padding: '10px', borderRadius: 9, border: 'none',
+                background: v.id === currentVersion?.id ? `${C.accent}16` : 'transparent', color: C.sec, cursor: 'pointer', fontFamily: F }}>
+              <span style={{ width: 30, height: 30, borderRadius: 8, background: C.s3, border: `1px solid ${C.b3}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: C.accent, flexShrink: 0 }}>{v.number}</span>
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.label}</span>
+                <span style={{ display: 'block', fontSize: 11, color: C.dim }}>{fmtTime(v.stats?.durationS ?? 0)} · {v.stats?.cuts ?? 0} cuts{v.stats?.match ? ` · ${v.stats.match}% match` : ''}</span>
+              </span>
+              {v.id === currentVersion?.id && <span style={{ marginLeft: 'auto', fontSize: 10, color: C.green, fontWeight: 700, whiteSpace: 'nowrap' }}>CURRENT</span>}
+            </button>
+          ))}
+        </div>
+      )}
 
       {sequence && sourceUrl && (
         <ExportModal
@@ -481,7 +752,74 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         .spin { animation: spin 0.8s linear infinite; }
+        @media (max-width: 860px) { .studio-iterate-grid { grid-template-columns: 1fr !important; } }
       `}</style>
+    </div>
+  );
+}
+
+/* ─────────── comparison box ─────────── */
+function CompareBox({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ width: 'min(42vw, 300px)', aspectRatio: '9 / 16', background: '#000', borderRadius: 14, overflow: 'hidden', position: 'relative', border: `1px solid ${C.b3}`, boxShadow: '0 18px 50px rgba(0,0,0,0.6)' }}>
+      <span style={{ position: 'absolute', top: 8, left: 8, zIndex: 2, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: '#fff', background: 'rgba(0,0,0,0.55)', padding: '3px 8px', borderRadius: 6 }}>{title}</span>
+      {children}
+    </div>
+  );
+}
+
+/* ─────────── Edit Map ─────────── */
+function EditMap({ markers, durationS, playheadS, selectedId, onSeek, onSelect }: {
+  markers: EditMarker[];
+  durationS: number;
+  playheadS: number;
+  selectedId: string | null;
+  onSeek: (t: number) => void;
+  onSelect: (m: EditMarker) => void;
+}) {
+  const dur = Math.max(1, durationS);
+  const laneColors: Record<string, string> = {
+    hook: '#F5C451', cut: C.accent, zoom: '#B07CFF', caption: C.green, broll: '#FF8A5B',
+  };
+  return (
+    <div style={{ background: C.s2, border: `1px solid ${C.b3}`, borderRadius: 12, padding: '14px 16px 12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: C.sec, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Edit map</span>
+        <span style={{ fontSize: 11, color: C.dim }}>What Modaya did — click any edit to see why</span>
+      </div>
+      <div style={{ position: 'relative', height: 46 }}>
+        {/* playhead */}
+        <div style={{ position: 'absolute', top: -6, bottom: -6, width: 2, background: '#fff', opacity: 0.7, left: `${(playheadS / dur) * 100}%`, pointerEvents: 'none' }} />
+        {/* baseline */}
+        <div style={{ position: 'absolute', left: 0, right: 0, top: 22, height: 2, background: C.b3, borderRadius: 2 }} />
+        {markers.map(m => {
+          const left = Math.min(98, (m.t / dur) * 100);
+          const color = laneColors[m.type] ?? C.sec;
+          const active = selectedId === m.id;
+          return (
+            <button key={m.id}
+              onClick={() => { onSelect(m); onSeek(m.t); }}
+              title={`${m.label} at ${fmtTime(m.t)}`}
+              style={{ position: 'absolute', left: `${left}%`, top: 6, transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+              <span style={{ width: active ? 30 : 26, height: active ? 30 : 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: m.type === 'cut' ? 13 : m.type === 'caption' ? 11 : 13, fontWeight: 700, color: '#0a0a0a',
+                background: color, boxShadow: active ? `0 0 0 3px ${color}44` : 'none', border: active ? '2px solid #fff' : 'none', lineHeight: 1 }}>
+                {markerIcon(m.type)}
+              </span>
+              <span style={{ position: 'absolute', top: 34, fontSize: 9, color: C.dim, whiteSpace: 'nowrap' }}>{fmtTime(m.t)}</span>
+            </button>
+          );
+        })}
+      </div>
+      {/* legend */}
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 18 }}>
+        {(['hook', 'cut', 'zoom', 'caption', 'broll'] as const).map(t => (
+          <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: C.muted, textTransform: 'capitalize' }}>
+            <span style={{ width: 8, height: 8, borderRadius: 3, background: laneColors[t] }} />
+            {t === 'broll' ? 'B-roll' : t}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -489,12 +827,14 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
 /* ─────────── drop screen ─────────── */
 function DropScreen({ projectId, projectName, hasFootage, onFootage, onReference, onStart, refInputRef, error }: {
   projectId: string; projectName: string; hasFootage: boolean;
-  onFootage: (f: File) => void; onReference: (f: File) => void; onStart: () => void;
+  onFootage: (f: File) => void; onReference: (f: File, note: string) => void; onStart: (note: string) => void;
   refInputRef: React.RefObject<HTMLInputElement | null>; error: string | null;
 }) {
   const footageRef = useRef<HTMLInputElement>(null);
   const [footName, setFootName] = useState<string | null>(null);
   const [refReady, setRefReady] = useState<File | null>(null);
+  const [note, setNote] = useState('');
+  const ready = !!hasFootage || !!footName;
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.text, fontFamily: F, display: 'flex', flexDirection: 'column' }}>
@@ -510,6 +850,7 @@ function DropScreen({ projectId, projectName, hasFootage, onFootage, onReference
             Drop your footage. Add a reference if you want Modaya to copy a style. Then Modaya does the rest.
           </p>
 
+          <p style={{ color: C.dim, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px' }}>Your video</p>
           <DropZone
             label={hasFootage || footName ? (footName ?? 'Footage ready') : 'Your footage'}
             sub={hasFootage || footName ? 'Tap to replace' : 'Upload the video you want edited'}
@@ -531,19 +872,27 @@ function DropScreen({ projectId, projectName, hasFootage, onFootage, onReference
           <input ref={refInputRef} type="file" accept="video/*" style={{ display: 'none' }}
             onChange={e => { const f = e.target.files?.[0]; if (f) setRefReady(f); e.target.value = ''; }} />
 
+          <p style={{ color: C.dim, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '20px 0 8px' }}>Instructions · optional</p>
+          <textarea
+            value={note} onChange={e => setNote(e.target.value)}
+            rows={2} placeholder={'e.g. "Create a 60-second cinematic edit. Keep the reference\'s pacing and transitions."'}
+            style={{ width: '100%', boxSizing: 'border-box', background: C.s2, border: `1.5px solid ${C.b3}`, borderRadius: 12, color: C.text,
+              fontFamily: F, fontSize: 14, lineHeight: 1.5, padding: '12px 14px', resize: 'vertical', outline: 'none' }}
+          />
+
           {error && <p style={{ color: '#ef4444', fontSize: 13, margin: '16px 0 0' }}>{error}</p>}
 
           <button
-            onClick={() => { if (refReady) onReference(refReady); else onStart(); }}
-            disabled={!hasFootage && !footName}
-            style={{ marginTop: 26, width: '100%', padding: '15px', borderRadius: 12, border: 'none', fontFamily: F, fontSize: 15, fontWeight: 600,
-              background: (!hasFootage && !footName) ? C.b3 : C.accent, color: (!hasFootage && !footName) ? C.dim : '#fff',
-              cursor: (!hasFootage && !footName) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
-              boxShadow: (!hasFootage && !footName) ? 'none' : `0 6px 24px ${C.accent}44` }}>
+            onClick={() => { const n = note.trim(); if (refReady) onReference(refReady, n); else onStart(n); }}
+            disabled={!ready}
+            style={{ marginTop: 22, width: '100%', padding: '15px', borderRadius: 12, border: 'none', fontFamily: F, fontSize: 15, fontWeight: 600,
+              background: ready ? C.accent : C.b3, color: ready ? '#fff' : C.dim,
+              cursor: ready ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+              boxShadow: ready ? `0 6px 24px ${C.accent}44` : 'none' }}>
             <Wand2 size={17} /> {refReady ? 'Create edit in this style' : 'Create edit'}
           </button>
           <p style={{ textAlign: 'center', color: C.dim, fontSize: 11, margin: '12px 0 0' }}>
-            {projectName} · No timeline, no settings — Modaya handles the technical work.
+            {projectName} · You don&apos;t edit the video — you tell Modaya how you want it edited.
           </p>
         </div>
       </div>

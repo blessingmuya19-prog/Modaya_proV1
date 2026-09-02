@@ -12,10 +12,11 @@
  */
 
 const DB_NAME    = 'modaya-media';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_FILE = 'files';
 const STORE_FRAMES = 'frames';
 const STORE_TRANSCRIPT = 'transcripts';
+const STORE_VERSIONS = 'versions';
 
 /** Don't try to persist enormous files — IndexedDB writes would stall the tab. */
 const MAX_PERSIST_BYTES = 600 * 1024 * 1024;   // 600 MB
@@ -46,6 +47,7 @@ function openDb(): Promise<IDBDatabase | null> {
       if (!db.objectStoreNames.contains(STORE_FILE))   db.createObjectStore(STORE_FILE);
       if (!db.objectStoreNames.contains(STORE_FRAMES)) db.createObjectStore(STORE_FRAMES);
       if (!db.objectStoreNames.contains(STORE_TRANSCRIPT)) db.createObjectStore(STORE_TRANSCRIPT);
+      if (!db.objectStoreNames.contains(STORE_VERSIONS))   db.createObjectStore(STORE_VERSIONS);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror   = () => resolve(null);
@@ -127,4 +129,18 @@ export async function saveTranscript(projectId: string, t: StoredTranscript) {
 export async function loadTranscript(projectId: string): Promise<StoredTranscript | null> {
   if (!projectId) return null;
   return tx<StoredTranscript>(STORE_TRANSCRIPT, 'readonly', s => s.get(projectId));
+}
+
+/* ─────────────── generic JSON record (edit versions etc.) ─────────────── */
+
+/** Persist any serializable record keyed by project (e.g. the version list). */
+export async function saveRecord<T>(projectId: string, value: T): Promise<void> {
+  if (!projectId || value === undefined) return;
+  await tx(STORE_VERSIONS, 'readwrite',
+    s => s.put(value, projectId) as unknown as IDBRequest<T>);
+}
+
+export async function loadRecord<T>(projectId: string): Promise<T | null> {
+  if (!projectId) return null;
+  return tx<T>(STORE_VERSIONS, 'readonly', s => s.get(projectId));
 }

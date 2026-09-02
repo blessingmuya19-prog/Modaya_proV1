@@ -20,10 +20,26 @@ near-empty of technical UI:
 > → match pacing → captions → build edit → render) → get a finished video with
 > **Export**, **Regenerate**, and a **"Tell Modaya what to change"** box.
 
-There is **no timeline, codec, keyframe or bitrate setting** in that flow. The
-full pro timeline (`/editor/[id]`) still exists and is one click away under
-**"Advanced timeline"** for power users/debugging — it is a power tool, not the
-product. The brain of both is the same (see below); Studio is the simple face.
+There is **no timeline, codec, keyframe or bitrate setting** the user is
+expected to touch. After the stages complete the result lands in two surfaces:
+
+- **Reference vs Result (compare).** A side-by-side of the reference and your
+  edit with **synced playback** ("play together") so the user can immediately
+  see Modaya recreated the editing pattern. Actions: **Export**, or **Iterate**.
+- **Iterate** — the transparent editor. Left: the edited video plus Modaya's
+  **Edit Map** — a clean row of Hook / Cut / Zoom / Caption / B-roll markers on
+  the programme time axis. It is **visual and inspectable, not manually
+  editable**: clicking any edit explains the decision in grounded terms ("Cut
+  here and removed 1.4s of dead air to match the reference's pace of about 28
+  cuts a minute"). Right: the Modaya conversation — you tell it what to change.
+  A **Your edit / Reference** toggle swaps the playback.
+
+Every regeneration or refinement is saved as a numbered **Version** (its
+deterministic recipe, so it rebuilds byte-identically on any device). The
+project never resets and nothing is overwritten: reopening a project restores
+the latest version with its reference and instructions; older versions are one
+click back. The full pro timeline (`/editor/[id]`) remains under
+**"Advanced / Take full control"** as a fallback power tool, not the product.
 
 You can also drive editing conversationally in the pro editor: "cut the
 silences", "add captions", "find me 5 viral clips", or "re-cut this like this
@@ -240,6 +256,8 @@ branch deploys), then **redeploy** — variables are read at build time.
 | `src/lib/studio/editPlan.ts` | The EditPlan brain: hook-first moment selection, 9:16/16:9 format, real captions, punch-ins, B-roll cutaways |
 | `src/lib/studio/refine.ts` | Maps "make it faster / more punch-ins / more captions" onto the StyleProfile and regenerates the plan |
 | `src/lib/studio/pipeline.ts` | Pure Studio spine: ordered stages, progress, grounded reference-match score |
+| `src/lib/studio/editMap.ts` | **Edit Map**: turns a plan into transparent Hook/Cut/Zoom/Caption/B-roll markers, each with a grounded Modaya explanation |
+| `src/lib/studio/versions.ts` | Edit versions — every cut is saved by its deterministic recipe (profile+seed); nothing is overwritten and the project never resets |
 | `src/lib/db.ts` / `mediaDb.ts` | Server project records / browser IndexedDB media |
 | `src/lib/server/mediaStore.ts` | Durable object store: S3/R2 (SigV4), local fs, in-memory; signed media URLs |
 | `src/lib/mediaKeys.ts` / `mediaCloud.ts` | Isomorphic object-key paths / browser client (capability, upload, cross-device rehydrate) |

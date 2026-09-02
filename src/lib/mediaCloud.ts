@@ -112,6 +112,28 @@ async function fetchProjectMediaMeta(projectId: string): Promise<ProjectMediaMet
 }
 
 /**
+ * Fetch a stored reference video (role 'ref', by index) from the durable
+ * store, if it exists. Returns a Blob + filename, or null. Used by the Studio
+ * to repopulate the reference for side-by-side comparison on reopen.
+ */
+export async function getReferenceBlob(
+  projectId: string,
+  index = 0,
+): Promise<{ blob: Blob; filename: string } | null> {
+  const cap = await getCloudCapability();
+  if (!cap.available) return null;
+  const meta = await fetchProjectMediaMeta(projectId);
+  const ext = meta?.refs?.[index]?.ext;
+  if (!ext) return null;
+  const url = mediaPath(projectId, 'ref', ext, index);
+  if (!(await cloudObjectExists(url))) return null;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const blob = await res.blob();
+  return { blob, filename: `reference.${ext}` };
+}
+
+/**
  * Get the project's main footage from wherever it durably lives:
  *   1. this browser's IndexedDB (instant), then
  *   2. the server store (fresh device / cleared browser), which is also
