@@ -44,10 +44,10 @@ export function HowItWorksSection() {
   const { ref, inView } = useInView(0.1);
 
   return (
-    <section id="how-it-works" className="section-pad" style={{ position:'relative', zIndex:0, background:'#050505', overflow:'hidden' }}>
+    <section id="how-it-works" className="section-pad" style={{ position:'relative', zIndex:0, background:'#F4F7FE', overflow:'hidden' }}>
 
       {/* Subtle background grid lines */}
-      <div style={{ position:'absolute', inset:0, backgroundImage:'linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.015) 1px, transparent 1px)', backgroundSize:'80px 80px', pointerEvents:'none', zIndex:0 }} />
+      <div style={{ position:'absolute', inset:0, backgroundImage:'linear-gradient(rgba(59,111,246,0.05) 1px, transparent 1px),linear-gradient(90deg,rgba(59,111,246,0.05) 1px, transparent 1px)', backgroundSize:'80px 80px', pointerEvents:'none', zIndex:0 }} />
 
       <div className="section-inner" style={{ position:'relative', zIndex:1 }}>
 
@@ -57,11 +57,11 @@ export function HowItWorksSection() {
             <span style={{ width:5, height:5, borderRadius:'50%', background:'#4F8CFF', display:'inline-block' }} />
             <span style={{ fontSize:11, color:'#4F8CFF', fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase' }}>How it works</span>
           </div>
-          <h2 style={{ fontFamily:"'Inter Tight',sans-serif", fontWeight:700, fontSize:'clamp(30px,5vw,52px)', letterSpacing:'-0.025em', lineHeight:1.05, color:'#FFFFFF', margin:'0 0 18px' }}>
+          <h2 style={{ fontFamily:"'Inter Tight',sans-serif", fontWeight:700, fontSize:'clamp(30px,5vw,52px)', letterSpacing:'-0.025em', lineHeight:1.05, color:'#0F1B33', margin:'0 0 18px' }}>
             Three steps.<br />
-            <span style={{ color:'rgba(255,255,255,0.3)' }}>No learning curve.</span>
+            <span style={{ color:'#4F8CFF' }}>No learning curve.</span>
           </h2>
-          <p style={{ fontSize:'clamp(15px,1.2vw,17px)', color:'#9AA2AE', maxWidth:460, margin:'0 auto', lineHeight:1.65 }}>
+          <p style={{ fontSize:'clamp(15px,1.2vw,17px)', color:'#41506B', maxWidth:460, margin:'0 auto', lineHeight:1.65 }}>
             Modaya handles every part of the edit. You just tell it what you need.
           </p>
         </div>
@@ -76,21 +76,21 @@ export function HowItWorksSection() {
             const Icon = step.icon;
             return (
               <div key={i} style={{ opacity: inView ? 1 : 0, transform: inView ? 'none' : 'translateY(36px)', transition:`all 600ms cubic-bezier(0.22,1,0.36,1) ${i * 130}ms`, position:'relative', zIndex:1 }}>
-                <div style={{ padding:'clamp(20px,2.5vw,36px) clamp(18px,2vw,32px)', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.05)', borderRadius:20, height:'100%', display:'flex', flexDirection:'column', transition:'border-color 300ms ease, background 300ms ease' }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(79,140,255,0.2)'; e.currentTarget.style.background = 'rgba(79,140,255,0.03)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'; e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; }}
+                <div style={{ padding:'clamp(20px,2.5vw,36px) clamp(18px,2vw,32px)', background:'#FFFFFF', border:'1px solid #E6EBF5', borderRadius:20, boxShadow:'0 8px 30px rgba(31,54,110,0.06)', height:'100%', display:'flex', flexDirection:'column', transition:'border-color 300ms ease, background 300ms ease' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(79,140,255,0.2)'; e.currentTarget.style.background = '#F7F9FE'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#D7DEF0'; e.currentTarget.style.background = '#FFFFFF'; }}
                 >
                   {/* Step number + Icon */}
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:28 }}>
                     <div style={{ width:52, height:52, borderRadius:14, background:'rgba(79,140,255,0.08)', border:'1px solid rgba(79,140,255,0.18)', display:'flex', alignItems:'center', justifyContent:'center' }}>
                       <Icon size={22} color="#4F8CFF" strokeWidth={1.6} />
                     </div>
-                    <span style={{ fontFamily:"'Inter Tight',sans-serif", fontSize:48, fontWeight:800, color:'rgba(255,255,255,0.04)', letterSpacing:'-0.06em', lineHeight:1 }}>{step.number}</span>
+                    <span style={{ fontFamily:"'Inter Tight',sans-serif", fontSize:48, fontWeight:800, color:'rgba(59,111,246,0.18)', letterSpacing:'-0.06em', lineHeight:1 }}>{step.number}</span>
                   </div>
 
-                  <h3 style={{ fontFamily:"'Inter Tight',sans-serif", fontSize:22, fontWeight:700, color:'#FFFFFF', letterSpacing:'-0.03em', margin:'0 0 12px' }}>{step.title}</h3>
-                  <p style={{ fontSize:15, color:'#9AA2AE', lineHeight:1.65, margin:'0 0 16px', flex:1 }}>{step.body}</p>
-                  <p style={{ fontSize:12, color:'#737D8D', margin:0, fontStyle:'italic', lineHeight:1.5 }}>{step.detail}</p>
+                  <h3 style={{ fontFamily:"'Inter Tight',sans-serif", fontSize:22, fontWeight:700, color:'#0F1B33', letterSpacing:'-0.03em', margin:'0 0 12px' }}>{step.title}</h3>
+                  <p style={{ fontSize:15, color:'#41506B', lineHeight:1.65, margin:'0 0 16px', flex:1 }}>{step.body}</p>
+                  <p style={{ fontSize:12, color:'#7A869E', margin:0, fontStyle:'italic', lineHeight:1.5 }}>{step.detail}</p>
                 </div>
               </div>
             );

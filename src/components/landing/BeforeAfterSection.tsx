@@ -26,7 +26,7 @@ const TOTAL_AFTER_S  = 1 * 60 + 53;  // 1:53
 /* colour palette */
 const C = {
   keep:  { bg: 'rgba(79,140,255,0.12)', border: 'rgba(79,140,255,0.28)', text: '#4F8CFF' },
-  waste: { bg: 'rgba(255,75,75,0.07)',  border: 'rgba(255,75,75,0.22)',  text: '#FF5252' },
+  waste: { bg: 'rgba(229,72,77,0.07)',  border: 'rgba(229,72,77,0.22)',  text: '#E5484D' },
 };
 
 function Clip({ label, dur, kind, delay = 0 }: { label: string; dur: string; kind: 'keep' | 'waste'; delay?: number }) {
@@ -44,8 +44,8 @@ function Clip({ label, dur, kind, delay = 0 }: { label: string; dur: string; kin
           ? <Check size={11} color={c.text} strokeWidth={2.5} />
           : <Trash2 size={11} color={c.text} strokeWidth={1.75} />
         }
-        <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: kind === 'keep' ? '#A1A1A1' : 'rgba(255,82,82,0.55)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: kind === 'waste' ? 'line-through' : 'none' }}>{label}</span>
-        <span style={{ fontSize: 11, color: kind === 'keep' ? '#3a3a3a' : 'rgba(255,82,82,0.35)', flexShrink: 0 }}>{dur}</span>
+        <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: kind === 'keep' ? '#41506B' : 'rgba(229,72,77,0.55)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: kind === 'waste' ? 'line-through' : 'none' }}>{label}</span>
+        <span style={{ fontSize: 11, color: kind === 'keep' ? '#9AA5BC' : 'rgba(229,72,77,0.35)', flexShrink: 0 }}>{dur}</span>
       </div>
     </div>
   );
@@ -70,11 +70,11 @@ function Panel({ title, label, clips, totalSec, maxSec, labelColor, badge, badge
 
   return (
     <div ref={ref} style={{ flex: '1 1 280px', minWidth: 0, opacity: visible ? 1 : 0, transform: visible ? 'none' : 'translateY(24px)', transition: `opacity 600ms ${delay}ms ease, transform 600ms ${delay}ms cubic-bezier(0.22,1,0.36,1)` }}>
-      <div style={{ background: '#080808', border: '1px solid #141414', borderRadius: 16, overflow: 'hidden' }}>
+      <div style={{ background: '#FFFFFF', border: '1px solid #E6EBF5', borderRadius: 16, overflow: 'hidden', boxShadow: '0 8px 30px rgba(31,54,110,0.08)' }}>
 
         {/* Panel header */}
-        <div style={{ padding: '14px 18px', borderBottom: '1px solid #101010', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#737D8D', letterSpacing: '0.04em', textTransform: 'uppercase' }}>{title}</span>
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid #EEF2FB', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#7A869E', letterSpacing: '0.04em', textTransform: 'uppercase' }}>{title}</span>
           <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', background: badgeBg, border: `1px solid ${labelColor}22`, borderRadius: 9999, color: labelColor, letterSpacing: '0.04em' }}>{badge}</span>
         </div>
 
@@ -84,9 +84,9 @@ function Panel({ title, label, clips, totalSec, maxSec, labelColor, badge, badge
         </div>
 
         {/* Duration bar */}
-        <div style={{ padding: '14px 18px', borderTop: '1px solid #101010' }}>
+        <div style={{ padding: '14px 18px', borderTop: '1px solid #EEF2FB' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 7 }}>
-            <span style={{ fontSize: 11, color: '#4D5664' }}>{label}</span>
+            <span style={{ fontSize: 11, color: '#9AA5BC' }}>{label}</span>
             <span style={{ fontSize: 13, fontWeight: 700, color: labelColor, fontFamily: "'Inter Tight',sans-serif", letterSpacing: '-0.03em' }}>{timeStr}</span>
           </div>
           <ProgressBar pct={pct} color={labelColor} />
@@ -110,10 +110,10 @@ export function BeforeAfterSection() {
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px', background: 'rgba(79,140,255,0.06)', border: '1px solid rgba(79,140,255,0.15)', borderRadius: 9999, marginBottom: 20 }}>
           <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#4F8CFF' }}>Before & After</span>
         </div>
-        <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(28px,4vw,48px)', letterSpacing: '-0.04em', color: '#FFFFFF', margin: '0 0 14px', lineHeight: 1.1 }}>
+        <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(28px,4vw,48px)', letterSpacing: '-0.04em', color: '#0F1B33', margin: '0 0 14px', lineHeight: 1.1 }}>
           Every edit, automated
         </h2>
-        <p style={{ fontSize: 16, color: '#737D8D', maxWidth: 480, margin: '0 auto', lineHeight: 1.7 }}>
+        <p style={{ fontSize: 16, color: '#7A869E', maxWidth: 480, margin: '0 auto', lineHeight: 1.7 }}>
           Modaya analyses your footage, removes the noise and keeps everything that matters — in seconds.
         </p>
       </div>
@@ -127,9 +127,9 @@ export function BeforeAfterSection() {
           clips={BEFORE_CLIPS}
           totalSec={TOTAL_BEFORE_S}
           maxSec={TOTAL_BEFORE_S}
-          labelColor="#FF5252"
+          labelColor="#E5484D"
           badge="5 min 47 sec"
-          badgeBg="rgba(255,82,82,0.07)"
+          badgeBg="rgba(229,72,77,0.07)"
           delay={0}
         />
 
@@ -162,7 +162,7 @@ export function BeforeAfterSection() {
       <div style={{ marginTop: 40, textAlign: 'center' }}>
         <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, padding: '10px 20px', background: 'rgba(79,140,255,0.05)', border: '1px solid rgba(79,140,255,0.12)', borderRadius: 12 }}>
           <span style={{ fontSize: 22, fontWeight: 800, color: '#4F8CFF', fontFamily: "'Inter Tight',sans-serif", letterSpacing: '-0.04em' }}>67%</span>
-          <span style={{ fontSize: 13, color: '#737D8D' }}>shorter video — zero manual editing</span>
+          <span style={{ fontSize: 13, color: '#7A869E' }}>shorter video — zero manual editing</span>
         </div>
       </div>
     </section>

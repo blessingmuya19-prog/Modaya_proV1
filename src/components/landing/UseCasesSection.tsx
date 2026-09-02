@@ -65,14 +65,14 @@ function CreatorCard({ c, i, inView }: { c: typeof CASES[0]; i: number; inView: 
       style={{
         borderRadius: 20,
         overflow: 'hidden',
-        border: `1px solid ${hov ? c.border : 'rgba(255,255,255,0.05)'}`,
-        background: '#0A0A0A',
+        border: `1px solid ${hov ? c.border : '#E6EBF5'}`,
+        background: '#FFFFFF',
         display: 'flex',
         flexDirection: 'column',
         opacity: inView ? 1 : 0,
         transform: inView ? 'none' : 'translateY(32px)',
         transition: `opacity 600ms cubic-bezier(0.22,1,0.36,1) ${i * 90}ms, transform 600ms cubic-bezier(0.22,1,0.36,1) ${i * 90}ms, border-color 300ms ease, box-shadow 300ms ease`,
-        boxShadow: hov ? `0 0 50px ${c.accent}, 0 24px 60px rgba(0,0,0,0.6)` : '0 8px 32px rgba(0,0,0,0.4)',
+        boxShadow: hov ? `0 0 50px ${c.accent}, 0 24px 60px rgba(31,54,110,0.18)` : '0 8px 32px rgba(31,54,110,0.12)',
         cursor: 'default',
       }}
     >
@@ -90,7 +90,7 @@ function CreatorCard({ c, i, inView }: { c: typeof CASES[0]; i: number; inView: 
           }}
         />
         {/* Gradient overlay */}
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.6) 100%)' }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(31,54,110,0.18) 100%)' }} />
 
         {/* Tag pill */}
         <div style={{ position: 'absolute', top: 14, left: 14 }}>
@@ -101,7 +101,7 @@ function CreatorCard({ c, i, inView }: { c: typeof CASES[0]; i: number; inView: 
 
         {/* Stat pill */}
         <div style={{ position: 'absolute', top: 14, right: 14 }}>
-          <span style={{ padding: '4px 12px', fontSize: 11, fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 9999 }}>
+          <span style={{ padding: '4px 12px', fontSize: 11, fontWeight: 700, color: '#fff', background: 'rgba(31,54,110,0.24)', backdropFilter: 'blur(8px)', border: '1px solid rgba(59,111,246,0.18)', borderRadius: 9999 }}>
             {c.stat}
           </span>
         </div>
@@ -109,8 +109,8 @@ function CreatorCard({ c, i, inView }: { c: typeof CASES[0]; i: number; inView: 
 
       {/* Text body */}
       <div style={{ padding: '24px 24px 28px', flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <h3 style={{ fontFamily: "'Inter Tight',sans-serif", fontSize: 20, fontWeight: 700, color: '#FFFFFF', letterSpacing: '-0.03em', margin: 0 }}>{c.title}</h3>
-        <p style={{ fontSize: 14, color: '#9AA2AE', lineHeight: 1.5, letterSpacing: '-0.01em', margin: 0 }}>{c.body}</p>
+        <h3 style={{ fontFamily: "'Inter Tight',sans-serif", fontSize: 20, fontWeight: 700, color: '#0F1B33', letterSpacing: '-0.03em', margin: 0 }}>{c.title}</h3>
+        <p style={{ fontSize: 14, color: '#41506B', lineHeight: 1.5, letterSpacing: '-0.01em', margin: 0 }}>{c.body}</p>
 
         {/* AI label */}
         <div style={{ marginTop: 6 }}>
@@ -125,7 +125,7 @@ export function UseCasesSection() {
   const { ref, inView } = useInView(0.08);
 
   return (
-    <section id="use-cases" className="section-pad" style={{ position: 'relative', zIndex: 0, background: '#050505', overflow: 'hidden' }}>
+    <section id="use-cases" className="section-pad" style={{ position: 'relative', zIndex: 0, background: '#F4F7FE', overflow: 'hidden' }}>
 
       {/* Subtle glow */}
       <div style={{ position: 'absolute', top: '40%', right: '-10%', width: 600, height: 600, pointerEvents: 'none', background: 'radial-gradient(ellipse at center, rgba(79,140,255,0.04) 0%, transparent 70%)', filter: 'blur(60px)' }} />
@@ -138,11 +138,11 @@ export function UseCasesSection() {
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#4F8CFF', display: 'inline-block' }} />
             <span style={{ fontSize: 11, color: '#4F8CFF', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Use cases</span>
           </div>
-          <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(30px,5vw,52px)', letterSpacing: '-0.025em', lineHeight: 1.05, color: '#FFFFFF', margin: '0 0 18px' }}>
+          <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(30px,5vw,52px)', letterSpacing: '-0.025em', lineHeight: 1.05, color: '#0F1B33', margin: '0 0 18px' }}>
             Built for every creator<br />
-            <span style={{ color: 'rgba(255,255,255,0.28)' }}>with footage to edit.</span>
+            <span style={{ color: 'rgba(15,27,51,0.30)' }}>with footage to edit.</span>
           </h2>
-          <p style={{ fontSize: 'clamp(15px,1.2vw,17px)', color: '#9AA2AE', maxWidth: 460, margin: '0 auto', lineHeight: 1.65 }}>
+          <p style={{ fontSize: 'clamp(15px,1.2vw,17px)', color: '#41506B', maxWidth: 460, margin: '0 auto', lineHeight: 1.65 }}>
             Whether you record daily or once a month — Modaya fits your workflow.
           </p>
         </div>
@@ -159,7 +159,7 @@ export function UseCasesSection() {
           marginTop: 56,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           gap: 0,
-          background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)',
+          background: '#FFFFFF', border: '1px solid #E6EBF5', boxShadow: '0 8px 30px rgba(31,54,110,0.06)',
           borderRadius: 16, padding: '28px 0',
           opacity: inView ? 1 : 0,
           transform: inView ? 'none' : 'translateY(20px)',
@@ -173,10 +173,10 @@ export function UseCasesSection() {
           ].map((s, i, arr) => (
             <React.Fragment key={i}>
               <div style={{ padding: '0 40px', textAlign: 'center' }}>
-                <p style={{ fontFamily: "'Inter Tight',sans-serif", fontSize: 'clamp(24px,3vw,36px)', fontWeight: 800, color: '#FFFFFF', letterSpacing: '-0.04em', margin: '0 0 4px' }}>{s.value}</p>
-                <p style={{ fontSize: 12, color: '#737D8D', margin: 0 }}>{s.label}</p>
+                <p style={{ fontFamily: "'Inter Tight',sans-serif", fontSize: 'clamp(24px,3vw,36px)', fontWeight: 800, color: '#0F1B33', letterSpacing: '-0.04em', margin: '0 0 4px' }}>{s.value}</p>
+                <p style={{ fontSize: 12, color: '#7A869E', margin: 0 }}>{s.label}</p>
               </div>
-              {i < arr.length - 1 && <div style={{ width: 1, height: 40, background: 'rgba(255,255,255,0.06)', flexShrink: 0 }} />}
+              {i < arr.length - 1 && <div style={{ width: 1, height: 40, background: '#D7DEF0', flexShrink: 0 }} />}
             </React.Fragment>
           ))}
         </div>

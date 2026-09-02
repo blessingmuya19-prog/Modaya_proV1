@@ -15,11 +15,11 @@ export function FAQSection() {
   const [open, setOpen] = useState<number | null>(0);
 
   return (
-    <section className="section-pad" style={{ background: 'rgba(5,5,5,0.93)', backdropFilter: 'blur(2px)', paddingLeft: 24, paddingRight: 24 }}>
+    <section className="section-pad" style={{ background: 'transparent', paddingLeft: 24, paddingRight: 24 }}>
       <div className="faq-grid">
         <div style={{ marginBottom: 48 }}>
-          <p style={{ fontSize: 11, color: '#737D8D', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 16 }}>FAQ</p>
-          <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(24px,4vw,40px)', letterSpacing: '-0.04em', lineHeight: 1.1, color: '#FFFFFF', margin: 0 }}>
+          <p style={{ fontSize: 11, color: '#7A869E', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 16 }}>FAQ</p>
+          <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(24px,4vw,40px)', letterSpacing: '-0.04em', lineHeight: 1.1, color: '#0F1B33', margin: 0 }}>
             Common questions.
           </h2>
         </div>
@@ -27,9 +27,9 @@ export function FAQSection() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {faqs.map((faq, i) => (
             <div key={i} style={{
-              border: `1px solid ${open === i ? '#1a1a1a' : '#141414'}`,
+              border: `1px solid ${open === i ? '#E6EBF5' : '#EEF2FB'}`,
               borderRadius: 16,
-              background: open === i ? '#111111' : '#0A0A0A',
+              background: open === i ? '#F7F9FE' : '#FFFFFF',
               overflow: 'hidden',
               transition: 'all 150ms ease',
             }}>
@@ -42,15 +42,15 @@ export function FAQSection() {
                   textAlign: 'left',
                 }}
               >
-                <span style={{ fontSize: 14, fontWeight: 500, color: '#FFFFFF' }}>{faq.q}</span>
+                <span style={{ fontSize: 14, fontWeight: 500, color: '#0F1B33' }}>{faq.q}</span>
                 {open === i
-                  ? <Minus size={16} style={{ color: '#737D8D', flexShrink: 0 }} />
-                  : <Plus  size={16} style={{ color: '#737D8D', flexShrink: 0 }} />
+                  ? <Minus size={16} style={{ color: '#7A869E', flexShrink: 0 }} />
+                  : <Plus  size={16} style={{ color: '#7A869E', flexShrink: 0 }} />
                 }
               </button>
               {open === i && (
                 <div style={{ padding: '0 20px 20px', animation: 'slide-up 0.2s ease' }}>
-                  <p style={{ fontSize: 14, color: '#A1A1A1', lineHeight: 1.7, margin: 0 }}>{faq.a}</p>
+                  <p style={{ fontSize: 14, color: '#41506B', lineHeight: 1.7, margin: 0 }}>{faq.a}</p>
                 </div>
               )}
             </div>

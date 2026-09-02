@@ -57,11 +57,11 @@ function FooterLogo() {
       <svg width="22" height="22" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect width="32" height="32" rx="8" fill="#4F8CFF" fillOpacity="0.12" />
         <rect x="1" y="1" width="30" height="30" rx="7" stroke="#4F8CFF" strokeOpacity="0.3" strokeWidth="1" />
-        <path d="M9 23 L16 9 L23 23" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M9 23 L16 9 L23 23" stroke="#4F8CFF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
         <path d="M11.5 18 L20.5 18" stroke="#4F8CFF" strokeWidth="2" strokeLinecap="round" />
       </svg>
       {/* Wordmark */}
-      <span style={{ fontFamily: "'Inter Tight', sans-serif", fontSize: 17, fontWeight: 700, color: '#FFFFFF', letterSpacing: '-0.04em' }}>
+      <span style={{ fontFamily: "'Inter Tight', sans-serif", fontSize: 17, fontWeight: 700, color: '#0F1B33', letterSpacing: '-0.04em' }}>
         Modaya
       </span>
     </div>
@@ -72,8 +72,8 @@ export function Footer() {
   return (
     <footer style={{
       position: 'relative', zIndex: 0,
-      background: '#050505',
-      borderTop: '1px solid #141414',
+      background: '#F4F7FE',
+      borderTop: '1px solid #E6EBF5',
     }}>
       {/* Top section */}
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: 'clamp(40px,6vw,80px) clamp(16px,3vw,48px) clamp(32px,4vw,56px)' }}>
@@ -82,7 +82,7 @@ export function Footer() {
           {/* Brand column */}
           <div className="footer-brand-col" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <FooterLogo />
-            <p style={{ fontSize: 13, color: '#737D8D', lineHeight: 1.5, letterSpacing: '-0.01em', maxWidth: 200, margin: 0 }}>
+            <p style={{ fontSize: 13, color: '#7A869E', lineHeight: 1.5, letterSpacing: '-0.01em', maxWidth: 200, margin: 0 }}>
               Upload your footage.<br />Tell AI how to edit it.
             </p>
 
@@ -91,12 +91,12 @@ export function Footer() {
               {SOCIALS.map(s => (
                 <a key={s.label} href={s.href} aria-label={s.label} style={{
                   width: 34, height: 34, borderRadius: 8,
-                  background: '#0f0f0f', border: '1px solid #1e1e1e',
+                  background: '#F7F9FE', border: '1px solid #E6EBF5',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#737D8D', textDecoration: 'none', transition: 'all 200ms ease',
+                  color: '#7A869E', textDecoration: 'none', transition: 'all 200ms ease',
                 }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#111'; e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#FFFFFF'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#0a0a0a'; e.currentTarget.style.borderColor = '#141414'; e.currentTarget.style.color = '#737D8D'; }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#EEF2FB'; e.currentTarget.style.borderColor = '#D7DEF0'; e.currentTarget.style.color = '#0F1B33'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#F7F9FE'; e.currentTarget.style.borderColor = '#D7DEF0'; e.currentTarget.style.color = '#7A869E'; }}
                 >
                   <span dangerouslySetInnerHTML={{ __html: s.svg }} />
                 </a>
@@ -107,9 +107,9 @@ export function Footer() {
             <Link href="/new" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '8px 16px', fontSize: 13, fontWeight: 600, color: '#FFFFFF',
-                background: 'linear-gradient(135deg, #4F8CFF 0%, #326FEA 100%)',
-                borderRadius: 8, boxShadow: '0 4px 14px rgba(79,140,255,0.25)',
+                padding: '9px 18px', fontSize: 13, fontWeight: 700, color: '#FFFFFF',
+                background: 'linear-gradient(135deg, #4F8CFF 0%, #6E5BFF 100%)',
+                borderRadius: 999, boxShadow: '0 6px 18px rgba(90,110,255,0.35)',
               }}>
                 Start editing free <ArrowUpRight size={13} />
               </span>
@@ -119,18 +119,18 @@ export function Footer() {
           {/* Nav columns */}
           {NAV_COLS.map(col => (
             <div key={col.heading} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <p style={{ fontSize: 11, fontWeight: 600, color: '#4D5664', letterSpacing: '0.06em', textTransform: 'uppercase', margin: 0 }}>
+              <p style={{ fontSize: 11, fontWeight: 600, color: '#9AA5BC', letterSpacing: '0.06em', textTransform: 'uppercase', margin: 0 }}>
                 {col.heading}
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {col.links.map(link => (
                   <a key={link.label} href={link.href} style={{
-                    fontSize: 14, color: '#737D8D', textDecoration: 'none',
+                    fontSize: 14, color: '#7A869E', textDecoration: 'none',
                     display: 'inline-flex', alignItems: 'center', gap: 7,
                     transition: 'color 200ms ease',
                   }}
-                    onMouseEnter={e => { e.currentTarget.style.color = '#A1A1A1'; }}
-                    onMouseLeave={e => { e.currentTarget.style.color = '#737D8D'; }}
+                    onMouseEnter={e => { e.currentTarget.style.color = '#41506B'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = '#7A869E'; }}
                   >
                     {link.label}
                     {'badge' in link && link.badge && (
@@ -148,16 +148,16 @@ export function Footer() {
 
       {/* Hairline */}
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 clamp(16px,3vw,48px)' }}>
-        <div style={{ height: 1, background: 'linear-gradient(to right, transparent, #181818 20%, #181818 80%, transparent)' }} />
+        <div style={{ height: 1, background: 'linear-gradient(to right, transparent, #EEF2FB 20%, #EEF2FB 80%, transparent)' }} />
       </div>
 
       {/* Bottom bar */}
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: 'clamp(16px,2vw,24px) clamp(16px,3vw,48px)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <p style={{ fontSize: 12, color: '#4D5664', margin: 0 }}>
+          <p style={{ fontSize: 12, color: '#9AA5BC', margin: 0 }}>
             © 2026 Modaya. All rights reserved.
           </p>
-          <p style={{ fontSize: 12, color: '#222', margin: 0 }}>
+          <p style={{ fontSize: 12, color: '#9AA5BC', margin: 0 }}>
             Made for creators who have footage, not time.
           </p>
         </div>

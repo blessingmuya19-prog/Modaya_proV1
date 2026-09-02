@@ -69,8 +69,8 @@ function Card({ t, delay }: { t: typeof TESTIMONIALS[0]; delay: number }) {
     <div
       style={{
         padding: 'clamp(18px,2vw,28px) clamp(16px,1.8vw,26px)',
-        background: 'rgba(255,255,255,0.02)',
-        border: '1px solid rgba(255,255,255,0.06)',
+        background: '#FFFFFF',
+        border: '1px solid #E6EBF5',
         borderRadius: 18,
         display: 'flex',
         flexDirection: 'column',
@@ -81,17 +81,17 @@ function Card({ t, delay }: { t: typeof TESTIMONIALS[0]; delay: number }) {
       }}
       onMouseEnter={e => {
         e.currentTarget.style.borderColor = 'rgba(79,140,255,0.2)';
-        e.currentTarget.style.background = 'rgba(79,140,255,0.025)';
+        e.currentTarget.style.background = '#F7F9FE';
         e.currentTarget.style.transform = 'translateY(-3px)';
       }}
       onMouseLeave={e => {
-        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)';
-        e.currentTarget.style.background = 'rgba(255,255,255,0.02)';
+        e.currentTarget.style.borderColor = '#E6EBF5';
+        e.currentTarget.style.background = '#FFFFFF';
         e.currentTarget.style.transform = '';
       }}
     >
       <Stars />
-      <p style={{ fontSize: 14, color: '#A5ADBA', lineHeight: 1.65, margin: '0 0 24px', flex: 1 }}>
+      <p style={{ fontSize: 14, color: '#41506B', lineHeight: 1.65, margin: '0 0 24px', flex: 1 }}>
         &ldquo;{t.quote}&rdquo;
       </p>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -106,8 +106,8 @@ function Card({ t, delay }: { t: typeof TESTIMONIALS[0]; delay: number }) {
             {t.avatar}
           </div>
           <div>
-            <p style={{ fontSize: 13, fontWeight: 600, color: '#FFFFFF', margin: '0 0 2px' }}>{t.name}</p>
-            <p style={{ fontSize: 11, color: '#737D8D', margin: 0 }}>{t.role}</p>
+            <p style={{ fontSize: 13, fontWeight: 600, color: '#0F1B33', margin: '0 0 2px' }}>{t.name}</p>
+            <p style={{ fontSize: 11, color: '#7A869E', margin: 0 }}>{t.role}</p>
           </div>
         </div>
         <span style={{
@@ -125,7 +125,7 @@ function Card({ t, delay }: { t: typeof TESTIMONIALS[0]; delay: number }) {
 
 export function TestimonialsSection() {
   return (
-    <section id="testimonials" className="section-pad" style={{ position: 'relative', zIndex: 0, background: '#050505' }}>
+    <section id="testimonials" className="section-pad" style={{ position: 'relative', zIndex: 0, background: '#F4F7FE' }}>
 
       <style>{`
         @keyframes testimonial-in {
@@ -145,11 +145,11 @@ export function TestimonialsSection() {
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#4F8CFF', display: 'inline-block' }} />
             <span style={{ fontSize: 11, color: '#4F8CFF', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>What creators say</span>
           </div>
-          <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(30px,5vw,52px)', letterSpacing: '-0.025em', lineHeight: 1.05, color: '#FFFFFF', margin: '0 0 16px' }}>
+          <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(30px,5vw,52px)', letterSpacing: '-0.025em', lineHeight: 1.05, color: '#0F1B33', margin: '0 0 16px' }}>
             Real creators.<br />
-            <span style={{ color: 'rgba(255,255,255,0.28)' }}>Real results.</span>
+            <span style={{ color: 'rgba(15,27,51,0.30)' }}>Real results.</span>
           </h2>
-          <p style={{ fontSize: 'clamp(14px,1.1vw,16px)', color: '#9AA2AE', maxWidth: 440, margin: '0 auto', lineHeight: 1.65 }}>
+          <p style={{ fontSize: 'clamp(14px,1.1vw,16px)', color: '#41506B', maxWidth: 440, margin: '0 auto', lineHeight: 1.65 }}>
             From solo podcasters to production teams — here's what Modaya does for their workflow.
           </p>
         </div>
@@ -169,8 +169,8 @@ export function TestimonialsSection() {
             { value: '2M+',  label: 'Videos edited' },
           ].map((s, i) => (
             <div key={i} style={{ textAlign: 'center' }}>
-              <p style={{ fontFamily: "'Inter Tight',sans-serif", fontSize: 28, fontWeight: 800, color: '#FFFFFF', letterSpacing: '-0.04em', margin: '0 0 4px' }}>{s.value}</p>
-              <p style={{ fontSize: 12, color: '#737D8D', margin: 0 }}>{s.label}</p>
+              <p style={{ fontFamily: "'Inter Tight',sans-serif", fontSize: 28, fontWeight: 800, color: '#0F1B33', letterSpacing: '-0.04em', margin: '0 0 4px' }}>{s.value}</p>
+              <p style={{ fontSize: 12, color: '#7A869E', margin: 0 }}>{s.label}</p>
             </div>
           ))}
         </div>

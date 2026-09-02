@@ -233,6 +233,15 @@ body {
   animation: shimmer 1.5s infinite;
 }
 
+/* Light, blue-and-white SaaS surface scope (marketing/landing page).
+   The app shell is light; only the pro editor keeps the dark theme, so we
+   scope the light scrollbar/text default to the landing root rather than
+   flipping the global dark vars. */
+.light-surface { background-color: #F4F7FE; color: #0F1B33; }
+.light-surface ::-webkit-scrollbar-track { background: #F4F7FE; }
+.light-surface ::-webkit-scrollbar-thumb { background: #C7D0E4; border-radius: 3px; }
+.light-surface ::-webkit-scrollbar-thumb:hover { background: #9AA5BC; }
+
 /* ─────────────────────────────────────────────
    REDUCED MOTION
 ───────────────────────────────────────────── */
