@@ -32,6 +32,7 @@ import {
 import { refineProfile } from '@/lib/studio/refine';
 import { buildEditMap, explainMarker, markerIcon, fmtTime, referenceMoment, type EditMarker, type RefMoment } from '@/lib/studio/editMap';
 import { addVersion, loadVersions, type EditVersion } from '@/lib/studio/versions';
+import { parseTimeRange } from '@/lib/referenceLink';
 import type { EditorClip } from '../editor/EditorShell';
 
 const F = "'Inter Tight', Inter, system-ui, sans-serif";
@@ -239,7 +240,16 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
    * The whole creative pipeline. Each stage maps to a real engine call; the
    * user only sees the named step light up.
    */
-  const run = useCallback(async (refFile?: File) => {
+  // Remember the reference + section from the most recent explicit run so that
+  // regenerate / iterate re-runs reuse them instead of dropping the style.
+  const lastRefRef = useRef<{ file: File | null; range: { startS: number; endS: number } | null }>({ file: null, range: null });
+
+  const run = useCallback(async (opts?: { ref?: File | null; range?: { startS: number; endS: number } | null }) => {
+    // Explicit opts win; a no-arg re-run reuses the previous reference/range.
+    const hasOpts = opts !== undefined;
+    const refFile = hasOpts ? (opts?.ref ?? null) : (lastRefRef.current.file ?? null);
+    const range = hasOpts ? (opts?.range ?? null) : (lastRefRef.current.range ?? null);
+    lastRefRef.current = { file: refFile, range };
     if (!projectId) return;
     setError(null);
     const stored = await getProjectMedia(projectId);
@@ -250,8 +260,10 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
     const withRef = !!refFile;
     cancelRef.current = false;
     setHasRef(withRef);
-    setRefName(refFile?.name ?? null);
+    const rangeLabel = range ? ` · ${fmtTime(range.startS)}–${fmtTime(range.endS)}` : '';
+    setRefName(refFile ? `${refFile.name}${rangeLabel}` : null);
     setSelectedMarker(null);
+    setIterView('mine');
     if (withRef && refFile) {
       setRefUrl(prev => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(refFile); });
       // Durable reference copy (role 'ref') so it survives and can be compared
@@ -281,13 +293,18 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
         env = await analyseAudio(blob).catch(() => null);
       });
 
-      // 2 — learn the reference, if provided
+      // 2 — learn the reference (or just the chosen section), if provided
       if (withRef && refFile) {
         await tick('learn-reference', async () => {
           const meta = await analyseFile(refFile).catch(() => null);
-          const dur = meta?.durationS ?? refFile.size / 90000;
-          const res = await analyseReference(refFile, { name: refFile.name, durationS: dur },
-            () => {}).catch(() => null);
+          const fullDur = meta?.durationS ?? refFile.size / 90000;
+          // Clamp a requested section to the real media length.
+          const win = range
+            ? { startS: Math.max(0, Math.min(range.startS, fullDur)),
+                endS:   Math.max(0, Math.min(range.endS, fullDur)) }
+            : undefined;
+          const res = await analyseReference(refFile, { name: refFile.name, durationS: fullDur },
+            () => {}, win && win.endS > win.startS + 0.5 ? win : undefined).catch(() => null);
           profile = res?.profile ?? null;
         });
       }
@@ -340,7 +357,7 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
       if (built) {
         const { versions: vs } = await addVersion(projectId, {
           profile: baseProfile, seed: 1, hasRef: withRef && !!profile,
-          refName: refFile?.name ?? null, note: initialNoteRef.current || undefined,
+          refName: refFile ? `${refFile.name}${rangeLabel}` : null, note: initialNoteRef.current || undefined,
         }, { durationS: built.plan.durationS, cuts: built.plan.cutCount, match: built.match });
         setVersions(vs);
         initialNoteRef.current = '';
@@ -531,8 +548,8 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
         projectId={projectId} projectName={projectName}
         hasFootage={!!media}
         onFootage={uploadFootage}
-        onReference={(f, note) => { initialNoteRef.current = note; void run(f); }}
-        onStart={(note) => { initialNoteRef.current = note; void run(); }}
+        onReference={(ref, range, note) => { initialNoteRef.current = note; void run({ ref, range }); }}
+        onStart={(note) => { initialNoteRef.current = note; void run({ ref: null }); }}
         refInputRef={refInput}
         error={error}
       />
@@ -896,16 +913,64 @@ function EditMap({ markers, durationS, playheadS, selectedId, onSeek, onSelect }
 }
 
 /* ─────────── drop screen ─────────── */
+type RefState =
+  | { kind: 'none' }
+  | { kind: 'file'; file: File }
+  | { kind: 'link'; url: string; file: File };
+
 function DropScreen({ projectId, projectName, hasFootage, onFootage, onReference, onStart, refInputRef, error }: {
   projectId: string; projectName: string; hasFootage: boolean;
-  onFootage: (f: File) => void; onReference: (f: File, note: string) => void; onStart: (note: string) => void;
+  onFootage: (f: File) => void;
+  onReference: (ref: File | null, range: { startS: number; endS: number } | null, note: string) => void;
+  onStart: (note: string) => void;
   refInputRef: React.RefObject<HTMLInputElement | null>; error: string | null;
 }) {
   const footageRef = useRef<HTMLInputElement>(null);
   const [footName, setFootName] = useState<string | null>(null);
-  const [refReady, setRefReady] = useState<File | null>(null);
+  const [refTab, setRefTab] = useState<'upload' | 'link'>('upload');
+  const [ref, setRef] = useState<RefState>({ kind: 'none' });
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [rangeText, setRangeText] = useState('');
   const [note, setNote] = useState('');
   const ready = !!hasFootage || !!footName;
+  const refReady = ref.kind !== 'none';
+
+  const useLink = async () => {
+    const url = linkUrl.trim();
+    if (!url) return;
+    setLinkBusy(true); setLinkError(null);
+    try {
+      const { fetchReferenceLink } = await import('@/lib/referenceLink');
+      const res = await fetchReferenceLink(url);
+      if (res.ok && res.file) {
+        setRef({ kind: 'link', url, file: res.file });
+        setLinkError(null);
+      } else if (res.kind === 'platform') {
+        setLinkError(res.error ?? `I can't download a ${res.platform} page. Use a direct video link or upload the file.`);
+      } else {
+        setLinkError(res.error ?? 'Could not fetch that link.');
+      }
+    } catch {
+      setLinkError('Could not fetch that link.');
+    } finally {
+      setLinkBusy(false);
+    }
+  };
+
+  const parseRange = (): { startS: number; endS: number } | null => parseTimeRange(rangeText);
+
+  const rangeValid = !rangeText.trim() || !!parseRange();
+
+  const create = () => {
+    if (!ready || !rangeValid || linkBusy) return;
+    const n = note.trim();
+    if (ref.kind === 'none') { onStart(n); return; }
+    onReference(ref.file, parseRange(), n);
+  };
+
+  const refLabel = ref.kind === 'none' ? 'Reference video' : ref.file.name;
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.text, fontFamily: F, display: 'flex', flexDirection: 'column' }}>
@@ -918,7 +983,7 @@ function DropScreen({ projectId, projectName, hasFootage, onFootage, onReference
         <div style={{ width: 'min(92vw, 560px)' }}>
           <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.03em', margin: '0 0 6px' }}>What are we editing today?</h1>
           <p style={{ color: C.muted, fontSize: 14, margin: '0 0 26px' }}>
-            Drop your footage. Add a reference if you want Modaya to copy a style. Then Modaya does the rest.
+            Drop your footage. Add a reference — upload it or paste a link — and Modaya learns its style. Then Modaya does the rest.
           </p>
 
           <p style={{ color: C.dim, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px' }}>Your video</p>
@@ -933,15 +998,75 @@ function DropScreen({ projectId, projectName, hasFootage, onFootage, onReference
             onChange={e => { const f = e.target.files?.[0]; if (f) { setFootName(f.name); void onFootage(f); } e.target.value = ''; }} />
 
           <p style={{ color: C.dim, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '20px 0 8px' }}>Reference · optional</p>
-          <DropZone
-            label={refReady ? refReady.name : 'Reference video'}
-            sub={refReady ? 'Tap to change' : 'A clip whose style Modaya should copy'}
-            icon={<Upload size={20} />}
-            onClick={() => refInputRef.current?.click()}
-            filled={!!refReady}
-          />
-          <input ref={refInputRef} type="file" accept="video/*" style={{ display: 'none' }}
-            onChange={e => { const f = e.target.files?.[0]; if (f) setRefReady(f); e.target.value = ''; }} />
+
+          {/* Upload / link tabs */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+            {([['upload', 'Upload video'], ['link', 'Paste link']] as const).map(([t, label]) => (
+              <button key={t} onClick={() => setRefTab(t)}
+                style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: `1px solid ${refTab === t ? C.accent : C.b3}`,
+                  background: refTab === t ? `${C.accent}16` : C.s2, color: refTab === t ? C.accent : C.muted,
+                  fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: F, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+                {t === 'upload' ? <Upload size={14} /> : <LinkIcon size={14} />} {label}
+              </button>
+            ))}
+          </div>
+
+          {refTab === 'upload' ? (
+            <>
+              <DropZone
+                label={ref.kind === 'file' ? refLabel : 'Reference video'}
+                sub={ref.kind === 'file' ? 'Tap to change' : 'A clip whose style Modaya should copy'}
+                icon={<Upload size={20} />}
+                onClick={() => refInputRef.current?.click()}
+                filled={ref.kind === 'file'}
+              />
+              <input ref={refInputRef} type="file" accept="video/*" style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) setRef({ kind: 'file', file: f }); e.target.value = ''; }} />
+            </>
+          ) : (
+            <div style={{ background: C.s2, border: `1.5px dashed ${ref.kind === 'link' ? C.accent + '66' : C.b3}`, borderRadius: 14, padding: 16 }}>
+              {ref.kind === 'link' ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <LinkIcon size={18} color={C.accent} />
+                  <span style={{ fontSize: 13, color: C.sec, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{ref.file.name}</span>
+                  <button onClick={() => { setRef({ kind: 'none' }); setLinkUrl(''); }} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 12 }}>Change</button>
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      value={linkUrl} onChange={e => setLinkUrl(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') void useLink(); }}
+                      placeholder="https://…/reference-clip.mp4"
+                      style={{ flex: 1, minWidth: 0, background: C.s3, border: `1px solid ${C.b3}`, borderRadius: 9, color: C.text,
+                        fontFamily: F, fontSize: 13, padding: '10px 12px', outline: 'none' }} />
+                    <button onClick={useLink} disabled={linkBusy || !linkUrl.trim()}
+                      style={{ padding: '0 16px', borderRadius: 9, border: 'none', background: linkUrl.trim() && !linkBusy ? C.accent : C.b3,
+                        color: '#fff', fontSize: 13, fontWeight: 600, cursor: linkUrl.trim() ? 'pointer' : 'default', fontFamily: F, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {linkBusy ? <Loader2 size={14} className="spin" /> : null} Fetch
+                    </button>
+                  </div>
+                  {linkError && <p style={{ color: '#f0a24a', fontSize: 12, margin: '8px 2px 0', lineHeight: 1.5 }}>{linkError}</p>}
+                  <p style={{ color: C.dim, fontSize: 11, margin: '8px 2px 0', lineHeight: 1.5 }}>
+                    Works with a direct video link (.mp4/.webm/…). YouTube, TikTok and Instagram page links can&apos;t be downloaded — upload those clips instead. The link is style reference, never footage Modaya copies.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Optional time range — learn from just one section */}
+          {refReady && (
+            <>
+              <p style={{ color: C.dim, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '16px 0 8px' }}>Use section · optional</p>
+              <input
+                value={rangeText} onChange={e => setRangeText(e.target.value)}
+                placeholder="e.g. 00:12 – 01:04"
+                style={{ width: '100%', boxSizing: 'border-box', background: C.s2, border: `1.5px solid ${rangeValid ? C.b3 : '#ef4444'}`, borderRadius: 10,
+                  color: C.text, fontFamily: F, fontSize: 14, padding: '10px 12px', outline: 'none' }} />
+              {!rangeValid && <p style={{ color: '#ef4444', fontSize: 11, margin: '6px 2px 0' }}>Use a range like 00:12 – 01:04.</p>}
+            </>
+          )}
 
           <p style={{ color: C.dim, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '20px 0 8px' }}>Instructions · optional</p>
           <textarea
@@ -954,12 +1079,12 @@ function DropScreen({ projectId, projectName, hasFootage, onFootage, onReference
           {error && <p style={{ color: '#ef4444', fontSize: 13, margin: '16px 0 0' }}>{error}</p>}
 
           <button
-            onClick={() => { const n = note.trim(); if (refReady) onReference(refReady, n); else onStart(n); }}
-            disabled={!ready}
+            onClick={create}
+            disabled={!ready || !rangeValid || linkBusy}
             style={{ marginTop: 22, width: '100%', padding: '15px', borderRadius: 12, border: 'none', fontFamily: F, fontSize: 15, fontWeight: 600,
-              background: ready ? C.accent : C.b3, color: ready ? '#fff' : C.dim,
-              cursor: ready ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
-              boxShadow: ready ? `0 6px 24px ${C.accent}44` : 'none' }}>
+              background: (ready && rangeValid) ? C.accent : C.b3, color: (ready && rangeValid) ? '#fff' : C.dim,
+              cursor: (ready && rangeValid && !linkBusy) ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+              boxShadow: (ready && rangeValid) ? `0 6px 24px ${C.accent}44` : 'none' }}>
             <Wand2 size={17} /> {refReady ? 'Create edit in this style' : 'Create edit'}
           </button>
           <p style={{ textAlign: 'center', color: C.dim, fontSize: 11, margin: '12px 0 0' }}>
@@ -968,6 +1093,15 @@ function DropScreen({ projectId, projectName, hasFootage, onFootage, onReference
         </div>
       </div>
     </div>
+  );
+}
+
+function LinkIcon({ size = 16, color }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </svg>
   );
 }
 

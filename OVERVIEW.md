@@ -15,10 +15,28 @@ and Modaya does the editing* — "Lovable for video", not Premiere Pro with AI
 bolted on. The default experience (**Studio**, `/studio/[id]`) is deliberately
 near-empty of technical UI:
 
-> Drop footage → (optionally) drop a reference → **Create edit** → watch Modaya
-> run named creative stages (understand footage → learn reference → find moments
-> → match pacing → captions → build edit → render) → get a finished video with
-> **Export**, **Regenerate**, and a **"Tell Modaya what to change"** box.
+> Drop footage → (optionally) add a reference by **📁 uploading a video or
+> 🔗 pasting a direct video link**, optionally scoped to a section with
+> **"Use: 00:12 – 01:04"** → **Create edit** → watch Modaya run named creative
+> stages (understand footage → learn reference → find moments → match pacing →
+> captions → build edit → render) → get a finished video with **Export**,
+> **Regenerate**, and a **"Tell Modaya what to change"** box.
+
+The **reference is style material, never footage Modaya copies** — Modaya
+measures its editing decisions (pacing, cuts, zooms, captions) and applies those
+principles to the user's own footage. Two inputs are offered in the Reference
+block: an **Upload video** tab (the file is analysed in-browser) and a **Paste
+link** tab — a server route (`POST /api/reference/fetch`) streams a public
+**direct media** link back so the creator can paste "edit my video like this"
+without downloading. Platform **watch pages** (YouTube, TikTok, Instagram,
+Vimeo, X, …) are recognised and *honestly declined* rather than scraped (their
+terms and reliability make that fragile; the user is told to upload or use a
+direct file link). The route is SSRF-hardened: http/https only, private/loopback/
+link-local names and **resolved IPs** refused (blocking DNS-rebinding names),
+redirects followed manually and re-checked at every hop, and a 300 MB cap
+enforced by content-length *and* a streaming byte count. An optional **time
+range** learns style from just one section of a long reference (frames and audio
+onsets are sliced/rebased so the profile describes only that window).
 
 There is **no timeline, codec, keyframe or bitrate setting** the user is
 expected to touch. After the stages complete the result lands in two surfaces:

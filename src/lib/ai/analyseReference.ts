@@ -67,13 +67,19 @@ export function measureFrame(ctx: CanvasRenderingContext2D, t: number): FrameSam
   };
 }
 
-/** Sample frames across a video at roughly `fps` samples per second. */
+/** Sample frames across a video at roughly `fps` samples per second. When a
+ *  range is given, only the window [rangeStart, rangeStart+windowLen] is
+ *  sampled and frame times are rebased to the window start (so the resulting
+ *  profile describes that section alone). */
 export async function sampleFrames(
   url: string, durationS: number, fps = 4, maxFrames = 480,
   onProgress?: (p: number) => void,
+  range?: { startS: number; lenS: number },
 ): Promise<FrameSample[]> {
-  const count = Math.max(8, Math.min(maxFrames, Math.round(durationS * fps)));
-  const step  = durationS / count;
+  const windowLen = range?.lenS ?? durationS;
+  const rangeStart = range?.startS ?? 0;
+  const count = Math.max(8, Math.min(maxFrames, Math.round(windowLen * fps)));
+  const step  = windowLen / count;
 
   const video = document.createElement('video');
   video.src = url; video.muted = true; video.playsInline = true; video.preload = 'auto';
@@ -102,12 +108,14 @@ export async function sampleFrames(
     if (!(await once('loadeddata', 15000))) return [];
 
     for (let i = 0; i < count; i++) {
-      const t = Math.min(durationS - 0.05, i * step);
-      video.currentTime = t;
+      // Seek to the absolute position in the media; store the relative
+      // (within-window) time so cut times come out relative to the section.
+      const rel = Math.min(windowLen - 0.05, i * step);
+      video.currentTime = rangeStart + rel;
       if (!(await once('seeked', 5000))) break;
       try {
         ctx.drawImage(video, 0, 0, SAMPLE_W, SAMPLE_H);
-        frames.push(measureFrame(ctx, t));
+        frames.push(measureFrame(ctx, rel));
       } catch { /* tainted or not ready — skip */ }
       if (i % 8 === 0) onProgress?.(i / count);
     }
@@ -183,27 +191,47 @@ export function interestCurve(env: AudioEnvelope | null, durationS: number): num
   return out;
 }
 
-/** Full reference analysis: file in, style profile out. */
+/** Restrict an audio envelope to a [start, start+len] window, rebasing onsets
+ *  so they count from the section start. */
+function sliceAudio(env: AudioEnvelope | null, startS: number, lenS: number): AudioEnvelope | null {
+  if (!env) return null;
+  const endS = startS + lenS;
+  const onsets = env.onsets
+    .filter(t => t >= startS && t <= endS)
+    .map(t => Number((t - startS).toFixed(3)));
+  return { ...env, onsets, bpm: env.bpm };
+}
+
+/** Full reference analysis: file in, style profile out. Pass `range` to learn
+ *  the style from only one section of the reference ("use 00:12–01:04"). */
 export async function analyseReference(
   file: File | Blob,
   meta: { name: string; durationS: number },
   onProgress?: (p: AnalysisProgress) => void,
+  range?: { startS: number; endS: number },
 ): Promise<{ profile: StyleProfile; audio: AudioEnvelope | null } | null> {
   const url = URL.createObjectURL(file);
   try {
-    onProgress?.({ stage: 'frames', progress: 0.05, message: 'Watching the reference…' });
-    const frames = await sampleFrames(url, meta.durationS, 4, 480,
-      p => onProgress?.({ stage: 'frames', progress: 0.05 + p * 0.6, message: 'Watching the reference…' }));
+    const winStart = range ? Math.max(0, Math.min(range.startS, meta.durationS)) : 0;
+    const winEnd   = range ? Math.max(winStart + 1, Math.min(range.endS, meta.durationS)) : meta.durationS;
+    const winLen   = winEnd - winStart;
+    const sampleRange = range ? { startS: winStart, lenS: winLen } : undefined;
+
+    onProgress?.({ stage: 'frames', progress: 0.05, message: range ? 'Watching that section of the reference…' : 'Watching the reference…' });
+    const frames = await sampleFrames(url, winLen, 4, 480,
+      p => onProgress?.({ stage: 'frames', progress: 0.05 + p * 0.6, message: 'Watching the reference…' }),
+      sampleRange);
 
     if (frames.length < 4) return null;
 
     onProgress?.({ stage: 'audio', progress: 0.7, message: 'Listening for the beat…' });
-    const audio = await analyseAudio(file);
+    const fullAudio = await analyseAudio(file);
+    const audio = range ? sliceAudio(fullAudio, winStart, winLen) : fullAudio;
 
     onProgress?.({ stage: 'profiling', progress: 0.9, message: 'Working out the style…' });
     const profile = buildStyleProfile({
       sourceName: meta.name,
-      durationS:  meta.durationS,
+      durationS:  winLen,
       frames,
       audio,
     });
