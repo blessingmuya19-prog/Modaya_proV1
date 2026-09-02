@@ -24,10 +24,10 @@ export function EditTypeSelector({ selected, onSelect }: { selected: string; onS
             style={{
               position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
               gap: 10, padding: 16, borderRadius: 16, border: 'none', textAlign: 'left', cursor: 'pointer',
-              background: isSelected ? 'rgba(79,140,255,0.05)' : '#111111',
-              border2: isSelected ? '1px solid rgba(79,140,255,0.4)' : '1px solid #242424',
-              outline: isSelected ? '1px solid rgba(79,140,255,0.4)' : '1px solid #242424',
-              boxShadow: isSelected ? '0 0 10px rgba(79,140,255,0.15)' : 'none',
+              background: isSelected ? 'rgba(139,92,246,0.05)' : '#111111',
+              border2: isSelected ? '1px solid rgba(139,92,246,0.4)' : '1px solid #242424',
+              outline: isSelected ? '1px solid rgba(139,92,246,0.4)' : '1px solid #242424',
+              boxShadow: isSelected ? '0 0 10px rgba(139,92,246,0.15)' : 'none',
               transform: 'translateY(0)',
               transition: 'all 150ms ease',
             } as React.CSSProperties}
@@ -37,7 +37,7 @@ export function EditTypeSelector({ selected, onSelect }: { selected: string; onS
             {isSelected && (
               <div style={{
                 position: 'absolute', top: 10, right: 10,
-                width: 16, height: 16, borderRadius: '50%', background: '#4F8CFF',
+                width: 16, height: 16, borderRadius: '50%', background: '#8B5CF6',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 animation: 'scale-in 0.2s cubic-bezier(0.22,1,0.36,1)',
               }}>
@@ -48,10 +48,10 @@ export function EditTypeSelector({ selected, onSelect }: { selected: string; onS
             <div style={{
               width: 36, height: 36, borderRadius: 8, flexShrink: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: isSelected ? 'rgba(79,140,255,0.15)' : '#181818',
+              background: isSelected ? 'rgba(139,92,246,0.15)' : '#181818',
               border: isSelected ? 'none' : '1px solid #242424',
             }}>
-              <Icon size={16} style={{ color: isSelected ? '#4F8CFF' : '#A1A1A1' }} />
+              <Icon size={16} style={{ color: isSelected ? '#8B5CF6' : '#A1A1A1' }} />
             </div>
 
             <div>

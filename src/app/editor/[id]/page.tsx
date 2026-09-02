@@ -9,7 +9,7 @@ import { loadFrames, saveFrames, saveMediaFile } from '@/lib/mediaDb';
 import { getProjectMedia } from '@/lib/mediaCloud';
 
 const F = "'Inter Tight', Inter, system-ui, sans-serif";
-const C = { bg: '#050505', muted: '#737D8D', accent: '#4F8CFF' };
+const C = { bg: '#050505', muted: '#737D8D', accent: '#8B5CF6' };
 
 interface ProjectData {
   id:          string;

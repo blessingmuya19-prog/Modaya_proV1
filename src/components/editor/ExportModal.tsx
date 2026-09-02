@@ -10,7 +10,7 @@ import type { Sequence } from '@/lib/render/sequence';
 const C = {
   bg:     '#050505', surface: '#070707', s2: '#0a0a0a', s3: '#0e0e0e',
   b:      '#111111', b2:      '#141414', b3: '#1a1a1a', b4: '#222222',
-  accent: '#4F8CFF', accentH: '#6EA3FF',
+  accent: '#8B5CF6', accentH: '#A78BFA',
   text:   '#F5F7FA', sec: '#A5ADBA', muted: '#737D8D', dim: '#4D5664',
   green:  '#34D399', greenBg: 'rgba(5,150,105,0.12)', greenBorder: 'rgba(52,211,153,0.25)',
 };

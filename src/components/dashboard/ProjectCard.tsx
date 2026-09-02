@@ -68,8 +68,8 @@ export function ProjectCard({ project }: { project: Project }) {
           {/* Processing overlay */}
           {project.status === 'processing' && (
             <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-              <Cpu size={14} style={{ color: '#4F8CFF', animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
-              <span style={{ fontSize: 12, color: '#4F8CFF', fontWeight: 600 }}>AI editing...</span>
+              <Cpu size={14} style={{ color: '#8B5CF6', animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
+              <span style={{ fontSize: 12, color: '#8B5CF6', fontWeight: 600 }}>AI editing...</span>
             </div>
           )}
         </div>
@@ -117,7 +117,7 @@ export function EmptyProjectState() {
         <button style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: '0 20px', height: 42, fontSize: 13, fontWeight: 600,
-          background: 'linear-gradient(135deg,#4F8CFF,#6E5BFF)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer',
+          background: 'linear-gradient(135deg,#8B5CF6,#6E5BFF)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer',
         }}>
           Create video
         </button>

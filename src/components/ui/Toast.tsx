@@ -15,9 +15,9 @@ export function useToast() { return useContext(ToastContext); }
 const ICON = {
   success: <CheckCircle size={15} style={{ color: '#4ade80', flexShrink: 0 }} />,
   error:   <AlertCircle size={15} style={{ color: '#f87171', flexShrink: 0 }} />,
-  info:    <Info        size={15} style={{ color: '#4F8CFF', flexShrink: 0 }} />,
+  info:    <Info        size={15} style={{ color: '#8B5CF6', flexShrink: 0 }} />,
 };
-const ACCENT = { success: '#4ade80', error: '#f87171', info: '#4F8CFF' };
+const ACCENT = { success: '#4ade80', error: '#f87171', info: '#8B5CF6' };
 
 function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }) {
   const [exiting, setExiting] = useState(false);

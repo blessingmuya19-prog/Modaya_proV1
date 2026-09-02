@@ -66,8 +66,8 @@ export function EditorTopbar({ projectName }: { projectName: string }) {
         <div style={{ position: 'relative', flexShrink: 0 }}>
           <button onClick={() => setVersionOpen(!versionOpen)} style={{
             display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px',
-            fontSize: 11, fontWeight: 600, color: '#4F8CFF',
-            background: 'rgba(79,140,255,0.08)', border: '1px solid rgba(79,140,255,0.2)',
+            fontSize: 11, fontWeight: 600, color: '#8B5CF6',
+            background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)',
             borderRadius: 7, cursor: 'pointer', transition: 'all 120ms',
           }}>
             {selectedVersion} <ChevronDown size={10} />
@@ -84,7 +84,7 @@ export function EditorTopbar({ projectName }: { projectName: string }) {
                   width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   padding: '8px 12px', fontSize: 12, background: 'none', border: 'none',
                   cursor: 'pointer', borderRadius: 7,
-                  color: selectedVersion === v.id ? '#4F8CFF' : '#777',
+                  color: selectedVersion === v.id ? '#8B5CF6' : '#777',
                   transition: 'all 120ms',
                 }}
                   onMouseEnter={e => { e.currentTarget.style.background = '#1a1a1a'; }}
@@ -119,13 +119,13 @@ export function EditorTopbar({ projectName }: { projectName: string }) {
         <button onClick={() => setExportOpen(true)} style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: '0 18px', height: 34, fontSize: 13, fontWeight: 600,
-          background: '#4F8CFF', color: '#fff', border: 'none',
+          background: '#8B5CF6', color: '#fff', border: 'none',
           borderRadius: 8, cursor: 'pointer', flexShrink: 0,
-          boxShadow: '0 2px 12px rgba(79,140,255,0.25)',
+          boxShadow: '0 2px 12px rgba(139,92,246,0.25)',
           transition: 'all 150ms',
         }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#6EA3FF'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = '#4F8CFF'; e.currentTarget.style.transform = ''; }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#A78BFA'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = '#8B5CF6'; e.currentTarget.style.transform = ''; }}
         >
           <Download size={12} /> Export
         </button>

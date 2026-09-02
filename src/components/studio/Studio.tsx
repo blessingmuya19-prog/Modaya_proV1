@@ -42,13 +42,13 @@ const F = "'Inter Tight', Inter, system-ui, sans-serif";
  * panels and wells; `media` is the near-black video canvas (darkest of all).
  */
 const C = {
-  bg: '#0B0F1A', surface: '#141A28', s2: '#181F30', s3: '#1F2739',
-  b: '#242C3E', b2: '#2E3750', b3: '#3A445E',
-  accent: '#5B82FF', accentH: '#7A9BFF',
-  text: '#F2F5FC', sec: '#B7C0D4', muted: '#8B95AD', dim: '#5E6885',
+  bg: '#09090B', surface: '#101014', s2: '#16161C', s3: '#1E1E26',
+  b: '#26262E', b2: '#33333D', b3: '#3F3F46',
+  accent: '#8B5CF6', accentH: '#C084FC',
+  text: '#FAFAFA', sec: '#D4D4D8', muted: '#A1A1AA', dim: '#71717A',
   green: '#34D399', gold: '#F5B53F',
   danger: '#F87171', warn: '#F0A24A', broll: '#F0775B',
-  media: '#05070D', mediaBorder: '#232B3D', mediaShade: 'rgba(0,0,0,0.55)',
+  media: '#000000', mediaBorder: '#26262E', mediaShade: 'rgba(0,0,0,0.55)',
 };
 
 type Phase = 'drop' | 'working' | 'result';
@@ -964,7 +964,7 @@ function EditMap({ markers, durationS, playheadS, selectedId, onSeek, onSelect }
               title={`${m.label} at ${fmtTime(m.t)}`}
               style={{ position: 'absolute', left: `${left}%`, top: 6, transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
               <span style={{ width: active ? 30 : 26, height: active ? 30 : 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: m.type === 'cut' ? 13 : m.type === 'caption' ? 11 : 13, fontWeight: 800, color: '#0B0F1A',
+                fontSize: m.type === 'cut' ? 13 : m.type === 'caption' ? 11 : 13, fontWeight: 800, color: '#09090B',
                 background: color, boxShadow: active ? `0 0 0 3px ${color}44` : 'none', border: active ? '2px solid #FFFFFF' : 'none', lineHeight: 1 }}>
                 {markerIcon(m.type)}
               </span>
@@ -1389,7 +1389,7 @@ function defaultPunchyProfile(durationS: number): StyleProfile {
 const primaryBtn: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 999,
   background: GLOW_GRADIENT, color: '#fff', border: 'none', fontFamily: F, fontSize: 14, fontWeight: 700,
-  cursor: 'pointer', boxShadow: '0 10px 30px rgba(74,108,255,0.5)',
+  cursor: 'pointer', boxShadow: '0 10px 30px rgba(139,92,246,0.5)',
 };
 const ghostBtn: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8, padding: '12px 18px', borderRadius: 10,

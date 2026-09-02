@@ -141,7 +141,7 @@ export function Timeline() {
   const playheadPx = playheadS * zoom;
 
   const tracks = [
-    { id:'video',    label:'Video',    clips: VIDEO_CLIPS,   accent:'#4F8CFF', trackColor:'rgba(79,140,255,0.07)' },
+    { id:'video',    label:'Video',    clips: VIDEO_CLIPS,   accent:'#8B5CF6', trackColor:'rgba(139,92,246,0.07)' },
     { id:'audio',    label:'Audio',    clips: AUDIO_CLIPS,   accent:'#34D399', trackColor:'rgba(52,211,153,0.05)' },
     { id:'captions', label:'Captions', clips: CAPTION_CLIPS, accent:'#A78BFA', trackColor:'rgba(167,139,250,0.05)' },
   ];
@@ -182,9 +182,9 @@ export function Timeline() {
         <div style={{ flex:1 }} />
 
         {/* AI cuts legend */}
-        <div style={{ display:'flex', alignItems:'center', gap:5, padding:'3px 9px', background:'rgba(79,140,255,0.06)', border:'1px solid rgba(79,140,255,0.14)', borderRadius:9999 }}>
-          <div style={{ width:8, height:8, borderRadius:2, background:'rgba(79,140,255,0.4)', border:'1px solid rgba(79,140,255,0.6)' }} />
-          <span style={{ fontSize:10, color:'#4F8CFF', fontWeight:600 }}>AI edited</span>
+        <div style={{ display:'flex', alignItems:'center', gap:5, padding:'3px 9px', background:'rgba(139,92,246,0.06)', border:'1px solid rgba(139,92,246,0.14)', borderRadius:9999 }}>
+          <div style={{ width:8, height:8, borderRadius:2, background:'rgba(139,92,246,0.4)', border:'1px solid rgba(139,92,246,0.6)' }} />
+          <span style={{ fontSize:10, color:'#8B5CF6', fontWeight:600 }}>AI edited</span>
         </div>
 
         <div style={{ display:'flex', alignItems:'center', gap:5, padding:'3px 9px', background:'rgba(255,82,82,0.05)', border:'1px solid rgba(255,82,82,0.15)', borderRadius:9999 }}>
@@ -223,7 +223,7 @@ export function Timeline() {
             <div key={t.id} style={{ height:TRACK_H, display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 6px 0 10px', borderBottom:'1px solid #0a0a0a', opacity: hiddenTracks[t.id] ? 0.3 : 1 }}>
               <span style={{ fontSize:10, fontWeight:600, color: hiddenTracks[t.id] ? '#333' : '#444', letterSpacing:'0.05em', textTransform:'uppercase' }}>{t.label}</span>
               <div style={{ display:'flex', gap:2 }}>
-                <button onClick={() => setHiddenTracks(h => ({ ...h, [t.id]: !h[t.id] }))} style={{ background:'none', border:'none', cursor:'pointer', color: hiddenTracks[t.id] ? '#4F8CFF' : '#222', padding:2, display:'flex', borderRadius:3 }}
+                <button onClick={() => setHiddenTracks(h => ({ ...h, [t.id]: !h[t.id] }))} style={{ background:'none', border:'none', cursor:'pointer', color: hiddenTracks[t.id] ? '#8B5CF6' : '#222', padding:2, display:'flex', borderRadius:3 }}
                   title={hiddenTracks[t.id] ? 'Show track' : 'Hide track'}>
                   {hiddenTracks[t.id] ? <EyeOff size={9} /> : <Eye size={9} />}
                 </button>
@@ -257,7 +257,7 @@ export function Timeline() {
 
               {/* Playhead on ruler */}
               <div style={{ position:'absolute', top:0, left:playheadPx, transform:'translateX(-50%)', zIndex:30, pointerEvents:'none', display:'flex', flexDirection:'column', alignItems:'center' }}>
-                <div style={{ width:0, height:0, borderLeft:'5px solid transparent', borderRight:'5px solid transparent', borderTop:'7px solid #4F8CFF' }} />
+                <div style={{ width:0, height:0, borderLeft:'5px solid transparent', borderRight:'5px solid transparent', borderTop:'7px solid #8B5CF6' }} />
               </div>
             </div>
 
@@ -290,12 +290,12 @@ export function Timeline() {
                         position:'absolute', top:3, bottom:3,
                         left:clip.start * zoom, width:(clip.end - clip.start) * zoom - 2,
                         background: clip.ai
-                          ? track.id === 'video'   ? 'rgba(79,140,255,0.18)'
+                          ? track.id === 'video'   ? 'rgba(139,92,246,0.18)'
                           : track.id === 'audio'   ? 'rgba(52,211,153,0.18)'
                           : 'rgba(167,139,250,0.18)'
                           : clip.color,
                         border:`1px solid ${clip.ai
-                          ? track.id === 'video'   ? 'rgba(79,140,255,0.5)'
+                          ? track.id === 'video'   ? 'rgba(139,92,246,0.5)'
                           : track.id === 'audio'   ? 'rgba(52,211,153,0.5)'
                           : 'rgba(167,139,250,0.5)'
                           : clip.border}`,
@@ -378,8 +378,8 @@ export function Timeline() {
             ))}
 
             {/* ── Playhead ── */}
-            <div style={{ position:'absolute', top:RULER_H, left:playheadPx, bottom:0, width:1, background:'#4F8CFF', zIndex:25, pointerEvents:'none', boxShadow:'0 0 6px rgba(79,140,255,0.5)' }}>
-              <div style={{ position:'absolute', top:0, left:-4, width:9, height:9, background:'#4F8CFF', borderRadius:'50%', boxShadow:'0 0 8px rgba(79,140,255,0.7)' }} />
+            <div style={{ position:'absolute', top:RULER_H, left:playheadPx, bottom:0, width:1, background:'#8B5CF6', zIndex:25, pointerEvents:'none', boxShadow:'0 0 6px rgba(139,92,246,0.5)' }}>
+              <div style={{ position:'absolute', top:0, left:-4, width:9, height:9, background:'#8B5CF6', borderRadius:'50%', boxShadow:'0 0 8px rgba(139,92,246,0.7)' }} />
             </div>
 
           </div>

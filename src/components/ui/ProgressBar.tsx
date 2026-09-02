@@ -11,7 +11,7 @@ interface ProgressBarProps {
 
 export function ProgressBar({ value, className, style, color = 'accent', size = 'md' }: ProgressBarProps) {
   const height = size === 'sm' ? 4 : 6;
-  const fillColor = color === 'accent' ? '#4F8CFF' : '#FFFFFF';
+  const fillColor = color === 'accent' ? '#8B5CF6' : '#FFFFFF';
 
   return (
     <div

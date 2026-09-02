@@ -152,10 +152,10 @@ export default function UploadPage() {
               <React.Fragment key={i}>
                 {i > 0 && <div style={{ width: 20, height: 1, background: '#1e1e1e' }} />}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <div style={{ width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, background: isDone ? '#4F8CFF' : isActive ? 'transparent' : 'transparent', border: isDone ? 'none' : isActive ? '1.5px solid #4F8CFF' : '1px solid #1e1e1e', color: isDone ? '#fff' : isActive ? '#4F8CFF' : '#333' }}>
+                  <div style={{ width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, background: isDone ? '#8B5CF6' : isActive ? 'transparent' : 'transparent', border: isDone ? 'none' : isActive ? '1.5px solid #8B5CF6' : '1px solid #1e1e1e', color: isDone ? '#fff' : isActive ? '#8B5CF6' : '#333' }}>
                     {isDone ? <Check size={10} strokeWidth={3} /> : i + 1}
                   </div>
-                  <span style={{ fontSize: 12, color: isActive ? '#FFFFFF' : isDone ? '#4F8CFF' : '#333' }}>{label}</span>
+                  <span style={{ fontSize: 12, color: isActive ? '#FFFFFF' : isDone ? '#8B5CF6' : '#333' }}>{label}</span>
                 </div>
               </React.Fragment>
             );
@@ -185,22 +185,22 @@ export default function UploadPage() {
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={handleDrop}
                 style={{
-                  border: `1.5px dashed ${isDragging ? 'rgba(79,140,255,0.7)' : 'rgba(255,255,255,0.08)'}`,
+                  border: `1.5px dashed ${isDragging ? 'rgba(139,92,246,0.7)' : 'rgba(255,255,255,0.08)'}`,
                   borderRadius: 18, padding: '64px 32px', cursor: 'pointer',
-                  background: isDragging ? 'rgba(79,140,255,0.05)' : 'rgba(255,255,255,0.02)',
+                  background: isDragging ? 'rgba(139,92,246,0.05)' : 'rgba(255,255,255,0.02)',
                   backdropFilter: 'blur(20px)', textAlign: 'center',
-                  boxShadow: isDragging ? '0 0 40px rgba(79,140,255,0.1)' : 'inset 0 1px 0 rgba(255,255,255,0.04)',
+                  boxShadow: isDragging ? '0 0 40px rgba(139,92,246,0.1)' : 'inset 0 1px 0 rgba(255,255,255,0.04)',
                   transition: 'all 250ms ease',
                 }}
               >
-                <div style={{ width: 56, height: 56, borderRadius: '50%', background: isDragging ? 'rgba(79,140,255,0.12)' : 'rgba(255,255,255,0.04)', border: `1px solid ${isDragging ? 'rgba(79,140,255,0.3)' : 'rgba(255,255,255,0.08)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', transition: 'all 250ms' }}>
-                  <Upload size={22} color={isDragging ? '#4F8CFF' : 'rgba(255,255,255,0.5)'} strokeWidth={1.75} />
+                <div style={{ width: 56, height: 56, borderRadius: '50%', background: isDragging ? 'rgba(139,92,246,0.12)' : 'rgba(255,255,255,0.04)', border: `1px solid ${isDragging ? 'rgba(139,92,246,0.3)' : 'rgba(255,255,255,0.08)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', transition: 'all 250ms' }}>
+                  <Upload size={22} color={isDragging ? '#8B5CF6' : 'rgba(255,255,255,0.5)'} strokeWidth={1.75} />
                 </div>
-                <p style={{ fontSize: 16, fontWeight: 600, color: isDragging ? '#4F8CFF' : '#FFFFFF', margin: '0 0 8px', transition: 'color 200ms' }}>
+                <p style={{ fontSize: 16, fontWeight: 600, color: isDragging ? '#8B5CF6' : '#FFFFFF', margin: '0 0 8px', transition: 'color 200ms' }}>
                   {isDragging ? 'Drop it here' : 'Drop your video here'}
                 </p>
                 <p style={{ fontSize: 14, color: '#737D8D', margin: '0 0 16px' }}>
-                  or <span style={{ color: '#4F8CFF' }}>browse files</span>
+                  or <span style={{ color: '#8B5CF6' }}>browse files</span>
                 </p>
                 <p style={{ fontSize: 12, color: '#252525', margin: 0, letterSpacing: '0.05em' }}>MP4 · MOV · WebM · up to 3 hours</p>
               </div>
@@ -224,17 +224,17 @@ export default function UploadPage() {
               {/* File chip */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#0c0c0c', border: '1px solid #1a1a1a', borderRadius: 10, padding: '10px 14px', marginBottom: 16 }}>
                 <div style={{ width: 32, height: 32, borderRadius: 8, background: '#111', border: '1px solid #1e1e1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <Play size={12} color="#4F8CFF" fill="#4F8CFF" style={{ marginLeft: 1 }} />
+                  <Play size={12} color="#8B5CF6" fill="#8B5CF6" style={{ marginLeft: 1 }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontSize: 13, fontWeight: 500, letterSpacing: '-0.01em', fontFamily: "'Inter Tight', Inter, system-ui, sans-serif", color: '#A5ADBA', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
                   <p style={{ fontSize: 11, fontWeight: 400, letterSpacing: '-0.01em', fontFamily: "'Inter Tight', Inter, system-ui, sans-serif", color: '#737D8D', margin: 0 }}>{formatBytes(file.size)}</p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5,
-                  background: 'rgba(79,140,255,0.08)', border: '1px solid rgba(79,140,255,0.2)',
+                  background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)',
                   borderRadius: 9999, padding: '2px 8px' }}>
-                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#4F8CFF' }} />
-                  <span style={{ fontSize: 10, color: '#4F8CFF', fontWeight: 600 }}>Ready</span>
+                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#8B5CF6' }} />
+                  <span style={{ fontSize: 10, color: '#8B5CF6', fontWeight: 600 }}>Ready</span>
                 </div>
                 <button onClick={() => { setFile(null); setStage('upload'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#737D8D', display: 'flex', padding: 0 }}>
                   <X size={14} />
@@ -259,7 +259,7 @@ export default function UploadPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6,
                       padding: '4px 10px', borderRadius: 7, background: '#0e0e0e',
                       border: '1px solid #1e1e1e' }}>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: '#4F8CFF',
+                      <span style={{ fontSize: 10, fontWeight: 600, color: '#8B5CF6',
                         letterSpacing: '0.04em', textTransform: 'uppercase',
                         fontFamily: "'Inter Tight', sans-serif" }}>
                         Auto-detected
@@ -290,14 +290,14 @@ export default function UploadPage() {
                     </div>
                   )}
                   {/* Captions toggle */}
-                  <button onClick={() => setCaptions(!captions)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', fontSize: 11, fontWeight: 500, borderRadius: 8, border: `1px solid ${captions ? 'rgba(79,140,255,0.25)' : '#1a1a1a'}`, background: captions ? 'rgba(79,140,255,0.08)' : 'transparent', color: captions ? '#4F8CFF' : '#3a3a3a', cursor: 'pointer', transition: 'all 150ms' }}>
+                  <button onClick={() => setCaptions(!captions)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', fontSize: 11, fontWeight: 500, borderRadius: 8, border: `1px solid ${captions ? 'rgba(139,92,246,0.25)' : '#1a1a1a'}`, background: captions ? 'rgba(139,92,246,0.08)' : 'transparent', color: captions ? '#8B5CF6' : '#3a3a3a', cursor: 'pointer', transition: 'all 150ms' }}>
                     <Captions size={11} /> Captions
                   </button>
                   {/* Submit */}
                   <div style={{ marginLeft: 'auto' }} className="ml-auto">
                     <button
                       onClick={uploadAndProcess} disabled={uploading || !prompt.trim()}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 20px', fontSize: 13, fontWeight: 600, color: '#FFFFFF', background: prompt.trim() && !uploading ? 'linear-gradient(135deg,#4F8CFF,#326FEA)' : '#111', border: 'none', borderRadius: 9, cursor: prompt.trim() && !uploading ? 'pointer' : 'not-allowed', boxShadow: prompt.trim() && !uploading ? '0 4px 16px rgba(79,140,255,0.28)' : 'none', transition: 'all 200ms' }}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 20px', fontSize: 13, fontWeight: 600, color: '#FFFFFF', background: prompt.trim() && !uploading ? 'linear-gradient(135deg,#8B5CF6,#A855F7)' : '#111', border: 'none', borderRadius: 9, cursor: prompt.trim() && !uploading ? 'pointer' : 'not-allowed', boxShadow: prompt.trim() && !uploading ? '0 4px 16px rgba(139,92,246,0.28)' : 'none', transition: 'all 200ms' }}
                     >
                       {uploading ? 'Uploading…' : 'Edit video'} <ArrowRight size={13} />
                     </button>
@@ -345,7 +345,7 @@ export default function UploadPage() {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
                 {PRESETS.map((p, i) => (
                   <button key={i} onClick={() => setPrompt(p.fill)}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 13px', fontSize: 12, color: prompt === p.fill ? '#4F8CFF' : '#444', background: prompt === p.fill ? 'rgba(79,140,255,0.08)' : 'transparent', border: `1px solid ${prompt === p.fill ? 'rgba(79,140,255,0.22)' : '#1a1a1a'}`, borderRadius: 9999, cursor: 'pointer', transition: 'all 200ms' }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 13px', fontSize: 12, color: prompt === p.fill ? '#8B5CF6' : '#444', background: prompt === p.fill ? 'rgba(139,92,246,0.08)' : 'transparent', border: `1px solid ${prompt === p.fill ? 'rgba(139,92,246,0.22)' : '#1a1a1a'}`, borderRadius: 9999, cursor: 'pointer', transition: 'all 200ms' }}
                     onMouseEnter={e => { if (prompt !== p.fill) { e.currentTarget.style.color = '#FFFFFF'; e.currentTarget.style.borderColor = '#2e2e2e'; } }}
                     onMouseLeave={e => { if (prompt !== p.fill) { e.currentTarget.style.color = '#444'; e.currentTarget.style.borderColor = '#1a1a1a'; } }}
                   >

@@ -54,7 +54,7 @@ import {
 const C = {
   bg:      '#050505', surface: '#070707', s2: '#0a0a0a', s3: '#0e0e0e',
   b:       '#111111', b2:      '#141414', b3: '#1a1a1a',
-  accent:  '#4F8CFF', accentH: '#6EA3FF',
+  accent:  '#8B5CF6', accentH: '#A78BFA',
   /* Text colour scale — spec §17 */
   text:    '#F5F7FA',   // primary
   sec:     '#A5ADBA',   // secondary
@@ -201,7 +201,7 @@ function buildTracks(clips: EditorClip[], totalS: number) {
   const ids = [...TRACK_ORDER.filter(id => byTrack[id]), ...Object.keys(byTrack).filter(id => !TRACK_ORDER.includes(id))];
 
   return ids.map(id => {
-    const meta = TRACK_META[id] ?? { label: id, icon: '▣', color: '#4F8CFF', bg: '#0d1520', h: 46 };
+    const meta = TRACK_META[id] ?? { label: id, icon: '▣', color: '#8B5CF6', bg: '#0d1520', h: 46 };
     return {
       id,
       ...meta,

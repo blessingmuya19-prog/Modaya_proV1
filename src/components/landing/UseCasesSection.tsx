@@ -16,42 +16,42 @@ const CASES = [
   {
     image: '/creators/podcaster-woman.jpg',
     tag: 'Podcasters',
-    tagColor: '#6E92FF',
+    tagColor: '#A78BFA',
     stat: '60 min → 8 min',
     title: 'Turn long episodes into viral clips',
     body: 'Upload your full recording. Modaya finds the strongest moments, removes the filler, and builds clips ready for every platform.',
-    accent: 'rgba(91,130,255,0.15)',
-    border: 'rgba(91,130,255,0.25)',
+    accent: 'rgba(139,92,246,0.15)',
+    border: 'rgba(139,92,246,0.25)',
   },
   {
     image: '/creators/podcast-group.jpg',
     tag: 'Interviewers',
-    tagColor: '#6E92FF',
+    tagColor: '#A78BFA',
     stat: '54% shorter',
     title: 'Keep the insight, lose the filler',
     body: 'Every interview becomes watchable in minutes. AI reads the conversation, keeps the sharpest exchanges, and cuts the rest.',
-    accent: 'rgba(91,130,255,0.1)',
-    border: 'rgba(91,130,255,0.2)',
+    accent: 'rgba(139,92,246,0.1)',
+    border: 'rgba(139,92,246,0.2)',
   },
   {
     image: '/creators/streamer.jpg',
     tag: 'Streamers',
-    tagColor: '#6E92FF',
+    tagColor: '#A78BFA',
     stat: '0 manual cuts',
     title: 'Hours of stream into highlight reels',
     body: 'Clip the best moments from multi-hour streams automatically. No scrubbing. No timeline. Just drop in the VOD.',
-    accent: 'rgba(91,130,255,0.12)',
-    border: 'rgba(91,130,255,0.22)',
+    accent: 'rgba(139,92,246,0.12)',
+    border: 'rgba(139,92,246,0.22)',
   },
   {
     image: '/creators/studio-setup.jpg',
     tag: 'YouTubers',
-    tagColor: '#6E92FF',
+    tagColor: '#A78BFA',
     stat: '3× faster',
     title: 'From raw footage to published video',
     body: 'Talking-head, vlog, tutorial — Modaya handles the cut, pacing, and captions so you can focus on what you want to say.',
-    accent: 'rgba(91,130,255,0.1)',
-    border: 'rgba(91,130,255,0.18)',
+    accent: 'rgba(139,92,246,0.1)',
+    border: 'rgba(139,92,246,0.18)',
   },
 ];
 
@@ -65,8 +65,8 @@ function CreatorCard({ c, i, inView }: { c: typeof CASES[0]; i: number; inView: 
       style={{
         borderRadius: 20,
         overflow: 'hidden',
-        border: `1px solid ${hov ? c.border : '#242C3E'}`,
-        background: '#141A28',
+        border: `1px solid ${hov ? c.border : '#26262E'}`,
+        background: '#101014',
         display: 'flex',
         flexDirection: 'column',
         opacity: inView ? 1 : 0,
@@ -94,14 +94,14 @@ function CreatorCard({ c, i, inView }: { c: typeof CASES[0]; i: number; inView: 
 
         {/* Tag pill */}
         <div style={{ position: 'absolute', top: 14, left: 14 }}>
-          <span style={{ padding: '4px 12px', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', background: 'rgba(91,130,255,0.85)', backdropFilter: 'blur(8px)', color: '#fff', borderRadius: 9999 }}>
+          <span style={{ padding: '4px 12px', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', background: 'rgba(139,92,246,0.85)', backdropFilter: 'blur(8px)', color: '#fff', borderRadius: 9999 }}>
             {c.tag}
           </span>
         </div>
 
         {/* Stat pill */}
         <div style={{ position: 'absolute', top: 14, right: 14 }}>
-          <span style={{ padding: '4px 12px', fontSize: 11, fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', border: '1px solid rgba(91,130,255,0.18)', borderRadius: 9999 }}>
+          <span style={{ padding: '4px 12px', fontSize: 11, fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', border: '1px solid rgba(139,92,246,0.18)', borderRadius: 9999 }}>
             {c.stat}
           </span>
         </div>
@@ -109,12 +109,12 @@ function CreatorCard({ c, i, inView }: { c: typeof CASES[0]; i: number; inView: 
 
       {/* Text body */}
       <div style={{ padding: '24px 24px 28px', flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <h3 style={{ fontFamily: "'Inter Tight',sans-serif", fontSize: 20, fontWeight: 700, color: '#F2F5FC', letterSpacing: '-0.03em', margin: 0 }}>{c.title}</h3>
-        <p style={{ fontSize: 14, color: '#B7C0D4', lineHeight: 1.5, letterSpacing: '-0.01em', margin: 0 }}>{c.body}</p>
+        <h3 style={{ fontFamily: "'Inter Tight',sans-serif", fontSize: 20, fontWeight: 700, color: '#FAFAFA', letterSpacing: '-0.03em', margin: 0 }}>{c.title}</h3>
+        <p style={{ fontSize: 14, color: '#D4D4D8', lineHeight: 1.5, letterSpacing: '-0.01em', margin: 0 }}>{c.body}</p>
 
         {/* AI label */}
         <div style={{ marginTop: 6 }}>
-          <span style={{ fontSize: 10, fontWeight: 600, color: '#6E92FF', letterSpacing: '0.08em', background: 'rgba(91,130,255,0.08)', border: '1px solid rgba(91,130,255,0.18)', padding: '3px 10px', borderRadius: 9999 }}>✦ AI Edit</span>
+          <span style={{ fontSize: 10, fontWeight: 600, color: '#A78BFA', letterSpacing: '0.08em', background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.18)', padding: '3px 10px', borderRadius: 9999 }}>✦ AI Edit</span>
         </div>
       </div>
     </div>
@@ -125,24 +125,24 @@ export function UseCasesSection() {
   const { ref, inView } = useInView(0.08);
 
   return (
-    <section id="use-cases" className="section-pad" style={{ position: 'relative', zIndex: 0, background: '#0B0F1A', overflow: 'hidden' }}>
+    <section id="use-cases" className="section-pad" style={{ position: 'relative', zIndex: 0, background: '#09090B', overflow: 'hidden' }}>
 
       {/* Subtle glow */}
-      <div style={{ position: 'absolute', top: '40%', right: '-10%', width: 600, height: 600, pointerEvents: 'none', background: 'radial-gradient(ellipse at center, rgba(91,130,255,0.04) 0%, transparent 70%)', filter: 'blur(60px)' }} />
+      <div style={{ position: 'absolute', top: '40%', right: '-10%', width: 600, height: 600, pointerEvents: 'none', background: 'radial-gradient(ellipse at center, rgba(139,92,246,0.04) 0%, transparent 70%)', filter: 'blur(60px)' }} />
 
       <div className="section-inner" style={{ position: 'relative', zIndex: 1 }}>
 
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 'clamp(36px,5vw,72px)' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px', borderRadius: 9999, background: 'rgba(91,130,255,0.08)', border: '1px solid rgba(91,130,255,0.18)', marginBottom: 20 }}>
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#6E92FF', display: 'inline-block' }} />
-            <span style={{ fontSize: 11, color: '#6E92FF', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Use cases</span>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px', borderRadius: 9999, background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.18)', marginBottom: 20 }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#A78BFA', display: 'inline-block' }} />
+            <span style={{ fontSize: 11, color: '#A78BFA', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Use cases</span>
           </div>
-          <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(30px,5vw,52px)', letterSpacing: '-0.025em', lineHeight: 1.05, color: '#F2F5FC', margin: '0 0 18px' }}>
+          <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(30px,5vw,52px)', letterSpacing: '-0.025em', lineHeight: 1.05, color: '#FAFAFA', margin: '0 0 18px' }}>
             Built for every creator<br />
             <span style={{ color: 'rgba(15,27,51,0.30)' }}>with footage to edit.</span>
           </h2>
-          <p style={{ fontSize: 'clamp(15px,1.2vw,17px)', color: '#B7C0D4', maxWidth: 460, margin: '0 auto', lineHeight: 1.65 }}>
+          <p style={{ fontSize: 'clamp(15px,1.2vw,17px)', color: '#D4D4D8', maxWidth: 460, margin: '0 auto', lineHeight: 1.65 }}>
             Whether you record daily or once a month — Modaya fits your workflow.
           </p>
         </div>
@@ -159,7 +159,7 @@ export function UseCasesSection() {
           marginTop: 56,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           gap: 0,
-          background: '#141A28', border: '1px solid #242C3E', boxShadow: '0 8px 30px rgba(0,0,0,0.25)',
+          background: '#101014', border: '1px solid #26262E', boxShadow: '0 8px 30px rgba(0,0,0,0.25)',
           borderRadius: 16, padding: '28px 0',
           opacity: inView ? 1 : 0,
           transform: inView ? 'none' : 'translateY(20px)',
@@ -173,10 +173,10 @@ export function UseCasesSection() {
           ].map((s, i, arr) => (
             <React.Fragment key={i}>
               <div style={{ padding: '0 40px', textAlign: 'center' }}>
-                <p style={{ fontFamily: "'Inter Tight',sans-serif", fontSize: 'clamp(24px,3vw,36px)', fontWeight: 800, color: '#F2F5FC', letterSpacing: '-0.04em', margin: '0 0 4px' }}>{s.value}</p>
-                <p style={{ fontSize: 12, color: '#8B95AD', margin: 0 }}>{s.label}</p>
+                <p style={{ fontFamily: "'Inter Tight',sans-serif", fontSize: 'clamp(24px,3vw,36px)', fontWeight: 800, color: '#FAFAFA', letterSpacing: '-0.04em', margin: '0 0 4px' }}>{s.value}</p>
+                <p style={{ fontSize: 12, color: '#A1A1AA', margin: 0 }}>{s.label}</p>
               </div>
-              {i < arr.length - 1 && <div style={{ width: 1, height: 40, background: '#2E3750', flexShrink: 0 }} />}
+              {i < arr.length - 1 && <div style={{ width: 1, height: 40, background: '#33333D', flexShrink: 0 }} />}
             </React.Fragment>
           ))}
         </div>

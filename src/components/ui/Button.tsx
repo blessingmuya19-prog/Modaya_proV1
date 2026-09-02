@@ -17,7 +17,7 @@ const sizeStyles = {
 
 const variantStyles = {
   primary: {
-    background: '#4F8CFF',
+    background: '#8B5CF6',
     color: '#050505',
     border: 'none',
     fontWeight: 600,
@@ -73,13 +73,13 @@ export function Button({
         if (!disabled && !loading) {
           const el = e.currentTarget;
           el.style.transform = 'translateY(-1px)';
-          if (variant === 'primary') el.style.background = '#6EA3FF';
+          if (variant === 'primary') el.style.background = '#A78BFA';
         }
       }}
       onMouseLeave={e => {
         const el = e.currentTarget;
         el.style.transform = '';
-        if (variant === 'primary') el.style.background = '#4F8CFF';
+        if (variant === 'primary') el.style.background = '#8B5CF6';
       }}
       {...props}
     >

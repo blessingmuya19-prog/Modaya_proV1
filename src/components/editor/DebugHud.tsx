@@ -86,7 +86,7 @@ export default function DebugHud({ projectId }: { projectId?: string }) {
       padding: '10px 12px', font: "11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace",
       pointerEvents: 'none', maxWidth: 460,
     }}>
-      <div style={{ color: '#4F8CFF', fontWeight: 700, marginBottom: 4 }}>MODAYA DIAGNOSTICS</div>
+      <div style={{ color: '#8B5CF6', fontWeight: 700, marginBottom: 4 }}>MODAYA DIAGNOSTICS</div>
       {row('source',   r.source)}
       {row('video',    r.videoT)}
       {row('buffer',   r.ready)}

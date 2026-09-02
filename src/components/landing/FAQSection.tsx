@@ -18,8 +18,8 @@ export function FAQSection() {
     <section className="section-pad" style={{ background: 'transparent', paddingLeft: 24, paddingRight: 24 }}>
       <div className="faq-grid">
         <div style={{ marginBottom: 48 }}>
-          <p style={{ fontSize: 11, color: '#8B95AD', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 16 }}>FAQ</p>
-          <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(24px,4vw,40px)', letterSpacing: '-0.04em', lineHeight: 1.1, color: '#F2F5FC', margin: 0 }}>
+          <p style={{ fontSize: 11, color: '#A1A1AA', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 16 }}>FAQ</p>
+          <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(24px,4vw,40px)', letterSpacing: '-0.04em', lineHeight: 1.1, color: '#FAFAFA', margin: 0 }}>
             Common questions.
           </h2>
         </div>
@@ -27,9 +27,9 @@ export function FAQSection() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {faqs.map((faq, i) => (
             <div key={i} style={{
-              border: `1px solid ${open === i ? '#242C3E' : '#1F2739'}`,
+              border: `1px solid ${open === i ? '#26262E' : '#1E1E26'}`,
               borderRadius: 16,
-              background: open === i ? '#181F30' : '#141A28',
+              background: open === i ? '#16161C' : '#101014',
               overflow: 'hidden',
               transition: 'all 150ms ease',
             }}>
@@ -42,15 +42,15 @@ export function FAQSection() {
                   textAlign: 'left',
                 }}
               >
-                <span style={{ fontSize: 14, fontWeight: 500, color: '#F2F5FC' }}>{faq.q}</span>
+                <span style={{ fontSize: 14, fontWeight: 500, color: '#FAFAFA' }}>{faq.q}</span>
                 {open === i
-                  ? <Minus size={16} style={{ color: '#8B95AD', flexShrink: 0 }} />
-                  : <Plus  size={16} style={{ color: '#8B95AD', flexShrink: 0 }} />
+                  ? <Minus size={16} style={{ color: '#A1A1AA', flexShrink: 0 }} />
+                  : <Plus  size={16} style={{ color: '#A1A1AA', flexShrink: 0 }} />
                 }
               </button>
               {open === i && (
                 <div style={{ padding: '0 20px 20px', animation: 'slide-up 0.2s ease' }}>
-                  <p style={{ fontSize: 14, color: '#B7C0D4', lineHeight: 1.7, margin: 0 }}>{faq.a}</p>
+                  <p style={{ fontSize: 14, color: '#D4D4D8', lineHeight: 1.7, margin: 0 }}>{faq.a}</p>
                 </div>
               )}
             </div>

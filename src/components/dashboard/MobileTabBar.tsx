@@ -28,7 +28,7 @@ export function MobileTabBar() {
         return (
           <Link key={href} href={href} style={{ textDecoration: 'none', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '6px 0' }}>
             {accent ? (
-              <div style={{ width: 40, height: 40, marginTop: -14, borderRadius: '50%', background: 'linear-gradient(135deg,#3E6FF0,#6A4EE8)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(74,108,255,0.5)', border: '3px solid #141A28' }}>
+              <div style={{ width: 40, height: 40, marginTop: -14, borderRadius: '50%', background: 'linear-gradient(135deg,#7C3AED,#A855F7)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(139,92,246,0.5)', border: '3px solid #101014' }}>
                 <Icon size={18} color="#fff" strokeWidth={2.7} />
               </div>
             ) : (
