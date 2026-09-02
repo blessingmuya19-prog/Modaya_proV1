@@ -153,7 +153,7 @@ export function HeroSection() {
 
             {/* CTA + note */}
             <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:10, marginTop:20 }}>
-              <Link href="/upload" style={{ textDecoration:'none' }}>
+              <Link href="/new" style={{ textDecoration:'none' }}>
                 <button style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'0 32px', height:52, fontSize:15, fontWeight:700, color:'#FFFFFF', background:'linear-gradient(135deg,#4F8CFF,#326FEA)', border:'none', borderRadius:12, cursor:'pointer', boxShadow:'0 4px 24px rgba(79,140,255,0.32)', transition:'all 220ms ease' }}
                   onMouseEnter={e => { e.currentTarget.style.transform='translateY(-2px)'; e.currentTarget.style.boxShadow='0 8px 36px rgba(79,140,255,0.48)'; }}
                   onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='0 4px 24px rgba(79,140,255,0.32)'; }}
@@ -200,7 +200,7 @@ export function HeroSection() {
                 <div style={{ display:'flex', gap:4 }}>
                   {['9:16','16:9','1:1'].map(r => <button key={r} onClick={() => setActiveRatio(r)} style={{ padding:'3px 8px', fontSize:11, color: r===activeRatio ? '#4F8CFF' : '#2e2e2e', background: r===activeRatio ? 'rgba(79,140,255,0.1)' : 'transparent', border: r===activeRatio ? '1px solid rgba(79,140,255,0.2)' : '1px solid transparent', borderRadius:5, cursor:'pointer', fontWeight:500 }}>{r}</button>)}
                 </div>
-                <Link href="/upload" style={{ textDecoration:'none' }}>
+                <Link href="/new" style={{ textDecoration:'none' }}>
                   <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 16px', fontSize:12, fontWeight:600, color:'#FFFFFF', background:'linear-gradient(135deg,#4F8CFF,#326FEA)', border:'none', borderRadius:7, cursor:'pointer', boxShadow:'0 4px 14px rgba(79,140,255,0.28)' }}>Edit video <ArrowRight size={12} /></button>
                 </Link>
               </div>

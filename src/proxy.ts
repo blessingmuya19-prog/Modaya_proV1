@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // Routes that require a valid session
-const PROTECTED = ['/dashboard', '/editor', '/upload'];
+const PROTECTED = ['/dashboard', '/editor', '/upload', '/new', '/studio'];
 // Routes only for guests (redirect to dashboard if already logged in)
 const GUEST_ONLY = ['/login', '/signup'];
 
@@ -36,5 +36,5 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/editor/:path*', '/upload/:path*', '/login', '/signup'],
+  matcher: ['/dashboard/:path*', '/editor/:path*', '/upload/:path*', '/new', '/studio/:path*', '/login', '/signup'],
 };

@@ -38,7 +38,7 @@ export function FinalCTASection() {
         </p>
 
         {/* CTA button */}
-        <Link href="/upload">
+        <Link href="/new">
           <button style={{ display:'inline-flex', alignItems:'center', gap:10, padding:'0 clamp(24px,3vw,48px)', height:'clamp(48px,5vh,64px)', fontSize:17, fontWeight:700, background:'linear-gradient(135deg,#4F8CFF 0%,#326FEA 100%)', color:'#FFFFFF', border:'none', borderRadius:14, cursor:'pointer', boxShadow:'0 0 50px rgba(79,140,255,0.3),0 12px 32px rgba(0,0,0,0.5)', transition:'all 250ms ease' } as React.CSSProperties}
             onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#6EA3FF,#4F8CFF)'; e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 0 70px rgba(79,140,255,0.4),0 20px 40px rgba(0,0,0,0.5)'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(135deg,#4F8CFF,#326FEA)'; e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 0 50px rgba(79,140,255,0.3),0 12px 32px rgba(0,0,0,0.5)'; }}

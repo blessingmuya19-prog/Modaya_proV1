@@ -384,11 +384,11 @@ function EmptyState({ filtered }: { filtered: boolean }) {
         {filtered ? 'Try a different filter.' : 'Upload your first video to get started.'}
       </p>
       {!filtered && (
-        <Link href="/upload" style={{ textDecoration: 'none' }}>
+        <Link href="/new" style={{ textDecoration: 'none' }}>
           <button style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 18px', height: 38,
             fontFamily: F, fontSize: 13, fontWeight: 600, background: C.accent, color: '#fff',
             border: 'none', borderRadius: 9, cursor: 'pointer' }}>
-            <Plus size={13}/> Upload video
+            <Plus size={13}/> Start an edit
           </button>
         </Link>
       )}
@@ -444,14 +444,14 @@ export default function DashboardPage() {
             {projects.length > 0 && !loading && ` · last edited ${fmtRelative(projects[0]?.updatedAt)}`}
           </p>
         </div>
-        <Link href="/upload" style={{ textDecoration: 'none' }}>
+        <Link href="/new" style={{ textDecoration: 'none' }}>
           <button style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 18px', height: 38,
             fontFamily: F, fontSize: 13, fontWeight: 600, background: C.accent, color: '#fff',
             border: 'none', borderRadius: 9, cursor: 'pointer', boxShadow: `0 2px 12px ${C.accent}33`,
             transition: 'all 150ms' }}
             onMouseEnter={e => { e.currentTarget.style.background = C.accentH; }}
             onMouseLeave={e => { e.currentTarget.style.background = C.accent; }}
-          ><Plus size={13} strokeWidth={2.5}/> New video</button>
+          ><Plus size={13} strokeWidth={2.5}/> New edit</button>
         </Link>
       </div>
 

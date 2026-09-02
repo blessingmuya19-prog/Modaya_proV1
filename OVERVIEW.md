@@ -12,8 +12,19 @@ are**. For setup and env vars see [README.md](./README.md).
 A **browser-based AI video editor** (Next.js 16 + React 19) whose guiding
 principle is: *the user supplies footage (and optionally a reference video),
 and Modaya does the editing* — "Lovable for video", not Premiere Pro with AI
-bolted on. The default experience (**Studio**, `/studio/[id]`) is deliberately
-near-empty of technical UI:
+bolted on.
+
+**Entry — two doors into the same Studio** (`/new`, "What do you want to
+create?"):
+- **Edit** — the general AI editor: footage + instructions, no reference.
+- **Reference Edit** (the hero, visually dominant) — footage + a reference
+  (upload or link) whose editing DNA Modaya recreates on the user's footage.
+Both mint a draft project (`POST /api/projects/new`, mode recorded) and route
+to `/studio/[id]?mode=…`, which only focuses the drop screen; the editor,
+engine and every later surface are identical.
+
+The default experience (**Studio**, `/studio/[id]`) is deliberately near-empty
+of technical UI:
 
 > Drop footage → (optionally) add a reference by **📁 uploading a video or
 > 🔗 pasting a direct video link**, optionally scoped to a section with

@@ -136,7 +136,7 @@ export function Navbar() {
               </button>
             </Link>
 
-            <Link href="/upload" style={{ textDecoration: 'none' }}>
+            <Link href="/new" style={{ textDecoration: 'none' }}>
               <button style={{
                 padding: '9px 20px', fontSize: 14, fontWeight: 600,
                 color: '#FFFFFF',
@@ -188,7 +188,7 @@ export function Navbar() {
             <Link href="/dashboard" onClick={() => setMenuOpen(false)} style={{ textDecoration: 'none' }}>
               <div style={{ padding: '11px 14px', fontSize: 15, color: '#737D8D', borderRadius: 12, cursor: 'pointer' }}>Log in</div>
             </Link>
-            <Link href="/upload" onClick={() => setMenuOpen(false)} style={{ textDecoration: 'none' }}>
+            <Link href="/new" onClick={() => setMenuOpen(false)} style={{ textDecoration: 'none' }}>
               <div style={{
                 padding: '11px 14px', fontSize: 15, fontWeight: 600,
                 color: '#050505', background: 'linear-gradient(135deg, #4F8CFF, #326FEA)',

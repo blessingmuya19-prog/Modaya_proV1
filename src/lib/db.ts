@@ -56,6 +56,8 @@ export interface Project {
   updatedAt:   string;
   exportedAt:  string | null;
   sizeMb:      number;
+  /** Which Studio door the project was created from: 'edit' | 'reference'. */
+  mode?:       'edit' | 'reference';
   /** Poster frame captured at upload, stored as a small JPEG data URL */
   thumbnail:   string;
   /** Durable media held in the server object store (ext per role), so a

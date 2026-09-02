@@ -13,7 +13,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Film, Upload, Wand2, Download, RefreshCw, Sparkles, Send, SlidersHorizontal, CheckCircle2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Film, Upload, Wand2, Download, RefreshCw, Sparkles, Send, SlidersHorizontal, CheckCircle2, Loader2, Plus } from 'lucide-react';
 import { LogoMark } from '../ui/Logo';
 import { getMedia, setMedia, subscribeMedia, analyseFile, type MediaEntry } from '@/lib/videoStore';
 import { saveMediaFile } from '@/lib/mediaDb';
@@ -107,7 +107,9 @@ function clipToEditor(c: { id: string; trackId?: string; label: string; startS: 
   };
 }
 
-export default function Studio({ projectId, projectName }: { projectId: string; projectName: string }) {
+export default function Studio({ projectId, projectName, mode = 'edit' }: {
+  projectId: string; projectName: string; mode?: 'edit' | 'reference';
+}) {
   const [media, setMediaState] = useState<MediaEntry | null>(() => (projectId ? getMedia(projectId) : null));
   const setMediaEntry = useCallback((e: MediaEntry | null) => {
     if (projectId && e) setMedia(projectId, e);
@@ -531,6 +533,20 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
     }).catch(() => {});
     // Durable server copy (no-op when the host has no durable storage).
     void uploadProjectMedia(projectId, 'main', f, f.name).catch(() => {});
+    // Keep the (possibly draft) server record in sync so the project lists its
+    // real footage/title/status on the dashboard.
+    void fetch(`/api/projects/${projectId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: meta?.filename ?? f.name.replace(/\.[^.]+$/, ''),
+        filename: f.name,
+        durationS: meta?.durationS ?? 0,
+        width: meta?.width ?? 0, height: meta?.height ?? 0,
+        aspectRatio: meta?.aspectRatio ?? '16:9',
+        status: 'ready',
+      }),
+    }).catch(() => {});
   }, [projectId, setMediaEntry]);
 
   /**
@@ -593,7 +609,7 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
   if (phase === 'drop') {
     return (
       <DropScreen
-        projectId={projectId} projectName={projectName}
+        projectId={projectId} projectName={projectName} mode={mode}
         hasFootage={!!media}
         onFootage={uploadFootage}
         onReference={(ref, range, note) => { initialNoteRef.current = note; void run({ ref, range }); }}
@@ -966,8 +982,8 @@ type RefState =
   | { kind: 'file'; file: File }
   | { kind: 'link'; url: string; file: File };
 
-function DropScreen({ projectId, projectName, hasFootage, onFootage, onReference, onStart, refInputRef, error }: {
-  projectId: string; projectName: string; hasFootage: boolean;
+function DropScreen({ projectId, projectName, mode, hasFootage, onFootage, onReference, onStart, refInputRef, error }: {
+  projectId: string; projectName: string; mode: 'edit' | 'reference'; hasFootage: boolean;
   onFootage: (f: File) => void;
   onReference: (ref: File | null, range: { startS: number; endS: number } | null, note: string) => void;
   onStart: (note: string) => void;
@@ -976,6 +992,8 @@ function DropScreen({ projectId, projectName, hasFootage, onFootage, onReference
   const footageRef = useRef<HTMLInputElement>(null);
   const [footName, setFootName] = useState<string | null>(null);
   const [showLink, setShowLink] = useState(false);
+  /** In plain Edit mode the optional reference block starts collapsed. */
+  const [refOpen, setRefOpen] = useState<boolean>(mode === 'reference');
   const [ref, setRef] = useState<RefState>({ kind: 'none' });
   const [linkUrl, setLinkUrl] = useState('');
   const [linkBusy, setLinkBusy] = useState(false);
@@ -1027,9 +1045,28 @@ function DropScreen({ projectId, projectName, hasFootage, onFootage, onReference
 
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
         <div style={{ width: 'min(92vw, 560px)' }}>
-          <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.03em', margin: '0 0 6px' }}>What are we editing today?</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+            {mode === 'reference' ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+                textTransform: 'uppercase', color: C.accent, background: `${C.accent}14`, border: `1px solid ${C.accent}44`,
+                borderRadius: 999, padding: '4px 11px' }}>
+                <Sparkles size={12} /> Reference edit
+              </span>
+            ) : (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+                textTransform: 'uppercase', color: C.muted, background: C.s3, border: `1px solid ${C.b3}`,
+                borderRadius: 999, padding: '4px 11px' }}>
+                <Wand2 size={12} /> Edit
+              </span>
+            )}
+          </div>
+          <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.03em', margin: '0 0 6px' }}>
+            {mode === 'reference' ? 'Edit your footage like a video you love' : 'What are we editing today?'}
+          </h1>
           <p style={{ color: C.muted, fontSize: 14, margin: '0 0 26px' }}>
-            Drop your footage. Add a reference — upload it or paste a link — and Modaya learns its style. Then Modaya does the rest.
+            {mode === 'reference'
+              ? <>Add your footage and a reference — upload it or paste a link. Modaya extracts its editing DNA and applies it to your video.</>
+              : <>Drop your footage and tell Modaya what you want. Add a reference anytime if you want to match a specific style.</>}
           </p>
 
           <p style={{ color: C.dim, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px' }}>Your video</p>
@@ -1043,15 +1080,50 @@ function DropScreen({ projectId, projectName, hasFootage, onFootage, onReference
           <input ref={footageRef} type="file" accept="video/*" style={{ display: 'none' }}
             onChange={e => { const f = e.target.files?.[0]; if (f) { setFootName(f.name); void onFootage(f); } e.target.value = ''; }} />
 
-          <p style={{ color: C.dim, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '20px 0 8px' }}>Reference · optional</p>
+          {/* Reference block — front-and-centre in reference mode, collapsed by
+              default in plain Edit mode. The reference is STYLE material, never
+              footage Modaya copies. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '20px 0 8px' }}>
+            <p style={{ color: C.dim, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>
+              Reference {mode === 'reference' ? '' : '· optional'}
+            </p>
+            {mode === 'reference' && (
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
+                color: C.accent, background: `${C.accent}14`, borderRadius: 999, padding: '2px 8px' }}>Style DNA</span>
+            )}
+          </div>
 
-          {/* One reference card: drop a file, or pick either action — upload or
-              paste a link. The reference is STYLE material, never footage to copy. */}
+          {/* Collapsed add-reference row (plain Edit mode, nothing chosen yet) */}
+          {!refOpen && !refReady ? (
+            <button
+              onClick={() => setRefOpen(true)}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
+                padding: '16px 18px', borderRadius: 14, cursor: 'pointer',
+                background: C.s2, border: `1.5px dashed ${C.b3}`, color: C.text, fontFamily: F }}>
+              <span style={{ width: 38, height: 38, borderRadius: 10, background: C.s3, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, flexShrink: 0 }}>
+                <Sparkles size={17} />
+              </span>
+              <span style={{ flex: 1 }}>
+                <span style={{ display: 'block', fontWeight: 600, fontSize: 14 }}>Add a reference to match a style</span>
+                <span style={{ display: 'block', color: C.dim, fontSize: 12, marginTop: 1 }}>Upload a video or paste a link — Modaya copies its pacing and feel</span>
+              </span>
+              <Plus size={16} color={C.muted} />
+            </button>
+          ) : (
+          /* One reference card: drop a file, or pick either action — upload or
+              paste a link. */
           <div
             onDragOver={e => { e.preventDefault(); }}
             onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f && f.type.startsWith('video/')) { setRef({ kind: 'file', file: f }); setShowLink(false); } }}
-            style={{ background: refReady ? `${C.accent}0e` : C.s2, border: `1.5px dashed ${refReady ? C.accent + '66' : C.b3}`,
-              borderRadius: 14, padding: refReady ? 16 : 22 }}>
+            style={{ background: refReady ? `${C.accent}0e` : (mode === 'reference' ? `linear-gradient(180deg, ${C.accent}0d, ${C.s2} 70%)` : C.s2),
+              border: `1.5px ${refReady || mode === 'reference' ? 'solid' : 'dashed'} ${refReady ? C.accent + '66' : mode === 'reference' ? C.accent + '44' : C.b3}`,
+              borderRadius: 14, padding: refReady ? 16 : 22, position: 'relative' }}>
+            {mode === 'edit' && (
+              <button onClick={() => { setRefOpen(false); setShowLink(false); }}
+                style={{ position: 'absolute', top: 10, right: 12, background: 'none', border: 'none', color: C.dim, cursor: 'pointer', fontSize: 12, fontFamily: F }}>
+                Collapse
+              </button>
+            )}
             <input ref={refInputRef} type="file" accept="video/*" style={{ display: 'none' }}
               onChange={e => { const f = e.target.files?.[0]; if (f) { setRef({ kind: 'file', file: f }); setShowLink(false); } e.target.value = ''; }} />
 
@@ -1127,6 +1199,7 @@ function DropScreen({ projectId, projectName, hasFootage, onFootage, onReference
               </>
             )}
           </div>
+          )}
 
           {/* Optional time range — learn the style from just one section */}
           {refReady && (
