@@ -927,7 +927,7 @@ function DropScreen({ projectId, projectName, hasFootage, onFootage, onReference
 }) {
   const footageRef = useRef<HTMLInputElement>(null);
   const [footName, setFootName] = useState<string | null>(null);
-  const [refTab, setRefTab] = useState<'upload' | 'link'>('upload');
+  const [showLink, setShowLink] = useState(false);
   const [ref, setRef] = useState<RefState>({ kind: 'none' });
   const [linkUrl, setLinkUrl] = useState('');
   const [linkBusy, setLinkBusy] = useState(false);
@@ -970,8 +970,6 @@ function DropScreen({ projectId, projectName, hasFootage, onFootage, onReference
     onReference(ref.file, parseRange(), n);
   };
 
-  const refLabel = ref.kind === 'none' ? 'Reference video' : ref.file.name;
-
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.text, fontFamily: F, display: 'flex', flexDirection: 'column' }}>
       <header style={{ height: 54, display: 'flex', alignItems: 'center', gap: 12, padding: '0 18px', borderBottom: `1px solid ${C.b}` }}>
@@ -999,72 +997,104 @@ function DropScreen({ projectId, projectName, hasFootage, onFootage, onReference
 
           <p style={{ color: C.dim, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '20px 0 8px' }}>Reference · optional</p>
 
-          {/* Upload / link tabs */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-            {([['upload', 'Upload video'], ['link', 'Paste link']] as const).map(([t, label]) => (
-              <button key={t} onClick={() => setRefTab(t)}
-                style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: `1px solid ${refTab === t ? C.accent : C.b3}`,
-                  background: refTab === t ? `${C.accent}16` : C.s2, color: refTab === t ? C.accent : C.muted,
-                  fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: F, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
-                {t === 'upload' ? <Upload size={14} /> : <LinkIcon size={14} />} {label}
-              </button>
-            ))}
+          {/* One reference card: drop a file, or pick either action — upload or
+              paste a link. The reference is STYLE material, never footage to copy. */}
+          <div
+            onDragOver={e => { e.preventDefault(); }}
+            onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f && f.type.startsWith('video/')) { setRef({ kind: 'file', file: f }); setShowLink(false); } }}
+            style={{ background: refReady ? `${C.accent}0e` : C.s2, border: `1.5px dashed ${refReady ? C.accent + '66' : C.b3}`,
+              borderRadius: 14, padding: refReady ? 16 : 22 }}>
+            <input ref={refInputRef} type="file" accept="video/*" style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) { setRef({ kind: 'file', file: f }); setShowLink(false); } e.target.value = ''; }} />
+
+            {refReady ? (
+              /* Filled state — reference chosen (file or fetched link) */
+              <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                <span style={{ width: 38, height: 38, borderRadius: 10, background: `${C.accent}1c`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent, flexShrink: 0 }}>
+                  {ref.kind === 'link' ? <LinkIcon size={18} /> : <Upload size={17} />}
+                </span>
+                <span style={{ minWidth: 0, flex: 1 }}>
+                  <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ref.file.name}</span>
+                  <span style={{ display: 'block', fontSize: 11.5, color: C.dim, marginTop: 1 }}>
+                    {ref.kind === 'link' ? 'From a link · style reference' : 'Uploaded · style reference'}
+                  </span>
+                </span>
+                <button onClick={() => { setRef({ kind: 'none' }); setLinkUrl(''); setLinkError(null); setShowLink(false); }}
+                  style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 12.5, fontFamily: F, flexShrink: 0 }}>
+                  Change
+                </button>
+              </div>
+            ) : showLink ? (
+              /* Paste-a-link action */
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <LinkIcon size={17} color={C.accent} style={{ flexShrink: 0 }} />
+                  <input
+                    autoFocus value={linkUrl} onChange={e => setLinkUrl(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') void useLink(); if (e.key === 'Escape') setShowLink(false); }}
+                    placeholder="Paste a video link…  https://…/clip.mp4"
+                    style={{ flex: 1, minWidth: 0, background: C.s3, border: `1px solid ${C.b3}`, borderRadius: 9, color: C.text,
+                      fontFamily: F, fontSize: 13, padding: '10px 12px', outline: 'none' }} />
+                  <button onClick={useLink} disabled={linkBusy || !linkUrl.trim()}
+                    style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: linkUrl.trim() && !linkBusy ? C.accent : C.b3,
+                      color: '#fff', fontSize: 13, fontWeight: 600, cursor: linkUrl.trim() && !linkBusy ? 'pointer' : 'default', fontFamily: F, display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                    {linkBusy ? <Loader2 size={14} className="spin" /> : null} Fetch
+                  </button>
+                </div>
+                {linkError ? (
+                  <p style={{ color: '#f0a24a', fontSize: 12, margin: '10px 2px 0', lineHeight: 1.5 }}>{linkError}</p>
+                ) : (
+                  <p style={{ color: C.dim, fontSize: 11, margin: '10px 2px 0', lineHeight: 1.5 }}>
+                    Works with a direct video link (.mp4/.webm/…). YouTube, TikTok and Instagram page links can&apos;t be downloaded — use the Upload button for those. The link is style reference, never footage Modaya copies.
+                  </p>
+                )}
+                <button onClick={() => { setShowLink(false); setLinkError(null); }}
+                  style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 12, fontFamily: F, marginTop: 8, padding: 0 }}>
+                  ← Upload a file instead
+                </button>
+              </>
+            ) : (
+              /* Empty state — the two actions both visible, matching the mock */
+              <>
+                <div onClick={() => refInputRef.current?.click()}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer', padding: '6px 0 4px' }}>
+                  <span style={{ color: C.sec, fontSize: 14, fontWeight: 600 }}>Drop a reference video here</span>
+                  <span style={{ color: C.dim, fontSize: 12 }}>or</span>
+                </div>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 12 }}>
+                  <button onClick={() => refInputRef.current?.click()}
+                    style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 10, border: `1px solid ${C.accent}55`,
+                      background: `${C.accent}14`, color: C.accent, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: F }}>
+                    <Upload size={15} /> Upload video
+                  </button>
+                  <button onClick={() => setShowLink(true)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 10, border: `1px solid ${C.b3}`,
+                      background: C.s3, color: C.sec, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: F }}>
+                    <LinkIcon size={15} /> Paste video link
+                  </button>
+                </div>
+                <p style={{ textAlign: 'center', color: C.dim, fontSize: 11, margin: '12px 0 0', lineHeight: 1.5 }}>
+                  Modaya learns its editing style — pacing, cuts, transitions, captions — and applies it to your footage.
+                </p>
+              </>
+            )}
           </div>
 
-          {refTab === 'upload' ? (
-            <>
-              <DropZone
-                label={ref.kind === 'file' ? refLabel : 'Reference video'}
-                sub={ref.kind === 'file' ? 'Tap to change' : 'A clip whose style Modaya should copy'}
-                icon={<Upload size={20} />}
-                onClick={() => refInputRef.current?.click()}
-                filled={ref.kind === 'file'}
-              />
-              <input ref={refInputRef} type="file" accept="video/*" style={{ display: 'none' }}
-                onChange={e => { const f = e.target.files?.[0]; if (f) setRef({ kind: 'file', file: f }); e.target.value = ''; }} />
-            </>
-          ) : (
-            <div style={{ background: C.s2, border: `1.5px dashed ${ref.kind === 'link' ? C.accent + '66' : C.b3}`, borderRadius: 14, padding: 16 }}>
-              {ref.kind === 'link' ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <LinkIcon size={18} color={C.accent} />
-                  <span style={{ fontSize: 13, color: C.sec, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{ref.file.name}</span>
-                  <button onClick={() => { setRef({ kind: 'none' }); setLinkUrl(''); }} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 12 }}>Change</button>
-                </div>
-              ) : (
-                <>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <input
-                      value={linkUrl} onChange={e => setLinkUrl(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') void useLink(); }}
-                      placeholder="https://…/reference-clip.mp4"
-                      style={{ flex: 1, minWidth: 0, background: C.s3, border: `1px solid ${C.b3}`, borderRadius: 9, color: C.text,
-                        fontFamily: F, fontSize: 13, padding: '10px 12px', outline: 'none' }} />
-                    <button onClick={useLink} disabled={linkBusy || !linkUrl.trim()}
-                      style={{ padding: '0 16px', borderRadius: 9, border: 'none', background: linkUrl.trim() && !linkBusy ? C.accent : C.b3,
-                        color: '#fff', fontSize: 13, fontWeight: 600, cursor: linkUrl.trim() ? 'pointer' : 'default', fontFamily: F, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {linkBusy ? <Loader2 size={14} className="spin" /> : null} Fetch
-                    </button>
-                  </div>
-                  {linkError && <p style={{ color: '#f0a24a', fontSize: 12, margin: '8px 2px 0', lineHeight: 1.5 }}>{linkError}</p>}
-                  <p style={{ color: C.dim, fontSize: 11, margin: '8px 2px 0', lineHeight: 1.5 }}>
-                    Works with a direct video link (.mp4/.webm/…). YouTube, TikTok and Instagram page links can&apos;t be downloaded — upload those clips instead. The link is style reference, never footage Modaya copies.
-                  </p>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Optional time range — learn from just one section */}
+          {/* Optional time range — learn the style from just one section */}
           {refReady && (
             <>
-              <p style={{ color: C.dim, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '16px 0 8px' }}>Use section · optional</p>
-              <input
-                value={rangeText} onChange={e => setRangeText(e.target.value)}
-                placeholder="e.g. 00:12 – 01:04"
-                style={{ width: '100%', boxSizing: 'border-box', background: C.s2, border: `1.5px solid ${rangeValid ? C.b3 : '#ef4444'}`, borderRadius: 10,
-                  color: C.text, fontFamily: F, fontSize: 14, padding: '10px 12px', outline: 'none' }} />
-              {!rangeValid && <p style={{ color: '#ef4444', fontSize: 11, margin: '6px 2px 0' }}>Use a range like 00:12 – 01:04.</p>}
+              <p style={{ color: C.dim, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '16px 0 8px' }}>Use a section · optional</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ color: C.sec, fontSize: 13, fontWeight: 600, flexShrink: 0 }}>Use:</span>
+                <input
+                  value={rangeText} onChange={e => setRangeText(e.target.value)}
+                  placeholder="00:12 – 01:04"
+                  style={{ flex: 1, minWidth: 0, boxSizing: 'border-box', background: C.s2, border: `1.5px solid ${rangeValid ? C.b3 : '#ef4444'}`, borderRadius: 10,
+                    color: C.text, fontFamily: F, fontSize: 14, padding: '10px 12px', outline: 'none' }} />
+              </div>
+              {!rangeValid
+                ? <p style={{ color: '#ef4444', fontSize: 11, margin: '6px 2px 0' }}>Use a range like 00:12 – 01:04.</p>
+                : <p style={{ color: C.dim, fontSize: 11, margin: '6px 2px 0' }}>Only learn the style from this part of a long reference.</p>}
             </>
           )}
 
@@ -1096,9 +1126,9 @@ function DropScreen({ projectId, projectName, hasFootage, onFootage, onReference
   );
 }
 
-function LinkIcon({ size = 16, color }: { size?: number; color?: string }) {
+function LinkIcon({ size = 16, color, style }: { size?: number; color?: string; style?: React.CSSProperties }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}>
       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
     </svg>

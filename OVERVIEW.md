@@ -25,10 +25,11 @@ near-empty of technical UI:
 The **reference is style material, never footage Modaya copies** — Modaya
 measures its editing decisions (pacing, cuts, zooms, captions) and applies those
 principles to the user's own footage. Two inputs are offered in the Reference
-block: an **Upload video** tab (the file is analysed in-browser) and a **Paste
-link** tab — a server route (`POST /api/reference/fetch`) streams a public
-**direct media** link back so the creator can paste "edit my video like this"
-without downloading. Platform **watch pages** (YouTube, TikTok, Instagram,
+block: one reference card offering **[📁 Upload video]** and **[🔗 Paste video
+link]** side by side (a dropped file or the upload button is analysed
+in-browser; Paste reveals a URL field) — a server route
+(`POST /api/reference/fetch`) streams a public **direct media** link back so
+the creator can paste "edit my video like this" without downloading. Platform **watch pages** (YouTube, TikTok, Instagram,
 Vimeo, X, …) are recognised and *honestly declined* rather than scraped (their
 terms and reliability make that fragile; the user is told to upload or use a
 direct file link). The route is SSRF-hardened: http/https only, private/loopback/
