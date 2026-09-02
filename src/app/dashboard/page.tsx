@@ -363,7 +363,10 @@ function ProjectCard({ project, viewMode, onRequestDelete, onRename }: {
   );
 
   return isReady ? (
-    <Link href={`/editor/${project.id}`} style={{ textDecoration: 'none' }}>{card}</Link>
+    // Open the simple Studio experience (Lovable-for-video), not the
+    // advanced pro editor — that stays one "Advanced"/"Take full control"
+    // click away from inside the Studio.
+    <Link href={`/studio/${project.id}`} style={{ textDecoration: 'none' }}>{card}</Link>
   ) : card;
 }
 
@@ -381,14 +384,14 @@ function EmptyState({ filtered }: { filtered: boolean }) {
         {filtered ? 'No projects match that filter' : 'No projects yet'}
       </p>
       <p style={{ fontFamily: F, fontSize: 13, color: C.muted, margin: '0 0 24px' }}>
-        {filtered ? 'Try a different filter.' : 'Upload your first video to get started.'}
+        {filtered ? 'Try a different filter.' : 'Create your first video to get started.'}
       </p>
       {!filtered && (
         <Link href="/new" style={{ textDecoration: 'none' }}>
           <button style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 18px', height: 38,
             fontFamily: F, fontSize: 13, fontWeight: 600, background: C.accent, color: '#fff',
             border: 'none', borderRadius: 9, cursor: 'pointer' }}>
-            <Plus size={13}/> Start an edit
+            <Plus size={13}/> Create video
           </button>
         </Link>
       )}
@@ -451,7 +454,7 @@ export default function DashboardPage() {
             transition: 'all 150ms' }}
             onMouseEnter={e => { e.currentTarget.style.background = C.accentH; }}
             onMouseLeave={e => { e.currentTarget.style.background = C.accent; }}
-          ><Plus size={13} strokeWidth={2.5}/> New edit</button>
+          ><Plus size={13} strokeWidth={2.5}/> Create video</button>
         </Link>
       </div>
 
