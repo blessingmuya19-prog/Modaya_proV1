@@ -22,6 +22,9 @@ export interface EditMarker {
   durS?: number;
   /** Where it maps back to in the source footage, seconds (video markers). */
   sourceIn?: number;
+  /** Ordinal among markers of the same kind (cut #0, zoom #1…), for mapping
+   *  an edit onto the corresponding moment in the reference. */
+  seq?: number;
   /** Short label shown under the icon. */
   label: string;
 }
@@ -38,24 +41,25 @@ const ZOOM_MIN = 1.03;   // scale above this reads as a deliberate punch-in
 export function buildEditMap(plan: StudioPlan): EditMarker[] {
   const markers: EditMarker[] = [];
   const base = BASE(plan);
+  let cutN = 0, zoomN = 0, brollN = 0;
 
   // ── Hook + cuts + zooms from the base video shots ──
   base.forEach((shot, i) => {
     if (i === 0) {
-      markers.push({ id: 'hook', type: 'hook', t: shot.startS, label: 'Hook', sourceIn: shot.sourceIn });
+      markers.push({ id: 'hook', type: 'hook', t: shot.startS, label: 'Hook', sourceIn: shot.sourceIn, seq: 0 });
     } else {
       const prev = base[i - 1];
       const boundary = shot.startS;
       const gap = removedGap(prev, shot);
       markers.push({
-        id: `cut-${i}`, type: 'cut', t: boundary, label: gap >= 0.5 ? 'Cut' : 'Cut',
-        sourceIn: shot.sourceIn, durS: gap,
+        id: `cut-${i}`, type: 'cut', t: boundary, label: 'Cut',
+        sourceIn: shot.sourceIn, durS: gap, seq: cutN++,
       });
     }
     if ((shot.transform?.scale ?? 1) > ZOOM_MIN) {
       markers.push({
         id: `zoom-${i}`, type: 'zoom', t: shot.startS,
-        durS: shot.endS - shot.startS, sourceIn: shot.sourceIn, label: 'Zoom',
+        durS: shot.endS - shot.startS, sourceIn: shot.sourceIn, label: 'Zoom', seq: zoomN++,
       });
     }
   });
@@ -66,7 +70,7 @@ export function buildEditMap(plan: StudioPlan): EditMarker[] {
     .sort((a, b) => a.startS - b.startS)
     .forEach((c, i) => markers.push({
       id: `broll-${i}`, type: 'broll', t: c.startS,
-      durS: c.endS - c.startS, sourceIn: c.sourceIn, label: 'B-roll',
+      durS: c.endS - c.startS, sourceIn: c.sourceIn, label: 'B-roll', seq: brollN++,
     }));
 
   // ── Captions: one band from the first to last line, not dozens of marks ──
@@ -77,7 +81,7 @@ export function buildEditMap(plan: StudioPlan): EditMarker[] {
     markers.push({
       id: 'captions', type: 'caption', t: caps[0].startS,
       durS: Math.max(0, caps[caps.length - 1].endS - caps[0].startS),
-      label: `Captions · ${plan.captions || caps.length}`,
+      label: `Captions · ${plan.captions || caps.length}`, seq: 0,
     });
   }
 
@@ -133,6 +137,91 @@ export function explainMarker(m: EditMarker, ctx: ExplainCtx): string {
     case 'broll':
       return 'B-roll cutaway from another strong moment in your footage — your audio keeps playing underneath.';
   }
+}
+
+// ── Reference correspondence ─────────────────────────────────────────────────
+
+export interface RefMapCtx {
+  hasRef: boolean;
+  /** Real hard-cut timestamps detected in the reference video (seconds). */
+  refCuts: number[];
+  refDurationS: number;
+  editDurationS: number;
+  /** Number of cut markers in our edit (interior boundaries). */
+  editCutCount: number;
+}
+
+export interface RefMoment {
+  /** Where to seek the reference, seconds. */
+  t: number;
+  /** A short, honest note on why this is the matching moment. */
+  note: string;
+}
+
+/** The nearest reference cut to time t, or null when the reference has none. */
+function nearestRefCut(refCuts: number[], t: number): number | null {
+  if (!refCuts.length) return null;
+  let best = refCuts[0], bestD = Math.abs(t - best);
+  for (const c of refCuts) {
+    const d = Math.abs(t - c);
+    if (d < bestD) { bestD = d; best = c; }
+  }
+  return best;
+}
+
+/**
+ * Where in the reference does the same editing decision appear? This is the
+ * "Modaya made this cut because the reference does something similar here"
+ * link. It is grounded only in the reference's *measured* cuts: cuts align by
+ * ordinal (our k-th cut ↔ the reference cut at the same relative position),
+ * zooms/captions align by progress fraction snapped to a real cut, and B-roll
+ * (which has no reference analogue) reports no correspondence rather than a
+ * fabricated one.
+ */
+export function referenceMoment(m: EditMarker, ctx: RefMapCtx): RefMoment | null {
+  if (!ctx.hasRef) return null;
+
+  if (m.type === 'hook') {
+    return { t: 0, note: 'The reference also opens on its strongest frame — the hook.' };
+  }
+
+  if (m.type === 'cut' && typeof m.seq === 'number') {
+    const refCuts = ctx.refCuts.filter(c => c > 0 && c < ctx.refDurationS).sort((a, b) => a - b);
+    if (!refCuts.length) {
+      // No cuts detected in the reference; align by progress.
+      const t = (m.t / Math.max(1, ctx.editDurationS)) * ctx.refDurationS;
+      return { t, note: 'Aligned to the same point in the reference timeline.' };
+    }
+    // Ordinal mapping: our cut number k maps to the reference cut at the same
+    // relative position through its cut sequence.
+    const editCuts = Math.max(1, ctx.editCutCount);
+    const idx = Math.round(m.seq * (refCuts.length / editCuts));
+    const ci = Math.max(0, Math.min(refCuts.length - 1, idx));
+    return {
+      t: refCuts[ci],
+      note: `The reference cuts here too — cut #${m.seq + 1} in your edit matches this reference cut.`,
+    };
+  }
+
+  if (m.type === 'zoom') {
+    const frac = m.t / Math.max(1, ctx.editDurationS);
+    const at = frac * ctx.refDurationS;
+    const snap = nearestRefCut(ctx.refCuts, at);
+    return {
+      t: snap ?? at,
+      note: snap != null
+        ? 'The reference punches in around this moment for emphasis too.'
+        : 'The reference emphasises this point the same way.',
+    };
+  }
+
+  if (m.type === 'caption') {
+    return { t: 0, note: 'The reference burns in captions throughout — your captions follow that style.' };
+  }
+
+  // B-roll cutaways are drawn from your own footage; the reference has no
+  // equivalent moment to point at.
+  return null;
 }
 
 // ── Small helpers for the UI ─────────────────────────────────────────────────

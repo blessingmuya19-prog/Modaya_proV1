@@ -30,7 +30,7 @@ import {
   type StageState, type StageId,
 } from '@/lib/studio/pipeline';
 import { refineProfile } from '@/lib/studio/refine';
-import { buildEditMap, explainMarker, markerIcon, fmtTime, type EditMarker } from '@/lib/studio/editMap';
+import { buildEditMap, explainMarker, markerIcon, fmtTime, referenceMoment, type EditMarker, type RefMoment } from '@/lib/studio/editMap';
 import { addVersion, loadVersions, type EditVersion } from '@/lib/studio/versions';
 import type { EditorClip } from '../editor/EditorShell';
 
@@ -120,18 +120,17 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
   // ── result surface: compare / edit-map / versions / reference ──
   /** 'compare' (reference vs result) or 'iterate' (video + chat + edit map). */
   const [resultView, setResultView] = useState<'compare' | 'iterate'>('compare');
-  /** In the iterate view: which playback the user sees. */
-  const [showRef, setShowRef] = useState(false);
+  /** In the iterate view: playback mode — just the edit, just the reference,
+   *  or both side by side. */
+  const [iterView, setIterView] = useState<'mine' | 'ref' | 'side'>('mine');
   const [versions, setVersions] = useState<EditVersion[]>([]);
   const [versionOpen, setVersionOpen] = useState(false);
   const [selectedMarker, setSelectedMarker] = useState<EditMarker | null>(null);
   /** The learned reference, kept as a playable blob URL for comparison. */
   const [refUrl, setRefUrl] = useState<string | null>(null);
   const refVideoRef = useRef<HTMLVideoElement | null>(null);
-  const syncRef = useRef(false);   // lock reference playback to the result
   const refInput = useRef<HTMLInputElement>(null);
   const cancelRef = useRef(false);
-  const bootstrapped = useRef(false);
   /** Everything a regeneration needs, captured on the first run. */
   const ctxRef = useRef<{
     durationS: number; onsets: number[]; interest: number[]; transcript: TranscriptLine[];
@@ -372,6 +371,30 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
       punchInRate: ctx.baseProfile.punchInRate,
     });
   }, [selectedMarker]);
+
+  /** Where the same editing decision appears in the reference (if it exists). */
+  const refMoment = useMemo<RefMoment | null>(() => {
+    if (!selectedMarker || !ctxRef.current || !refUrl) return null;
+    const ctx = ctxRef.current;
+    const cutMarkers = editMap.filter(m => m.type === 'cut').length;
+    return referenceMoment(selectedMarker, {
+      hasRef: ctx.hasRef && !!refUrl,
+      refCuts: ctx.baseProfile.cuts ?? [],
+      refDurationS: ctx.baseProfile.durationS || 0,
+      editDurationS: totalS,
+      editCutCount: Math.max(1, cutMarkers),
+    });
+  }, [selectedMarker, editMap, totalS, refUrl]);
+
+  // Selecting an edit that has a reference moment seeks the reference player
+  // to it and flips to side-by-side so the link is obvious.
+  useEffect(() => {
+    if (!refMoment || !refUrl) return;
+    const v = refVideoRef.current;
+    if (v) { try { v.pause(); v.currentTime = refMoment.t; } catch { /* metadata not ready */ } }
+    if (iterView === 'mine') setIterView('side');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refMoment]);
 
   // Bootstrap once footage exists: if this project already has versions (the
   // user is reopening their project) rebuild the latest one straight into the
@@ -629,13 +652,13 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
         <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 360px', gap: 0, minHeight: 0 }} className="studio-iterate-grid">
           {/* Left: video + edit map */}
           <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, padding: '18px 20px', gap: 12, overflowY: 'auto' }}>
-            {/* Reference / Your edit toggle (only when a reference exists) */}
+            {/* Your edit / Reference / Side by side toggle (reference only) */}
             {refUrl && (
               <div style={{ display: 'flex', gap: 6 }}>
-                {([['mine', 'Your edit'], ['ref', 'Reference']] as const).map(([v, label]) => (
-                  <button key={v} onClick={() => setShowRef(v === 'ref')}
-                    style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${showRef === (v === 'ref') ? C.accent : C.b3}`,
-                      background: showRef === (v === 'ref') ? `${C.accent}1c` : C.s2, color: showRef === (v === 'ref') ? C.accent : C.muted,
+                {([['mine', 'Your edit'], ['ref', 'Reference'], ['side', 'Side by side']] as const).map(([v, label]) => (
+                  <button key={v} onClick={() => setIterView(v)}
+                    style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${iterView === v ? C.accent : C.b3}`,
+                      background: iterView === v ? `${C.accent}1c` : C.s2, color: iterView === v ? C.accent : C.muted,
                       fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: F }}>
                     {label}
                   </button>
@@ -643,13 +666,43 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
               </div>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              {showRef && refUrl ? (
-                <div style={{ ...previewBox(plan?.frame.ratio), background: '#000', borderRadius: 14, overflow: 'hidden', border: `1px solid ${C.b3}` }}>
-                  <video src={refUrl} controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            {iterView === 'side' && refUrl ? (
+              /* Side by side: reference left, your edit right — linked by the
+                 selected edit's reference moment. */
+              <div style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                  <SideBox highlight={!!refMoment} label="REFERENCE">
+                    <video ref={refVideoRef} src={refUrl} controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
+                  </SideBox>
+                  <span style={{ fontSize: 11, color: refMoment ? C.accent : C.dim, fontWeight: refMoment ? 700 : 400 }}>
+                    {refMoment ? `Reference ${fmtTime(refMoment.t)}` : (refName ?? 'Reference')}
+                  </span>
                 </div>
-              ) : resultVideo}
-            </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                  <SideBox highlight={!!selectedMarker} label="YOUR EDIT">
+                    {sequence && sourceUrl ? (
+                      <PreviewCanvas
+                        sequence={sequence} sourceUrl={sourceUrl} sourceId={projectId || 'main'}
+                        playing={playing} playheadS={playhead}
+                        onTime={setPlayhead} onPaused={() => setPlaying(false)}
+                        onEnded={() => { setPlaying(false); setPlayhead(0); }}
+                      />
+                    ) : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, fontSize: 12 }}>Preparing…</div>}
+                  </SideBox>
+                  <span style={{ fontSize: 11, color: selectedMarker ? C.green : C.dim, fontWeight: selectedMarker ? 700 : 400 }}>
+                    {selectedMarker ? `Your edit ${fmtTime(selectedMarker.t)}` : `Your video${match > 0 ? ` · ${match}% match` : ''}`}
+                  </span>
+                </div>
+              </div>
+            ) : iterView === 'ref' && refUrl ? (
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <div style={{ ...previewBox(plan?.frame.ratio), background: '#000', borderRadius: 14, overflow: 'hidden', border: `1px solid ${C.b3}` }}>
+                  <video ref={refVideoRef} src={refUrl} controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', justifyContent: 'center' }}>{resultVideo}</div>
+            )}
 
             {/* Time */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: C.sec, fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>
@@ -673,6 +726,11 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
               <div style={{ background: C.s2, border: `1px solid ${C.accent}55`, borderRadius: 10, padding: '10px 14px', fontSize: 13, color: C.sec, lineHeight: 1.5 }}>
                 <span style={{ color: C.accent, fontWeight: 700, marginRight: 6 }}>{fmtTime(selectedMarker.t)} · {selectedMarker.label}</span>
                 {markerExplanation}
+                {refMoment && (
+                  <span style={{ display: 'block', marginTop: 6, color: C.green, fontSize: 12.5 }}>
+                    In the reference, this happens at <b>{fmtTime(refMoment.t)}</b>{iterView !== 'side' && refUrl ? ' — showing side by side.' : ''} {refMoment.note}
+                  </span>
+                )}
               </div>
             )}
 
@@ -763,6 +821,19 @@ function CompareBox({ title, children }: { title: string; children: React.ReactN
   return (
     <div style={{ width: 'min(42vw, 300px)', aspectRatio: '9 / 16', background: '#000', borderRadius: 14, overflow: 'hidden', position: 'relative', border: `1px solid ${C.b3}`, boxShadow: '0 18px 50px rgba(0,0,0,0.6)' }}>
       <span style={{ position: 'absolute', top: 8, left: 8, zIndex: 2, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: '#fff', background: 'rgba(0,0,0,0.55)', padding: '3px 8px', borderRadius: 6 }}>{title}</span>
+      {children}
+    </div>
+  );
+}
+
+/* ─────────── side-by-side box (iterate view) ─────────── */
+function SideBox({ label, highlight, children }: { label: string; highlight: boolean; children: React.ReactNode }) {
+  return (
+    <div style={{ width: 'min(38vw, 240px)', aspectRatio: '9 / 16', background: '#000', borderRadius: 12, overflow: 'hidden',
+      position: 'relative', border: `2px solid ${highlight ? C.accent : C.b3}`,
+      boxShadow: highlight ? `0 0 0 3px ${C.accent}33` : 'none', transition: 'border 160ms' }}>
+      <span style={{ position: 'absolute', top: 7, left: 7, zIndex: 3, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
+        color: '#fff', background: 'rgba(0,0,0,0.55)', padding: '3px 7px', borderRadius: 6 }}>{label}</span>
       {children}
     </div>
   );

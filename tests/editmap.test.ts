@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildEditMap, explainMarker, markerIcon, fmtTime } from '../src/lib/studio/editMap';
+import { buildEditMap, explainMarker, markerIcon, fmtTime, referenceMoment, type RefMapCtx } from '../src/lib/studio/editMap';
 import type { StudioPlan, PlannedShot } from '../src/lib/studio/editPlan';
 import { shortLabel } from '../src/lib/studio/versions';
 
@@ -117,6 +117,45 @@ describe('explainMarker', () => {
   it('explains b-roll keeps the talk track', () => {
     expect(explainMarker({ id: 'x', type: 'broll', t: 3, label: 'B-roll' }, { hasRef: false }))
       .toContain('audio keeps playing');
+  });
+});
+
+describe('reference correspondence', () => {
+  const ctx: RefMapCtx = {
+    hasRef: true, refCuts: [10, 20, 30, 40], refDurationS: 45,
+    editDurationS: 30, editCutCount: 3,
+  };
+
+  it('returns null without a reference', () => {
+    expect(referenceMoment({ id: 'x', type: 'cut', t: 4, seq: 0, label: 'Cut' }, { ...ctx, hasRef: false })).toBeNull();
+  });
+
+  it('maps the hook to the reference start', () => {
+    expect(referenceMoment({ id: 'h', type: 'hook', t: 0, seq: 0, label: 'Hook' }, ctx)?.t).toBe(0);
+  });
+
+  it('aligns cuts by relative ordinal through the reference cut sequence', () => {
+    // 3 edit cuts across 4 ref cuts: cut #0 -> ref cut index round(0*4/3)=0 → 10
+    const m0 = referenceMoment({ id: 'c0', type: 'cut', t: 5, seq: 0, label: 'Cut' }, ctx);
+    const m2 = referenceMoment({ id: 'c2', type: 'cut', t: 25, seq: 2, label: 'Cut' }, ctx);
+    expect(m0?.t).toBe(10);
+    expect(m2?.t).toBe(40);   // round(2*4/3)=round(2.67)=3 → refCuts[3]=40
+  });
+
+  it('snaps zooms to the nearest real reference cut', () => {
+    // t=21 of 30 → frac .7 → ref at 31.5 → nearest cut 30
+    const m = referenceMoment({ id: 'z', type: 'zoom', t: 21, seq: 0, label: 'Zoom' }, ctx);
+    expect(m?.t).toBe(30);
+  });
+
+  it('gives b-roll no fabricated reference moment', () => {
+    expect(referenceMoment({ id: 'b', type: 'broll', t: 8, seq: 0, label: 'B-roll' }, ctx)).toBeNull();
+  });
+
+  it('falls back to progress alignment when the reference has no detected cuts', () => {
+    const noCuts = { ...ctx, refCuts: [] };
+    const m = referenceMoment({ id: 'c', type: 'cut', t: 15, seq: 0, label: 'Cut' }, noCuts);
+    expect(m?.t).toBeCloseTo(22.5, 1); // 15/30 * 45
   });
 });
 

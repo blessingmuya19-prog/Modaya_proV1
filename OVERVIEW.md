@@ -31,8 +31,13 @@ expected to touch. After the stages complete the result lands in two surfaces:
   the programme time axis. It is **visual and inspectable, not manually
   editable**: clicking any edit explains the decision in grounded terms ("Cut
   here and removed 1.4s of dead air to match the reference's pace of about 28
-  cuts a minute"). Right: the Modaya conversation — you tell it what to change.
-  A **Your edit / Reference** toggle swaps the playback.
+  cuts a minute") and, when a reference exists, **links to the matching moment
+  in the reference video** — the editor flips to **Side by side**, seeks the
+  reference player to the corresponding cut (our k-th cut ↔ the reference cut at
+  the same relative position, derived only from the reference's measured cut
+  timestamps), and says why they correspond. Right: the Modaya conversation —
+  you tell it what to change. A **Your edit / Reference / Side by side** toggle
+  switches the playback.
 
 Every regeneration or refinement is saved as a numbered **Version** (its
 deterministic recipe, so it rebuilds byte-identically on any device). The
@@ -256,7 +261,7 @@ branch deploys), then **redeploy** — variables are read at build time.
 | `src/lib/studio/editPlan.ts` | The EditPlan brain: hook-first moment selection, 9:16/16:9 format, real captions, punch-ins, B-roll cutaways |
 | `src/lib/studio/refine.ts` | Maps "make it faster / more punch-ins / more captions" onto the StyleProfile and regenerates the plan |
 | `src/lib/studio/pipeline.ts` | Pure Studio spine: ordered stages, progress, grounded reference-match score |
-| `src/lib/studio/editMap.ts` | **Edit Map**: turns a plan into transparent Hook/Cut/Zoom/Caption/B-roll markers, each with a grounded Modaya explanation |
+| `src/lib/studio/editMap.ts` | **Edit Map**: turns a plan into transparent Hook/Cut/Zoom/Caption/B-roll markers, each with a grounded Modaya explanation, plus `referenceMoment()` that maps an edit onto the matching cut in the reference video |
 | `src/lib/studio/versions.ts` | Edit versions — every cut is saved by its deterministic recipe (profile+seed); nothing is overwritten and the project never resets |
 | `src/lib/db.ts` / `mediaDb.ts` | Server project records / browser IndexedDB media |
 | `src/lib/server/mediaStore.ts` | Durable object store: S3/R2 (SigV4), local fs, in-memory; signed media URLs |
