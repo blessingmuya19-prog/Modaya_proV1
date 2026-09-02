@@ -41,7 +41,7 @@ const C = {
   b: '#111', b2: '#161616', b3: '#1d1d1d',
   accent: '#4F8CFF', accentH: '#6EA3FF',
   text: '#F5F7FA', sec: '#A5ADBA', muted: '#737D8D', dim: '#4D5664',
-  green: '#34D399',
+  green: '#34D399', gold: '#F5C451',
 };
 
 type Phase = 'drop' | 'working' | 'result';
@@ -107,9 +107,12 @@ function clipToEditor(c: { id: string; trackId?: string; label: string; startS: 
   };
 }
 
-export default function Studio({ projectId, projectName, mode = 'edit' }: {
+export default function Studio({ projectId, projectName, mode: initialMode = 'edit' }: {
   projectId: string; projectName: string; mode?: 'edit' | 'reference';
 }) {
+  // The door (/new) suggests a mode, but the user can switch modes right here
+  // in the app before creating the edit.
+  const [mode, setMode] = useState<'edit' | 'reference'>(initialMode);
   const [media, setMediaState] = useState<MediaEntry | null>(() => (projectId ? getMedia(projectId) : null));
   const setMediaEntry = useCallback((e: MediaEntry | null) => {
     if (projectId && e) setMedia(projectId, e);
@@ -609,7 +612,7 @@ export default function Studio({ projectId, projectName, mode = 'edit' }: {
   if (phase === 'drop') {
     return (
       <DropScreen
-        projectId={projectId} projectName={projectName} mode={mode}
+        projectId={projectId} projectName={projectName} mode={mode} onModeChange={setMode}
         hasFootage={!!media}
         onFootage={uploadFootage}
         onReference={(ref, range, note) => { initialNoteRef.current = note; void run({ ref, range }); }}
@@ -982,8 +985,9 @@ type RefState =
   | { kind: 'file'; file: File }
   | { kind: 'link'; url: string; file: File };
 
-function DropScreen({ projectId, projectName, mode, hasFootage, onFootage, onReference, onStart, refInputRef, error }: {
-  projectId: string; projectName: string; mode: 'edit' | 'reference'; hasFootage: boolean;
+function DropScreen({ projectId, projectName, mode, onModeChange, hasFootage, onFootage, onReference, onStart, refInputRef, error }: {
+  projectId: string; projectName: string; mode: 'edit' | 'reference'; onModeChange: (m: 'edit' | 'reference') => void;
+  hasFootage: boolean;
   onFootage: (f: File) => void;
   onReference: (ref: File | null, range: { startS: number; endS: number } | null, note: string) => void;
   onStart: (note: string) => void;
@@ -995,6 +999,15 @@ function DropScreen({ projectId, projectName, mode, hasFootage, onFootage, onRef
   /** In plain Edit mode the optional reference block starts collapsed. */
   const [refOpen, setRefOpen] = useState<boolean>(mode === 'reference');
   const [ref, setRef] = useState<RefState>({ kind: 'none' });
+
+  /** Switching mode inside the app also opens/closes the reference block. */
+  const switchMode = (m: 'edit' | 'reference') => {
+    if (m === mode) return;
+    onModeChange(m);
+    setShowLink(false);
+    if (m === 'reference') setRefOpen(true);
+    else if (ref.kind === 'none') setRefOpen(false);
+  };
   const [linkUrl, setLinkUrl] = useState('');
   const [linkBusy, setLinkBusy] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
@@ -1045,20 +1058,20 @@ function DropScreen({ projectId, projectName, mode, hasFootage, onFootage, onRef
 
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
         <div style={{ width: 'min(92vw, 560px)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-            {mode === 'reference' ? (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
-                textTransform: 'uppercase', color: C.accent, background: `${C.accent}14`, border: `1px solid ${C.accent}44`,
-                borderRadius: 999, padding: '4px 11px' }}>
-                <Sparkles size={12} /> Reference edit
-              </span>
-            ) : (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
-                textTransform: 'uppercase', color: C.muted, background: C.s3, border: `1px solid ${C.b3}`,
-                borderRadius: 999, padding: '4px 11px' }}>
-                <Wand2 size={12} /> Edit
-              </span>
-            )}
+          {/* In-app mode switcher — the two doors, available right here. */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 22 }}>
+            <ModePill
+              active={mode === 'edit'} hero={false}
+              icon={<Film size={15} />} title="Edit"
+              hint="Footage + instructions"
+              onClick={() => switchMode('edit')}
+            />
+            <ModePill
+              active={mode === 'reference'} hero
+              icon={<Sparkles size={15} />} title="Reference edit"
+              hint="Match a video's style"
+              onClick={() => switchMode('reference')}
+            />
           </div>
           <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.03em', margin: '0 0 6px' }}>
             {mode === 'reference' ? 'Edit your footage like a video you love' : 'What are we editing today?'}
@@ -1244,6 +1257,44 @@ function DropScreen({ projectId, projectName, mode, hasFootage, onFootage, onRef
         </div>
       </div>
     </div>
+  );
+}
+
+/** One option in the in-app Edit / Reference Edit switcher. */
+function ModePill({ active, hero, icon, title, hint, onClick }: {
+  active: boolean; hero: boolean; icon: React.ReactNode; title: string; hint: string; onClick: () => void;
+}) {
+  // Reference is the hero (accent glow); Edit uses a neutral active state.
+  const edge = active ? (hero ? C.accent : C.muted) : C.b3;
+  const fg = active ? (hero ? C.accent : C.text) : C.muted;
+  return (
+    <button onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 11, textAlign: 'left',
+        padding: '12px 14px', borderRadius: 12, cursor: 'pointer', fontFamily: F,
+        border: `1.5px solid ${edge}`,
+        background: active
+          ? (hero ? `linear-gradient(135deg, ${C.accent}1c, ${C.s2})` : C.s3)
+          : C.s2,
+        boxShadow: active && hero ? `0 6px 22px ${C.accent}22` : 'none',
+        color: C.text, transition: 'all 140ms',
+      }}>
+      <span style={{
+        width: 34, height: 34, borderRadius: 9, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: active ? (hero ? `${C.accent}22` : C.b3) : C.s3,
+        border: `1px solid ${active ? (hero ? `${C.accent}55` : C.b3) : C.b3}`,
+        color: fg,
+      }}>{icon}</span>
+      <span style={{ minWidth: 0 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em' }}>
+          {title}
+          {hero && <span style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase',
+            color: '#1a1405', background: C.gold ?? '#F5C451', borderRadius: 999, padding: '2px 6px' }}>Hero</span>}
+        </span>
+        <span style={{ display: 'block', fontSize: 11.5, color: active ? C.sec : C.dim, marginTop: 1 }}>{hint}</span>
+      </span>
+    </button>
   );
 }
 
