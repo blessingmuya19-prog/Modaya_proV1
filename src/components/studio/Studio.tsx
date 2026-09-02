@@ -46,6 +46,55 @@ const C = {
 
 type Phase = 'drop' | 'working' | 'result';
 
+/** The footage bytes Modaya analyses, plus enough metadata to run. */
+interface FootageSource {
+  blob: Blob;
+  filename: string;
+  durationS: number;
+  mimeType: string;
+}
+
+/**
+ * Resolve the project's footage bytes from the best available source:
+ *   1. the persistent store (IndexedDB hot path, then the durable cloud), and
+ *   2. this session's in-memory entry — it holds a `blob:` object URL from
+ *      which the bytes can be fetched even when the file was too big for
+ *      IndexedDB (600 MB cap / quota / private mode) on a host with no
+ *      durable cloud. The footage is genuinely uploaded (it plays), so we use
+ *      it rather than wrongly telling the user to re-upload.
+ * Returns null only when there is truly no footage anywhere.
+ */
+async function resolveFootage(projectId: string, entry: MediaEntry | null): Promise<FootageSource | null> {
+  const stored = await getProjectMedia(projectId).catch(() => null);
+  if (stored?.blob && stored.blob.size > 0) {
+    return {
+      blob: stored.blob,
+      filename: stored.filename || entry?.filename || 'footage.mp4',
+      durationS: stored.durationS || entry?.durationS || 0,
+      mimeType: stored.mimeType || entry?.mimeType || 'video/mp4',
+    };
+  }
+
+  const url = entry?.objectUrl;
+  if (url && url.startsWith('blob:')) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        const blob = await res.blob();
+        if (blob && blob.size > 0) {
+          return {
+            blob,
+            filename: entry?.filename || 'footage.mp4',
+            durationS: entry?.durationS || 0,
+            mimeType: entry?.mimeType || blob.type || 'video/mp4',
+          };
+        }
+      }
+    } catch { /* object URL gone — fall through */ }
+  }
+  return null;
+}
+
 function clipToEditor(c: { id: string; trackId?: string; label: string; startS: number; endS: number; type?: string; textPosition?: string; textAlign?: string }): EditorClip {
   return {
     id: c.id,
@@ -252,10 +301,10 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
     lastRefRef.current = { file: refFile, range };
     if (!projectId) return;
     setError(null);
-    const stored = await getProjectMedia(projectId);
     const entry = getMedia(projectId);
-    const blob = stored?.blob;
-    if (!blob) { setError('Upload your footage first.'); return; }
+    const footage = await resolveFootage(projectId, entry);
+    if (!footage) { setError('Upload your footage first.'); setPhase('drop'); return; }
+    const blob = footage.blob;
 
     const withRef = !!refFile;
     cancelRef.current = false;
@@ -309,7 +358,7 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
         });
       }
 
-      const durationS = stored.durationS || entry?.durationS || 60;
+      const durationS = footage.durationS || entry?.durationS || 60;
       const interest = interestCurve(env, durationS);
       const baseProfile: StyleProfile = profile ?? defaultPunchyProfile(durationS);
 
@@ -332,7 +381,7 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
         onsets: env?.onsets ?? [], interest, transcript,
         baseProfile, hasRef: withRef && !!profile,
         captionsWanted: baseProfile.captions.present,
-        sourceName: stored.filename || entry?.filename,
+        sourceName: footage.filename || entry?.filename,
       };
       profileRef.current = baseProfile;
       seedRef.current = 1;
@@ -426,18 +475,17 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
       if (existing.length) {
         // Rebuild context from the latest version's recipe.
         const last = existing[existing.length - 1];
-        const stored = await getProjectMedia(projectId);
-        const blob = stored?.blob;
-        if (!blob) { void run(); return; }
+        const footage = await resolveFootage(projectId, media);
+        if (!footage) { void run(); return; }
         let env: Awaited<ReturnType<typeof analyseAudio>> = null;
-        try { env = await analyseAudio(blob); } catch { /* silent */ }
-        const durationS = stored.durationS || media.durationS || 60;
+        try { env = await analyseAudio(footage.blob); } catch { /* silent */ }
+        const durationS = footage.durationS || media.durationS || 60;
         const interest = interestCurve(env, durationS);
         ctxRef.current = {
           durationS, onsets: env?.onsets ?? [], interest, transcript: [],
           baseProfile: last.recipe.profile, hasRef: last.recipe.hasRef,
           captionsWanted: last.recipe.profile.captions.present,
-          sourceName: stored.filename || media.filename,
+          sourceName: footage.filename || media.filename,
         };
         profileRef.current = last.recipe.profile;
         seedRef.current = last.recipe.seed;
