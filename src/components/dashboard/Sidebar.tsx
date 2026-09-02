@@ -5,6 +5,7 @@ import { FolderOpen, Clock, Settings, Plus, BarChart2, LogOut } from 'lucide-rea
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth, apiLogout } from '@/lib/useAuth';
+import { TC, FONT } from '../ui/theme';
 
 const navItems = [
   { label: 'All projects', href: '/dashboard',         icon: FolderOpen },
@@ -30,37 +31,37 @@ export function Sidebar() {
   return (
     <aside className="dashboard-sidebar" style={{
       width: 228, flexShrink: 0,
-      background: '#070707',
-      borderRight: '1px solid #141414',
+      background: TC.surface,
+      borderRight: `1px solid ${TC.border}`,
       display: 'flex', flexDirection: 'column',
       height: '100vh',
     }}>
       {/* Logo */}
-      <div style={{ padding: '18px 20px 16px', borderBottom: '1px solid #111' }}>
+      <div style={{ padding: '18px 20px 16px', borderBottom: `1px solid ${TC.border}` }}>
         <Logo size={26} />
       </div>
 
-      {/* New video CTA */}
+      {/* Create video CTA */}
       <div style={{ padding: '14px 12px 10px' }}>
-        <Link href="/upload" style={{ textDecoration: 'none' }}>
+        <Link href="/new" style={{ textDecoration: 'none' }}>
           <button style={{
             width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-            padding: '10px', fontSize: 13, fontWeight: 600, letterSpacing: '-0.01em', fontFamily: "'Inter Tight',sans-serif",
-            background: '#4F8CFF', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer',
-            boxShadow: '0 2px 12px rgba(79,140,255,0.25)',
+            padding: '11px', fontSize: 13.5, fontWeight: 700, letterSpacing: '-0.01em', fontFamily: FONT,
+            background: 'linear-gradient(135deg,#4F8CFF,#6E5BFF)', color: '#fff', border: 'none', borderRadius: 999, cursor: 'pointer',
+            boxShadow: '0 8px 22px rgba(90,110,255,0.40)',
             transition: 'all 150ms ease',
           }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#6EA3FF'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#4F8CFF'; e.currentTarget.style.transform = ''; }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.filter = 'brightness(1.05)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.filter = ''; }}
           >
-            <Plus size={14} strokeWidth={2.5} /><span className="sidebar-cta-text"> New video</span>
+            <Plus size={15} strokeWidth={2.7} /><span className="sidebar-cta-text"> Create video</span>
           </button>
         </Link>
       </div>
 
       {/* Nav */}
       <nav style={{ flex: 1, padding: '4px 8px', overflowY: 'auto' }}>
-        <p style={{ fontSize: 10, fontWeight: 700, color: '#4D5664', letterSpacing: '0.04em', textTransform: 'uppercase', padding: '8px 12px 6px', margin: 0 }}>Workspace</p>
+        <p style={{ fontSize: 10, fontWeight: 700, color: TC.dim, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '8px 12px 6px', margin: 0, fontFamily: FONT }}>Workspace</p>
         {navItems.map(item => {
           const Icon = item.icon;
           const active = pathname === item.href;
@@ -68,19 +69,19 @@ export function Sidebar() {
             <Link key={item.href} href={item.href} style={{ textDecoration: 'none' }}>
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 10,
-                padding: '9px 12px', borderRadius: 8, marginBottom: 1,
-                background: active ? '#111' : 'transparent',
-                border: `1px solid ${active ? '#1e1e1e' : 'transparent'}`,
-                color: active ? '#FFFFFF' : '#737D8D',
-                cursor: 'pointer', fontSize: 13, fontWeight: 500, letterSpacing: '-0.01em', fontFamily: "'Inter Tight',sans-serif",
+                padding: '9px 12px', borderRadius: 10, marginBottom: 2,
+                background: active ? TC.surface3 : 'transparent',
+                border: `1px solid ${active ? TC.border2 : 'transparent'}`,
+                color: active ? TC.text : TC.sec,
+                cursor: 'pointer', fontSize: 13, fontWeight: active ? 600 : 500, letterSpacing: '-0.01em', fontFamily: FONT,
                 transition: 'all 120ms ease',
               }}
-                onMouseEnter={e => { if (!active) { e.currentTarget.style.color = '#A1A1A1'; e.currentTarget.style.background = '#0e0e0e'; } }}
-                onMouseLeave={e => { if (!active) { e.currentTarget.style.color = '#737D8D'; e.currentTarget.style.background = 'transparent'; } }}
+                onMouseEnter={e => { if (!active) { e.currentTarget.style.color = TC.text; e.currentTarget.style.background = TC.surface2; } }}
+                onMouseLeave={e => { if (!active) { e.currentTarget.style.color = TC.sec; e.currentTarget.style.background = 'transparent'; } }}
               >
-                <Icon size={14} style={{ color: active ? '#4F8CFF' : '#737D8D', flexShrink: 0 }} />
+                <Icon size={15} style={{ color: active ? TC.accent : TC.muted, flexShrink: 0 }} />
                 <span className="sidebar-label">{item.label}</span>
-                {active && <div className="sidebar-label" style={{ marginLeft: 'auto', width: 5, height: 5, borderRadius: '50%', background: '#4F8CFF' }} />}
+                {active && <div className="sidebar-label" style={{ marginLeft: 'auto', width: 5, height: 5, borderRadius: '50%', background: TC.accent }} />}
               </div>
             </Link>
           );
@@ -88,14 +89,14 @@ export function Sidebar() {
       </nav>
 
       {/* Storage */}
-      <div className="sidebar-storage" style={{ padding: '12px 16px', borderTop: '1px solid #111' }}>
+      <div className="sidebar-storage" style={{ padding: '12px 16px', borderTop: `1px solid ${TC.border}` }}>
         <div style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '-0.01em', fontFamily: "'Inter Tight',sans-serif", color: '#737D8D' }}>Storage</span>
-            <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '-0.01em', fontFamily: "'Inter Tight',sans-serif", color: '#737D8D' }}>{STORAGE_USED}% used</span>
+            <span style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '-0.01em', fontFamily: FONT, color: TC.muted }}>Storage</span>
+            <span style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '-0.01em', fontFamily: FONT, color: TC.muted }}>{STORAGE_USED}% used</span>
           </div>
-          <div style={{ height: 3, background: '#141414', borderRadius: 9999 }}>
-            <div style={{ height: '100%', width: `${STORAGE_USED}%`, background: '#4F8CFF', borderRadius: 9999, opacity: 0.7 }} />
+          <div style={{ height: 5, background: TC.surface3, borderRadius: 9999 }}>
+            <div style={{ height: '100%', width: `${STORAGE_USED}%`, background: 'linear-gradient(90deg,#4F8CFF,#6E5BFF)', borderRadius: 9999 }} />
           </div>
         </div>
 
@@ -103,46 +104,46 @@ export function Sidebar() {
         <Link href="/dashboard/settings" style={{ textDecoration: 'none' }}>
           <div style={{
             display: 'flex', alignItems: 'center', gap: 10,
-            padding: '8px 10px', borderRadius: 8, marginBottom: 2,
-            color: '#A5ADBA', cursor: 'pointer', fontSize: 13, fontWeight: 500, letterSpacing: '-0.01em', fontFamily: "'Inter Tight',sans-serif", transition: 'all 120ms ease',
+            padding: '8px 10px', borderRadius: 10, marginBottom: 4,
+            color: TC.sec, cursor: 'pointer', fontSize: 13, fontWeight: 500, letterSpacing: '-0.01em', fontFamily: FONT, transition: 'all 120ms ease',
           }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#0e0e0e'; e.currentTarget.style.color = '#A1A1A1'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#444'; }}
+            onMouseEnter={e => { e.currentTarget.style.background = TC.surface2; e.currentTarget.style.color = TC.text; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = TC.sec; }}
           >
-            <Settings size={13} style={{ color: '#4D5664' }} /><span className="sidebar-label"> Settings</span>
+            <Settings size={14} style={{ color: TC.muted }} /><span className="sidebar-label"> Settings</span>
           </div>
         </Link>
 
         {/* User card */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8,
-          padding: '10px', borderRadius: 10, background: '#0a0a0a', border: '1px solid #111' }}>
+          padding: '10px', borderRadius: 12, background: TC.surface2, border: `1px solid ${TC.border}` }}>
           {/* Avatar */}
           <div style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
-            background: 'rgba(79,140,255,0.12)', border: '1px solid rgba(79,140,255,0.25)',
+            background: 'rgba(59,111,246,0.12)', border: '1px solid rgba(59,111,246,0.25)',
             display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontSize: 11, color: '#4F8CFF', fontWeight: 600,
-              fontFamily: "'Inter Tight', sans-serif" }}>{initials}</span>
+            <span style={{ fontSize: 11, color: TC.accent, fontWeight: 700,
+              fontFamily: FONT }}>{initials}</span>
           </div>
           {/* Name + plan */}
           <div className="sidebar-label" style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: 13, fontWeight: 500, letterSpacing: '-0.01em',
-              fontFamily: "'Inter Tight', sans-serif", color: '#F5F7FA',
+            <p style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.01em',
+              fontFamily: FONT, color: TC.text,
               margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {user?.name ?? '…'}
             </p>
             <p style={{ fontSize: 10, fontWeight: 500, letterSpacing: '-0.01em',
-              fontFamily: "'Inter Tight', sans-serif", color: '#737D8D', margin: 0, textTransform: 'capitalize' }}>
+              fontFamily: FONT, color: TC.muted, margin: 0, textTransform: 'capitalize' }}>
               {user?.plan ?? 'starter'} plan
             </p>
           </div>
           {/* Logout */}
           <button onClick={handleLogout} title="Sign out"
             className="sidebar-label"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#4D5664',
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: TC.muted,
               display: 'flex', alignItems: 'center', padding: 2, borderRadius: 5, transition: 'color 120ms', flexShrink: 0 }}
-            onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; }}
-            onMouseLeave={e => { e.currentTarget.style.color = '#4D5664'; }}
-          ><LogOut size={12}/></button>
+            onMouseEnter={e => { e.currentTarget.style.color = TC.danger; }}
+            onMouseLeave={e => { e.currentTarget.style.color = TC.muted; }}
+          ><LogOut size={13}/></button>
         </div>
       </div>
     </aside>

@@ -3,29 +3,18 @@
  * /new — the "What do you want to create?" mode picker.
  *
  * Two doors into the SAME Studio experience:
- *   • Edit           — the general AI editor: footage + instructions, no
- *                      reference required.
+ *   • Edit           — the general AI editor: footage + instructions.
  *   • Reference Edit — the hero: footage + a reference (upload or link) whose
  *                      editing DNA Modaya recreates on the user's footage.
  *
- * Both create a fresh project and route to /studio/[id]?mode=… which simply
- * focuses the drop screen; the editor, engine and every later surface is
- * identical.
+ * Both create a fresh project and route to /studio/[id]?mode=… which focuses
+ * the drop screen; the editor itself is identical.
  */
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Film, Sparkles, Link2, Upload, ArrowRight, Loader2, Wand2, Scissors, Captions } from 'lucide-react';
-import { LogoMark } from '@/components/ui/Logo';
-
-const F = "'Inter Tight', Inter, system-ui, sans-serif";
-const C = {
-  bg: '#050505', s2: '#0a0a0a', s3: '#0e0e0e',
-  b: '#111', b3: '#1d1d1d',
-  accent: '#4F8CFF', accentH: '#6EA3FF',
-  text: '#F5F7FA', sec: '#A5ADBA', muted: '#737D8D', dim: '#4D5664',
-  gold: '#F5C451',
-};
+import { ArrowLeft, Film, Sparkles, Link2, Upload, ArrowRight, Loader2, Wand2, Scissors, Captions, Zap } from 'lucide-react';
+import { TC, FONT, GLOW_GRADIENT, GlowButton } from '@/components/ui/theme';
 
 type Mode = 'edit' | 'reference';
 
@@ -60,116 +49,57 @@ export default function NewProjectPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: C.bg, color: C.text, fontFamily: F, display: 'flex', flexDirection: 'column' }}>
-      <header style={{ height: 54, display: 'flex', alignItems: 'center', gap: 12, padding: '0 18px', borderBottom: `1px solid ${C.b}` }}>
-        <Link href="/dashboard" style={{ color: C.muted, display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none', fontSize: 13 }}>
+    <div style={{ minHeight: '100vh', background: TC.bg, color: TC.text, fontFamily: FONT, display: 'flex', flexDirection: 'column',
+      backgroundImage: `radial-gradient(circle at 20% 0%, rgba(79,140,255,0.10), transparent 45%), radial-gradient(circle at 85% 15%, rgba(110,91,255,0.10), transparent 45%)` }}>
+      <header style={{ height: 58, display: 'flex', alignItems: 'center', gap: 12, padding: '0 22px', borderBottom: `1px solid ${TC.border}`, background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(8px)' }}>
+        <Link href="/dashboard" style={{ color: TC.muted, display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none', fontSize: 13.5, fontWeight: 600 }}>
           <ArrowLeft size={15} /> Projects
         </Link>
-        <div style={{ marginLeft: 'auto' }}><LogoMark size={24} /></div>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: 17, letterSpacing: '-0.02em' }}>
+          <span style={{ width: 26, height: 26, borderRadius: 8, background: GLOW_GRADIENT, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}><Wand2 size={14} /></span>
+          Modaya
+        </div>
       </header>
 
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '28px 20px' }}>
-        <div style={{ width: 'min(94vw, 880px)' }}>
-          <div style={{ textAlign: 'center', marginBottom: 34 }}>
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
-              <span style={{ width: 52, height: 52, borderRadius: 15, background: `linear-gradient(135deg, ${C.accent}, ${C.accentH})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 8px 28px ${C.accent}44` }}>
-                <Wand2 size={24} color="#fff" />
-              </span>
-            </div>
-            <h1 style={{ fontSize: 'clamp(24px, 3.4vw, 34px)', fontWeight: 700, letterSpacing: '-0.03em', margin: '0 0 8px' }}>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 20px' }}>
+        <div style={{ width: 'min(94vw, 900px)' }}>
+          <div style={{ textAlign: 'center', marginBottom: 36 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em',
+              textTransform: 'uppercase', color: TC.accent, background: 'rgba(59,111,246,0.10)', border: `1px solid rgba(59,111,246,0.25)`,
+              borderRadius: 999, padding: '5px 13px', marginBottom: 16 }}>
+              <Sparkles size={12} /> AI video editor
+            </span>
+            <h1 style={{ fontSize: 'clamp(26px,3.6vw,38px)', fontWeight: 800, letterSpacing: '-0.035em', margin: '0 0 10px', color: TC.text }}>
               What do you want to create?
             </h1>
-            <p style={{ color: C.muted, fontSize: 15, margin: 0 }}>
-              Your AI video editor. Choose a starting point — you can always add a reference or change direction inside the editor.
+            <p style={{ color: TC.muted, fontSize: 15.5, margin: 0, maxWidth: 560, marginInline: 'auto', lineHeight: 1.55 }}>
+              Drop your footage and let Modaya do the editing. Start from a style you love, or just tell it what you want.
             </p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }} className="mode-grid">
-            {/* ── Reference Edit — the hero card ── */}
-            <button
-              onClick={() => start('reference')}
-              disabled={!!busy}
-              className="mode-card mode-card-hero"
-              style={{
-                position: 'relative', textAlign: 'left', cursor: busy ? 'default' : 'pointer',
-                background: `linear-gradient(180deg, ${C.accent}14, ${C.s2} 62%)`,
-                border: `1.5px solid ${C.accent}66`, borderRadius: 18, padding: '26px 24px 22px',
-                color: C.text, fontFamily: F, overflow: 'hidden',
-                boxShadow: `0 18px 60px rgba(0,0,0,0.55), 0 0 0 1px ${C.accent}22 inset`,
-                display: 'flex', flexDirection: 'column', minHeight: 320,
-              }}>
-              {/* "Hero" ribbon */}
-              <span style={{ position: 'absolute', top: 14, right: -34, transform: 'rotate(38deg)',
-                background: C.gold, color: '#1a1405', fontSize: 10, fontWeight: 800, letterSpacing: '0.08em',
-                padding: '3px 40px', textTransform: 'uppercase', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>
-                Most popular
-              </span>
-
-              <span style={{ width: 50, height: 50, borderRadius: 13, background: `${C.accent}22`, border: `1px solid ${C.accent}55`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent, marginBottom: 18 }}>
-                <Sparkles size={23} />
-              </span>
-              <span style={{ fontSize: 21, fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 8 }}>Reference Edit</span>
-              <span style={{ fontSize: 13.5, color: C.sec, lineHeight: 1.55, marginBottom: 16 }}>
-                Give Modaya a reference — a video you love or a link — and it recreates the
-                <b style={{ color: C.text }}> editing style, pacing, transitions and captions</b> on your own footage.
-                “Edit my video like this.”
-              </span>
-
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 18 }}>
-                <Chip icon={<Upload size={11} />} label="Upload reference" />
-                <Chip icon={<Link2 size={11} />} label="Paste link" />
-                <Chip icon={<Film size={11} />} label="Use a section" />
-              </div>
-
-              <span style={{ marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8,
-                background: `linear-gradient(135deg, ${C.accent}, ${C.accentH})`, color: '#fff',
-                fontSize: 14, fontWeight: 600, borderRadius: 11, padding: '12px 18px', alignSelf: 'flex-start',
-                boxShadow: `0 6px 22px ${C.accent}44` }}>
-                {busy === 'reference' ? <Loader2 size={15} className="spin" /> : null}
-                Start reference edit <ArrowRight size={15} />
-              </span>
-            </button>
-
-            {/* ── Edit — general AI editor ── */}
-            <button
-              onClick={() => start('edit')}
-              disabled={!!busy}
-              className="mode-card"
-              style={{
-                textAlign: 'left', cursor: busy ? 'default' : 'pointer',
-                background: C.s2, border: `1.5px solid ${C.b3}`, borderRadius: 18, padding: '26px 24px 22px',
-                color: C.text, fontFamily: F, display: 'flex', flexDirection: 'column', minHeight: 320,
-              }}>
-              <span style={{ width: 50, height: 50, borderRadius: 13, background: C.s3, border: `1px solid ${C.b3}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, marginBottom: 18 }}>
-                <Film size={22} />
-              </span>
-              <span style={{ fontSize: 21, fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 8 }}>Edit</span>
-              <span style={{ fontSize: 13.5, color: C.sec, lineHeight: 1.55, marginBottom: 16 }}>
-                Tell Modaya how you want your video edited and it does the work —
-                cut the dead air, tighten pacing, add captions, set the mood. No reference needed.
-              </span>
-
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 18 }}>
-                <Chip icon={<Scissors size={11} />} label="Trim & tighten" muted />
-                <Chip icon={<Captions size={11} />} label="Auto captions" muted />
-                <Chip icon={<Wand2 size={11} />} label="Any vibe" muted />
-              </div>
-
-              <span style={{ marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8,
-                background: C.s3, color: C.sec, border: `1px solid ${C.b3}`,
-                fontSize: 14, fontWeight: 600, borderRadius: 11, padding: '12px 18px', alignSelf: 'flex-start' }}>
-                {busy === 'edit' ? <Loader2 size={15} className="spin" /> : null}
-                Start editing <ArrowRight size={15} />
-              </span>
-            </button>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }} className="mode-grid">
+            {/* ── Reference Edit — the hero ── */}
+            <ModeCard hero onClick={() => start('reference')} busy={busy === 'reference'} disabled={!!busy}
+              icon={<Sparkles size={26} />}
+              title="Reference edit"
+              body={<>Give Modaya a reference — a video you love or a link — and it recreates the <b>editing style, pacing and captions</b> on your footage. “Edit my video like this.”</>}
+              chips={[<Upload size={12} key="u" />, 'Upload reference', <Link2 size={12} key="l" />, 'Paste link', <Film size={12} key="f" />, 'Use a section']}
+              cta={busy === 'reference' ? 'Starting…' : 'Generate this style'}
+            />
+            {/* ── Edit ── */}
+            <ModeCard onClick={() => start('edit')} busy={busy === 'edit'} disabled={!!busy}
+              icon={<Film size={24} />}
+              title="Edit"
+              body={<>Tell Modaya how you want your video — cut the dead air, tighten pacing, add captions, set the mood. No reference needed.</>}
+              chips={[<Scissors size={12} key="s" />, 'Trim & tighten', <Captions size={12} key="c" />, 'Auto captions', <Zap size={12} key="z" />, 'Any vibe']}
+              cta={busy === 'edit' ? 'Starting…' : 'Create video'}
+            />
           </div>
 
-          {error && <p style={{ color: '#f87171', textAlign: 'center', fontSize: 13, marginTop: 18 }}>{error}</p>}
+          {error && <p style={{ color: TC.danger, textAlign: 'center', fontSize: 13.5, marginTop: 20 }}>{error}</p>}
 
-          <p style={{ textAlign: 'center', color: C.dim, fontSize: 12, margin: '22px 0 0', lineHeight: 1.6 }}>
-            Both modes land in the same editor — your video in the middle, Modaya on the right, the edit map at the bottom.
+          <p style={{ textAlign: 'center', color: TC.dim, fontSize: 12.5, margin: '26px 0 0', lineHeight: 1.6 }}>
+            Both land in the same editor — your video in the middle, Modaya on the right, the edit map at the bottom.
           </p>
         </div>
       </div>
@@ -177,22 +107,67 @@ export default function NewProjectPage() {
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         .spin { animation: spin 0.8s linear infinite; }
-        .mode-card { transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease; }
-        .mode-card:not(:disabled):hover { transform: translateY(-3px); }
-        .mode-card-hero:not(:disabled):hover { box-shadow: 0 26px 70px rgba(0,0,0,0.6), 0 0 0 1px ${C.accent}55 inset; border-color: ${C.accent}; }
-        @media (max-width: 720px) { .mode-grid { grid-template-columns: 1fr !important; } }
+        @media (max-width: 740px) { .mode-grid { grid-template-columns: 1fr !important; } }
       `}</style>
     </div>
   );
 }
 
-function Chip({ icon, label, muted }: { icon: React.ReactNode; label: string; muted?: boolean }) {
+function ModeCard({ hero, icon, title, body, chips, cta, onClick, busy, disabled }: {
+  hero?: boolean; icon: React.ReactNode; title: string; body: React.ReactNode;
+  chips: React.ReactNode[]; cta: string; onClick: () => void; busy: boolean; disabled: boolean;
+}) {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 999,
-      fontSize: 11.5, fontWeight: 500,
-      background: muted ? C.s3 : `${C.accent}12`, border: `1px solid ${muted ? C.b3 : `${C.accent}33`}`,
-      color: muted ? C.muted : C.accentH }}>
-      {icon}{label}
-    </span>
+    <button onClick={onClick} disabled={disabled}
+      style={{
+        position: 'relative', textAlign: 'left', cursor: disabled ? 'default' : 'pointer',
+        background: TC.surface,
+        border: hero ? `1.5px solid rgba(90,110,255,0.45)` : `1.5px solid ${TC.border}`,
+        borderRadius: 22, padding: '28px 26px 24px', color: TC.text, fontFamily: FONT,
+        boxShadow: hero ? '0 18px 50px rgba(90,110,255,0.18)' : '0 8px 30px rgba(31,54,110,0.08)',
+        display: 'flex', flexDirection: 'column', minHeight: 340, overflow: 'hidden',
+        transition: 'transform 160ms ease, box-shadow 160ms ease',
+      }}
+      className={hero ? 'mode-card mode-card-hero' : 'mode-card'}>
+      {hero && (
+        <>
+          <span style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(90,110,255,0.07), transparent 55%)', pointerEvents: 'none' }} />
+          <span style={{ position: 'absolute', top: 16, right: -34, transform: 'rotate(38deg)',
+            background: TC.gold, color: '#3A2A05', fontSize: 10, fontWeight: 800, letterSpacing: '0.08em',
+            padding: '3px 42px', textTransform: 'uppercase', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}>
+            Most popular
+          </span>
+        </>
+      )}
+
+      <span style={{ width: 54, height: 54, borderRadius: 15, marginBottom: 18, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: hero ? GLOW_GRADIENT : TC.surface3,
+        color: hero ? '#fff' : TC.muted,
+        boxShadow: hero ? '0 8px 20px rgba(90,110,255,0.45)' : 'none', border: hero ? 'none' : `1px solid ${TC.border2}` }}>
+        {icon}
+      </span>
+      <span style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.025em', marginBottom: 8, position: 'relative' }}>{title}</span>
+      <span style={{ fontSize: 14, color: TC.sec, lineHeight: 1.6, marginBottom: 18, position: 'relative' }}>{body}</span>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 22, position: 'relative' }}>
+        {chips.map((c, i) => (
+          <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 999,
+            fontSize: 11.5, fontWeight: 600,
+            background: hero ? 'rgba(90,110,255,0.08)' : TC.surface3,
+            border: `1px solid ${hero ? 'rgba(90,110,255,0.22)' : TC.border}`,
+            color: hero ? TC.accent : TC.muted }}>
+            {c}
+          </span>
+        ))}
+      </div>
+
+      <span style={{ marginTop: 'auto', position: 'relative' }}>
+        <GlowButton size="lg" disabled={disabled} style={{ opacity: busy ? 0.85 : 1 }}>
+          {busy ? <Loader2 size={17} className="spin" /> : null}
+          {cta} <ArrowRight size={17} />
+        </GlowButton>
+      </span>
+    </button>
   );
 }

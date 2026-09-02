@@ -104,7 +104,7 @@ export function Footer() {
             </div>
 
             {/* CTA */}
-            <Link href="/upload" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+            <Link href="/new" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 padding: '8px 16px', fontSize: 13, fontWeight: 600, color: '#FFFFFF',

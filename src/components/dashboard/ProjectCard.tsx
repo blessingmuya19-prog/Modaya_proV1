@@ -112,14 +112,14 @@ export function EmptyProjectState() {
       <h3 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 600, fontSize: 16, letterSpacing: '-0.025em', color: '#F5F7FA', margin: '0 0 8px' }}>
         Your next edit starts here.
       </h3>
-      <p style={{ fontSize: 13, color: '#737D8D', margin: '0 0 24px' }}>Upload a video and let AI do the editing.</p>
-      <Link href="/upload" style={{ textDecoration: 'none' }}>
+      <p style={{ fontSize: 13, color: '#737D8D', margin: '0 0 24px' }}>Create a video and let AI do the editing.</p>
+      <Link href="/new" style={{ textDecoration: 'none' }}>
         <button style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: '0 20px', height: 42, fontSize: 13, fontWeight: 600,
-          background: '#4F8CFF', color: '#050505', border: 'none', borderRadius: 10, cursor: 'pointer',
+          background: 'linear-gradient(135deg,#4F8CFF,#6E5BFF)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer',
         }}>
-          Upload a video
+          Create video
         </button>
       </Link>
     </div>

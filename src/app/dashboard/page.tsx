@@ -8,18 +8,18 @@ import { getMedia } from '@/lib/videoStore';
 
 const F = "'Inter Tight', Inter, system-ui, sans-serif";
 const C = {
-  bg: '#050505', surface: '#070707', s2: '#0a0a0a', s3: '#0e0e0e',
-  b: '#111', b2: '#141414', b3: '#1a1a1a',
-  text: '#F5F7FA', sec: '#A5ADBA', muted: '#737D8D', dim: '#4D5664',
-  accent: '#4F8CFF', accentH: '#6EA3FF', danger: '#f87171', dangerBg: 'rgba(248,113,113,0.08)',
+  bg: '#F4F7FE', surface: '#FFFFFF', s2: '#F7F9FE', s3: '#EEF2FB',
+  b: '#E6EBF5', b2: '#D7DEF0', b3: '#D2DAEC',
+  text: '#0F1B33', sec: '#41506B', muted: '#7A869E', dim: '#9AA5BC',
+  accent: '#3B6FF6', accentH: '#5C8CFF', danger: '#E5484D', dangerBg: 'rgba(229,72,77,0.08)',
 };
 
 const STATUS_BADGE: Record<string, { bg: string; color: string; label: string }> = {
-  ready:      { bg: 'rgba(52,211,153,0.1)',  color: '#34D399', label: 'Ready'      },
-  processing: { bg: 'rgba(79,140,255,0.1)',  color: '#4F8CFF', label: 'Processing' },
-  uploading:  { bg: 'rgba(79,140,255,0.07)', color: '#4F8CFF', label: 'Uploading'  },
-  draft:      { bg: 'rgba(115,125,141,0.1)', color: '#737D8D', label: 'Draft'      },
-  failed:     { bg: 'rgba(248,113,113,0.1)', color: '#f87171', label: 'Failed'     },
+  ready:      { bg: 'rgba(22,163,74,0.10)',  color: '#16A34A', label: 'Ready'      },
+  processing: { bg: 'rgba(59,111,246,0.10)',  color: '#3B6FF6', label: 'Processing' },
+  uploading:  { bg: 'rgba(59,111,246,0.07)',  color: '#3B6FF6', label: 'Uploading'  },
+  draft:      { bg: 'rgba(122,134,158,0.12)', color: '#7A869E', label: 'Draft'      },
+  failed:     { bg: 'rgba(229,72,77,0.10)',   color: '#E5484D', label: 'Failed'     },
 };
 
 const filters = ['all', 'ready', 'processing', 'draft'] as const;
@@ -69,11 +69,11 @@ function DeleteConfirmModal({
           top: '50%', left: '50%',
           transform: 'translate(-50%, -50%)',
           width: '100%', maxWidth: 420,
-          background: '#0c0c0c',
-          border: '1px solid #1e1e1e',
+          background: '#FFFFFF',
+          border: '1px solid #E6EBF5',
           borderRadius: 16,
           padding: '28px 28px 24px',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
+          boxShadow: '0 24px 64px rgba(31,54,110,0.22)',
           animation: 'scaleIn 140ms cubic-bezier(0.34,1.56,0.64,1)',
           fontFamily: F,
         }}
@@ -114,12 +114,12 @@ function DeleteConfirmModal({
             disabled={deleting}
             style={{
               flex: 1, height: 40, fontFamily: F, fontSize: 14, fontWeight: 600,
-              letterSpacing: '-0.01em', background: '#141414', color: C.sec,
-              border: '1px solid #1e1e1e', borderRadius: 10, cursor: 'pointer',
+              letterSpacing: '-0.01em', background: '#F7F9FE', color: C.sec,
+              border: '1px solid #E6EBF5', borderRadius: 10, cursor: 'pointer',
               transition: 'all 120ms', opacity: deleting ? 0.5 : 1,
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#1a1a1a'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#141414'; }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#EEF2FB'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#F7F9FE'; }}
           >
             Cancel
           </button>
@@ -129,15 +129,15 @@ function DeleteConfirmModal({
             style={{
               flex: 1, height: 40, fontFamily: F, fontSize: 14, fontWeight: 600,
               letterSpacing: '-0.01em',
-              background: deleting ? '#1a0f0f' : 'rgba(248,113,113,0.12)',
+              background: deleting ? '#FBEAEA' : 'rgba(229,72,77,0.10)',
               color: deleting ? C.dim : C.danger,
-              border: `1px solid ${deleting ? '#1e1e1e' : 'rgba(248,113,113,0.3)'}`,
+              border: `1px solid ${deleting ? '#E6EBF5' : 'rgba(229,72,77,0.30)'}`,
               borderRadius: 10, cursor: deleting ? 'not-allowed' : 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
               transition: 'all 120ms',
             }}
-            onMouseEnter={e => { if (!deleting) { e.currentTarget.style.background = 'rgba(248,113,113,0.2)'; e.currentTarget.style.borderColor = 'rgba(248,113,113,0.5)'; } }}
-            onMouseLeave={e => { if (!deleting) { e.currentTarget.style.background = 'rgba(248,113,113,0.12)'; e.currentTarget.style.borderColor = 'rgba(248,113,113,0.3)'; } }}
+            onMouseEnter={e => { if (!deleting) { e.currentTarget.style.background = 'rgba(229,72,77,0.16)'; e.currentTarget.style.borderColor = 'rgba(229,72,77,0.5)'; } }}
+            onMouseLeave={e => { if (!deleting) { e.currentTarget.style.background = 'rgba(229,72,77,0.10)'; e.currentTarget.style.borderColor = 'rgba(229,72,77,0.30)'; } }}
           >
             {deleting
               ? <><div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} /> Deleting…</>
@@ -169,7 +169,7 @@ function RenameInput({ value, onSave, onCancel }: {
           padding: '4px 8px', fontFamily: F, fontSize: 13, fontWeight: 600, color: C.text,
           outline: 'none', letterSpacing: '-0.01em' }}
       />
-      <button onClick={() => onSave(val)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#34D399', display: 'flex' }}><Check size={13}/></button>
+      <button onClick={() => onSave(val)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#16A34A', display: 'flex' }}><Check size={13}/></button>
       <button onClick={onCancel}          style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, display: 'flex' }}><X size={13}/></button>
     </div>
   );
@@ -388,10 +388,11 @@ function EmptyState({ filtered }: { filtered: boolean }) {
       </p>
       {!filtered && (
         <Link href="/new" style={{ textDecoration: 'none' }}>
-          <button style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 18px', height: 38,
-            fontFamily: F, fontSize: 13, fontWeight: 600, background: C.accent, color: '#fff',
-            border: 'none', borderRadius: 9, cursor: 'pointer' }}>
-            <Plus size={13}/> Create video
+          <button style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 22px', height: 42,
+            fontFamily: F, fontSize: 14, fontWeight: 700,
+            background: 'linear-gradient(135deg,#4F8CFF,#6E5BFF)', color: '#fff',
+            border: 'none', borderRadius: 999, cursor: 'pointer', boxShadow: '0 8px 22px rgba(90,110,255,0.40)' }}>
+            <Plus size={15} strokeWidth={2.7}/> Create video
           </button>
         </Link>
       )}
@@ -448,13 +449,14 @@ export default function DashboardPage() {
           </p>
         </div>
         <Link href="/new" style={{ textDecoration: 'none' }}>
-          <button style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 18px', height: 38,
-            fontFamily: F, fontSize: 13, fontWeight: 600, background: C.accent, color: '#fff',
-            border: 'none', borderRadius: 9, cursor: 'pointer', boxShadow: `0 2px 12px ${C.accent}33`,
+          <button style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 22px', height: 40,
+            fontFamily: F, fontSize: 13.5, fontWeight: 700,
+            background: 'linear-gradient(135deg,#4F8CFF,#6E5BFF)', color: '#fff',
+            border: 'none', borderRadius: 999, cursor: 'pointer', boxShadow: '0 8px 22px rgba(90,110,255,0.40)',
             transition: 'all 150ms' }}
-            onMouseEnter={e => { e.currentTarget.style.background = C.accentH; }}
-            onMouseLeave={e => { e.currentTarget.style.background = C.accent; }}
-          ><Plus size={13} strokeWidth={2.5}/> Create video</button>
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.filter = 'brightness(1.05)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.filter = ''; }}
+          ><Plus size={15} strokeWidth={2.7}/> Create video</button>
         </Link>
       </div>
 
@@ -513,20 +515,20 @@ export default function DashboardPage() {
               display: 'flex', flexDirection: viewMode === 'list' ? 'row' : 'column',
               animationDelay: `${i * 60}ms`,
             }}>
-              <div className="shimmer" style={{
+              <div className="shimmer-light" style={{
                 height: viewMode === 'list' ? 52 : 120,
                 width: viewMode === 'list' ? 88 : '100%',
                 flexShrink: 0,
               }} />
               <div style={{ flex: 1, padding: viewMode === 'list' ? '0 14px' : '12px 14px 14px', display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center' }}>
-                <div className="shimmer" style={{ height: 13, width: '65%', borderRadius: 6 }} />
-                <div className="shimmer" style={{ height: 10, width: '40%', borderRadius: 6 }} />
+                <div className="shimmer-light" style={{ height: 13, width: '65%', borderRadius: 6 }} />
+                <div className="shimmer-light" style={{ height: 10, width: '40%', borderRadius: 6 }} />
               </div>
             </div>
           ))}
         </div>
       ) : error ? (
-        <div style={{ padding: '32px', fontFamily: F, fontSize: 13, color: '#f87171' }}>
+        <div style={{ padding: '32px', fontFamily: F, fontSize: 13, color: C.danger }}>
           Failed to load: {error}
         </div>
       ) : filtered.length === 0 ? (

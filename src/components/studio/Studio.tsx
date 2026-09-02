@@ -33,15 +33,22 @@ import { refineProfile } from '@/lib/studio/refine';
 import { buildEditMap, explainMarker, markerIcon, fmtTime, referenceMoment, type EditMarker, type RefMoment } from '@/lib/studio/editMap';
 import { addVersion, loadVersions, type EditVersion } from '@/lib/studio/versions';
 import { parseTimeRange } from '@/lib/referenceLink';
+import { GlowButton, GLOW_GRADIENT } from '../ui/theme';
 import type { EditorClip } from '../editor/EditorShell';
 
 const F = "'Inter Tight', Inter, system-ui, sans-serif";
+/**
+ * Light, blue-and-white SaaS theme. `surface`/`s2`/`s3` are the white/near-
+ * white panels and wells; `media` stays near-black for the video canvases.
+ */
 const C = {
-  bg: '#050505', surface: '#070707', s2: '#0a0a0a', s3: '#0e0e0e',
-  b: '#111', b2: '#161616', b3: '#1d1d1d',
-  accent: '#4F8CFF', accentH: '#6EA3FF',
-  text: '#F5F7FA', sec: '#A5ADBA', muted: '#737D8D', dim: '#4D5664',
-  green: '#34D399', gold: '#F5C451',
+  bg: '#F4F7FE', surface: '#FFFFFF', s2: '#F7F9FE', s3: '#EEF2FB',
+  b: '#E6EBF5', b2: '#D7DEF0', b3: '#D2DAEC',
+  accent: '#3B6FF6', accentH: '#5C8CFF',
+  text: '#0F1B33', sec: '#41506B', muted: '#7A869E', dim: '#9AA5BC',
+  green: '#16A34A', gold: '#F5B53F',
+  danger: '#E5484D', warn: '#D97824', broll: '#F0775B',
+  media: '#0B0F1A', mediaBorder: '#232B3D', mediaShade: 'rgba(15,27,51,0.55)',
 };
 
 type Phase = 'drop' | 'working' | 'result';
@@ -647,7 +654,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
   }, [totalS]);
 
   const resultVideo = (
-    <div style={{ ...previewBox(plan?.frame.ratio), background: '#000', borderRadius: 14, overflow: 'hidden', position: 'relative', border: `1px solid ${C.b3}`, boxShadow: '0 24px 70px rgba(0,0,0,0.7)' }}>
+    <div style={{ ...previewBox(plan?.frame.ratio), background: C.media, borderRadius: 14, overflow: 'hidden', position: 'relative', border: `1px solid ${C.b3}`, boxShadow: '0 24px 70px rgba(31,54,110,0.18)' }}>
       {sequence && sourceUrl ? (
         <PreviewCanvas
           sequence={sequence} sourceUrl={sourceUrl} sourceId={projectId || 'main'}
@@ -657,7 +664,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
       ) : (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, fontSize: 13 }}>Preparing preview…</div>
       )}
-      <button onClick={() => setPlaying(p => !p)} style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', width: 44, height: 44, borderRadius: '50%', background: 'rgba(0,0,0,0.55)', border: `1px solid rgba(255,255,255,0.25)`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
+      <button onClick={() => setPlaying(p => !p)} style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', width: 44, height: 44, borderRadius: '50%', background: 'rgba(15,27,51,0.55)', border: `1px solid rgba(255,255,255,0.25)`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
         {playing ? '❚❚' : '▶'}
       </button>
     </div>
@@ -780,7 +787,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
               </div>
             ) : iterView === 'ref' && refUrl ? (
               <div style={{ display: 'flex', justifyContent: 'center' }}>
-                <div style={{ ...previewBox(plan?.frame.ratio), background: '#000', borderRadius: 14, overflow: 'hidden', border: `1px solid ${C.b3}` }}>
+                <div style={{ ...previewBox(plan?.frame.ratio), background: C.media, borderRadius: 14, overflow: 'hidden', border: `1px solid ${C.b3}` }}>
                   <video ref={refVideoRef} src={refUrl} controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </div>
               </div>
@@ -866,7 +873,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
 
       {/* Versions popover */}
       {versionOpen && (
-        <div style={{ position: 'fixed', top: 58, right: 130, zIndex: 9500, width: 300, background: C.surface, border: `1px solid ${C.b3}`, borderRadius: 12, boxShadow: '0 24px 60px rgba(0,0,0,0.7)', padding: 8, maxHeight: '60vh', overflowY: 'auto' }}>
+        <div style={{ position: 'fixed', top: 58, right: 130, zIndex: 9500, width: 300, background: C.surface, border: `1px solid ${C.b3}`, borderRadius: 12, boxShadow: '0 24px 60px rgba(31,54,110,0.18)', padding: 8, maxHeight: '60vh', overflowY: 'auto' }}>
           <div style={{ fontSize: 12, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '6px 10px' }}>Versions</div>
           {[...versions].reverse().map(v => (
             <button key={v.id} onClick={() => { restoreVersion(v); setVersionOpen(false); }}
@@ -903,8 +910,8 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
 /* ─────────── comparison box ─────────── */
 function CompareBox({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ width: 'min(42vw, 300px)', aspectRatio: '9 / 16', background: '#000', borderRadius: 14, overflow: 'hidden', position: 'relative', border: `1px solid ${C.b3}`, boxShadow: '0 18px 50px rgba(0,0,0,0.6)' }}>
-      <span style={{ position: 'absolute', top: 8, left: 8, zIndex: 2, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: '#fff', background: 'rgba(0,0,0,0.55)', padding: '3px 8px', borderRadius: 6 }}>{title}</span>
+    <div style={{ width: 'min(42vw, 300px)', aspectRatio: '9 / 16', background: C.media, borderRadius: 14, overflow: 'hidden', position: 'relative', border: `1px solid ${C.b3}`, boxShadow: '0 18px 50px rgba(31,54,110,0.16)' }}>
+      <span style={{ position: 'absolute', top: 8, left: 8, zIndex: 2, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: '#fff', background: 'rgba(15,27,51,0.55)', padding: '3px 8px', borderRadius: 6 }}>{title}</span>
       {children}
     </div>
   );
@@ -913,11 +920,11 @@ function CompareBox({ title, children }: { title: string; children: React.ReactN
 /* ─────────── side-by-side box (iterate view) ─────────── */
 function SideBox({ label, highlight, children }: { label: string; highlight: boolean; children: React.ReactNode }) {
   return (
-    <div style={{ width: 'min(38vw, 240px)', aspectRatio: '9 / 16', background: '#000', borderRadius: 12, overflow: 'hidden',
+    <div style={{ width: 'min(38vw, 240px)', aspectRatio: '9 / 16', background: C.media, borderRadius: 12, overflow: 'hidden',
       position: 'relative', border: `2px solid ${highlight ? C.accent : C.b3}`,
       boxShadow: highlight ? `0 0 0 3px ${C.accent}33` : 'none', transition: 'border 160ms' }}>
       <span style={{ position: 'absolute', top: 7, left: 7, zIndex: 3, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
-        color: '#fff', background: 'rgba(0,0,0,0.55)', padding: '3px 7px', borderRadius: 6 }}>{label}</span>
+        color: '#fff', background: 'rgba(15,27,51,0.55)', padding: '3px 7px', borderRadius: 6 }}>{label}</span>
       {children}
     </div>
   );
@@ -944,7 +951,7 @@ function EditMap({ markers, durationS, playheadS, selectedId, onSeek, onSelect }
       </div>
       <div style={{ position: 'relative', height: 46 }}>
         {/* playhead */}
-        <div style={{ position: 'absolute', top: -6, bottom: -6, width: 2, background: '#fff', opacity: 0.7, left: `${(playheadS / dur) * 100}%`, pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', top: -6, bottom: -6, width: 2.5, background: C.accent, borderRadius: 2, boxShadow: `0 0 8px ${C.accent}88`, left: `${(playheadS / dur) * 100}%`, pointerEvents: 'none' }} />
         {/* baseline */}
         <div style={{ position: 'absolute', left: 0, right: 0, top: 22, height: 2, background: C.b3, borderRadius: 2 }} />
         {markers.map(m => {
@@ -957,8 +964,8 @@ function EditMap({ markers, durationS, playheadS, selectedId, onSeek, onSelect }
               title={`${m.label} at ${fmtTime(m.t)}`}
               style={{ position: 'absolute', left: `${left}%`, top: 6, transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
               <span style={{ width: active ? 30 : 26, height: active ? 30 : 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: m.type === 'cut' ? 13 : m.type === 'caption' ? 11 : 13, fontWeight: 700, color: '#0a0a0a',
-                background: color, boxShadow: active ? `0 0 0 3px ${color}44` : 'none', border: active ? '2px solid #fff' : 'none', lineHeight: 1 }}>
+                fontSize: m.type === 'cut' ? 13 : m.type === 'caption' ? 11 : 13, fontWeight: 800, color: '#0B0F1A',
+                background: color, boxShadow: active ? `0 0 0 3px ${color}44` : 'none', border: active ? '2px solid #FFFFFF' : 'none', lineHeight: 1 }}>
                 {markerIcon(m.type)}
               </span>
               <span style={{ position: 'absolute', top: 34, fontSize: 9, color: C.dim, whiteSpace: 'nowrap' }}>{fmtTime(m.t)}</span>
@@ -1175,7 +1182,7 @@ function DropScreen({ projectId, projectName, mode, onModeChange, hasFootage, on
                   </button>
                 </div>
                 {linkError ? (
-                  <p style={{ color: '#f0a24a', fontSize: 12, margin: '10px 2px 0', lineHeight: 1.5 }}>{linkError}</p>
+                  <p style={{ color: C.warn, fontSize: 12, margin: '10px 2px 0', lineHeight: 1.5 }}>{linkError}</p>
                 ) : (
                   <p style={{ color: C.dim, fontSize: 11, margin: '10px 2px 0', lineHeight: 1.5 }}>
                     Works with a direct video link (.mp4/.webm/…). YouTube, TikTok and Instagram page links can&apos;t be downloaded — use the Upload button for those. The link is style reference, never footage Modaya copies.
@@ -1223,11 +1230,11 @@ function DropScreen({ projectId, projectName, mode, onModeChange, hasFootage, on
                 <input
                   value={rangeText} onChange={e => setRangeText(e.target.value)}
                   placeholder="00:12 – 01:04"
-                  style={{ flex: 1, minWidth: 0, boxSizing: 'border-box', background: C.s2, border: `1.5px solid ${rangeValid ? C.b3 : '#ef4444'}`, borderRadius: 10,
+                  style={{ flex: 1, minWidth: 0, boxSizing: 'border-box', background: C.s2, border: `1.5px solid ${rangeValid ? C.b3 : C.danger}`, borderRadius: 10,
                     color: C.text, fontFamily: F, fontSize: 14, padding: '10px 12px', outline: 'none' }} />
               </div>
               {!rangeValid
-                ? <p style={{ color: '#ef4444', fontSize: 11, margin: '6px 2px 0' }}>Use a range like 00:12 – 01:04.</p>
+                ? <p style={{ color: C.danger, fontSize: 11, margin: '6px 2px 0' }}>Use a range like 00:12 – 01:04.</p>
                 : <p style={{ color: C.dim, fontSize: 11, margin: '6px 2px 0' }}>Only learn the style from this part of a long reference.</p>}
             </>
           )}
@@ -1240,17 +1247,14 @@ function DropScreen({ projectId, projectName, mode, onModeChange, hasFootage, on
               fontFamily: F, fontSize: 14, lineHeight: 1.5, padding: '12px 14px', resize: 'vertical', outline: 'none' }}
           />
 
-          {error && <p style={{ color: '#ef4444', fontSize: 13, margin: '16px 0 0' }}>{error}</p>}
+          {error && <p style={{ color: C.danger, fontSize: 13, margin: '16px 0 0' }}>{error}</p>}
 
-          <button
-            onClick={create}
-            disabled={!ready || !rangeValid || linkBusy}
-            style={{ marginTop: 22, width: '100%', padding: '15px', borderRadius: 12, border: 'none', fontFamily: F, fontSize: 15, fontWeight: 600,
-              background: (ready && rangeValid) ? C.accent : C.b3, color: (ready && rangeValid) ? '#fff' : C.dim,
-              cursor: (ready && rangeValid && !linkBusy) ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
-              boxShadow: (ready && rangeValid) ? `0 6px 24px ${C.accent}44` : 'none' }}>
-            <Wand2 size={17} /> {refReady ? 'Create edit in this style' : 'Create edit'}
-          </button>
+          <div style={{ marginTop: 26 }}>
+            <GlowButton size="lg" fullWidth onClick={create} disabled={!ready || !rangeValid || linkBusy}
+              icon={<Wand2 size={18} />}>
+              {linkBusy ? 'Fetching reference…' : refReady ? 'Generate edit in this style' : 'Generate my edit'}
+            </GlowButton>
+          </div>
           <p style={{ textAlign: 'center', color: C.dim, fontSize: 11, margin: '12px 0 0' }}>
             {projectName} · You don&apos;t edit the video — you tell Modaya how you want it edited.
           </p>
@@ -1383,9 +1387,9 @@ function defaultPunchyProfile(durationS: number): StyleProfile {
 }
 
 const primaryBtn: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 8, padding: '12px 22px', borderRadius: 10,
-  background: C.accent, color: '#fff', border: 'none', fontFamily: F, fontSize: 14, fontWeight: 600,
-  cursor: 'pointer', boxShadow: `0 4px 18px ${C.accent}44`,
+  display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 999,
+  background: GLOW_GRADIENT, color: '#fff', border: 'none', fontFamily: F, fontSize: 14, fontWeight: 700,
+  cursor: 'pointer', boxShadow: '0 8px 24px rgba(90,110,255,0.40)',
 };
 const ghostBtn: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8, padding: '12px 18px', borderRadius: 10,

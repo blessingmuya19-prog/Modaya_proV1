@@ -220,9 +220,15 @@ body {
 }
 .timeline-clip:hover { filter: brightness(1.25); }
 
-/* Shimmer skeleton */
+/* Shimmer skeleton (dark surfaces: pro editor / media) */
 .shimmer {
   background: linear-gradient(90deg, #111111 0%, #181818 50%, #111111 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+/* Shimmer skeleton (light blue-and-white SaaS surfaces) */
+.shimmer-light {
+  background: linear-gradient(90deg, #EEF2FB 0%, #F7F9FE 50%, #EEF2FB 100%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
