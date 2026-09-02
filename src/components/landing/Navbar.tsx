@@ -27,13 +27,13 @@ export function Navbar() {
   const pillScale = scrolled ? 1 + Math.min(scrollY / 1200, 0.04) : 1;
 
   // Glass becomes more opaque and blurrier as you scroll
-  const glassBlur = scrolled ? Math.min(20 + scrollY / 15, 40) : 18;
+  const glassBlur = scrolled ? Math.min(20 + scrollY / 15, 40) : 20;
   const glassBg = scrolled
-    ? `rgba(255,255,255,${Math.min(0.75 + scrollY / 1200, 0.92)})`
-    : 'rgba(255,255,255,0.6)';
+    ? `rgba(15,20,33,${Math.min(0.72 + scrollY / 1200, 0.9)})`
+    : 'rgba(20,26,40,0.55)';
   const glassBorder = scrolled
-    ? `rgba(215,222,240,${Math.min(0.7 + scrollY / 3000, 1)})`
-    : 'rgba(230,235,245,0.9)';
+    ? `rgba(58,68,94,${Math.min(0.7 + scrollY / 3000, 1)})`
+    : 'rgba(46,55,80,0.6)';
 
   return (
     <>
@@ -44,7 +44,7 @@ export function Navbar() {
         backdropFilter: scrolled ? `blur(${Math.min(scrollY / 8, 18)}px)` : 'none',
         WebkitBackdropFilter: scrolled ? `blur(${Math.min(scrollY / 8, 18)}px)` : 'none',
         background: scrolled
-          ? `linear-gradient(to bottom, rgba(244,247,254,${Math.min(scrollY / 300, 0.85)}) 0%, transparent 100%)`
+          ? `linear-gradient(to bottom, rgba(11,15,26,${Math.min(scrollY / 300, 0.8)}) 0%, transparent 100%)`
           : 'transparent',
         maskImage: 'linear-gradient(to bottom, black 50%, transparent 100%)',
         WebkitMaskImage: 'linear-gradient(to bottom, black 50%, transparent 100%)',
@@ -74,8 +74,8 @@ export function Navbar() {
             WebkitBackdropFilter: `blur(${glassBlur}px) saturate(180%)`,
             border: `1px solid ${glassBorder}`,
             boxShadow: scrolled
-              ? `0 8px 40px rgba(31,54,110,0.15), inset 0 1px 0 rgba(255,255,255,${Math.min(0.04 + scrollY / 5000, 0.1)})`
-              : '0 4px 20px rgba(31,54,110,0.08), inset 0 1px 0 rgba(59,111,246,0.06)',
+              ? `0 8px 40px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,${Math.min(0.04 + scrollY / 5000, 0.1)})`
+              : '0 4px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(91,130,255,0.06)',
             transition: 'background 200ms ease, box-shadow 200ms ease, border-color 200ms ease',
             pointerEvents: 'none',
           }} />
@@ -83,7 +83,7 @@ export function Navbar() {
           {/* Frosted glass top highlight */}
           <div style={{
             position: 'absolute', top: 0, left: '10%', right: '10%', height: 1,
-            background: 'linear-gradient(90deg, transparent, rgba(110,91,255,0.28), transparent)',
+            background: 'linear-gradient(90deg, transparent, rgba(124,107,255,0.28), transparent)',
             pointerEvents: 'none', zIndex: 1,
           }} />
 
@@ -107,12 +107,12 @@ export function Navbar() {
             {navLinks.map(link => (
               <a key={link.label} href={link.href} style={{
                 padding: '7px 15px', fontSize: 14, fontWeight: 500,
-                color: '#7A869E', textDecoration: 'none', borderRadius: 9999,
+                color: '#8B95AD', textDecoration: 'none', borderRadius: 9999,
                 transition: 'color 150ms ease, background 150ms ease',
                 whiteSpace: 'nowrap', letterSpacing: '-0.01em',
               }}
-                onMouseEnter={e => { e.currentTarget.style.color = '#0F1B33'; e.currentTarget.style.background = 'rgba(59,111,246,0.08)'; }}
-                onMouseLeave={e => { e.currentTarget.style.color = '#7A869E'; e.currentTarget.style.background = 'transparent'; }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#F2F5FC'; e.currentTarget.style.background = 'rgba(91,130,255,0.08)'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#8B95AD'; e.currentTarget.style.background = 'transparent'; }}
               >
                 {link.label}
               </a>
@@ -124,13 +124,13 @@ export function Navbar() {
             <Link href="/dashboard" style={{ textDecoration: 'none' }} className="nav-desktop">
               <button style={{
                 padding: '8px 18px', fontSize: 14, fontWeight: 500,
-                color: '#7A869E', background: 'none', border: 'none',
+                color: '#8B95AD', background: 'none', border: 'none',
                 cursor: 'pointer', borderRadius: 9999,
                 transition: 'color 150ms ease, background 150ms ease',
                 whiteSpace: 'nowrap', letterSpacing: '-0.01em',
               }}
-                onMouseEnter={e => { e.currentTarget.style.color = '#0F1B33'; e.currentTarget.style.background = 'rgba(59,111,246,0.08)'; }}
-                onMouseLeave={e => { e.currentTarget.style.color = '#7A869E'; e.currentTarget.style.background = 'none'; }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#F2F5FC'; e.currentTarget.style.background = 'rgba(91,130,255,0.08)'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#8B95AD'; e.currentTarget.style.background = 'none'; }}
               >
                 Log in
               </button>
@@ -140,14 +140,14 @@ export function Navbar() {
               <button style={{
                 padding: '9px 20px', fontSize: 14, fontWeight: 600,
                 color: '#FFFFFF',
-                background: 'linear-gradient(135deg, #4F8CFF 0%, #6E5BFF 100%)',
+                background: 'linear-gradient(135deg, #3E6FF0 0%, #6A4EE8 100%)',
                 border: 'none', borderRadius: 9999, cursor: 'pointer',
                 whiteSpace: 'nowrap', letterSpacing: '-0.01em',
-                boxShadow: '0 6px 20px rgba(90,110,255,0.40)',
+                boxShadow: '0 6px 20px rgba(74,108,255,0.40)',
                 transition: 'all 200ms ease',
               }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 10px 28px rgba(90,110,255,0.55)'; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 6px 20px rgba(90,110,255,0.40)'; }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 10px 28px rgba(74,108,255,0.55)'; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 6px 20px rgba(74,108,255,0.40)'; }}
               >
                 Try it free
               </button>
@@ -155,9 +155,9 @@ export function Navbar() {
 
             <button onClick={() => setMenuOpen(!menuOpen)} id="mobile-menu-btn" style={{
               display: 'none', alignItems: 'center', justifyContent: 'center',
-              width: 38, height: 38, background: 'rgba(59,111,246,0.06)',
-              border: '1px solid rgba(59,111,246,0.08)', cursor: 'pointer',
-              color: '#41506B', borderRadius: 9999, marginLeft: 6,
+              width: 38, height: 38, background: 'rgba(91,130,255,0.06)',
+              border: '1px solid rgba(91,130,255,0.08)', cursor: 'pointer',
+              color: '#B7C0D4', borderRadius: 9999, marginLeft: 6,
             }}>
               {menuOpen ? <X size={17} /> : <Menu size={17} />}
             </button>
@@ -169,29 +169,29 @@ export function Navbar() {
         {menuOpen && (
           <div style={{
             maxWidth: 1200, margin: '8px auto 0', pointerEvents: 'auto',
-            background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(32px) saturate(180%)',
-            border: '1px solid #E6EBF5', borderRadius: 20, boxShadow: '0 18px 50px rgba(31,54,110,0.15)',
+            background: 'rgba(15,20,33,0.92)', backdropFilter: 'blur(32px) saturate(180%)',
+            border: '1px solid #242C3E', borderRadius: 20, boxShadow: '0 18px 50px rgba(0,0,0,0.45)',
             padding: '12px', display: 'flex', flexDirection: 'column', gap: 2,
           }}>
             {navLinks.map(link => (
               <a key={link.label} href={link.href} onClick={() => setMenuOpen(false)} style={{
-                padding: '11px 14px', fontSize: 15, color: '#7A869E',
+                padding: '11px 14px', fontSize: 15, color: '#8B95AD',
                 textDecoration: 'none', borderRadius: 12, transition: 'all 150ms',
               }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(59,111,246,0.06)'; e.currentTarget.style.color = '#0F1B33'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#7A869E'; }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(91,130,255,0.06)'; e.currentTarget.style.color = '#F2F5FC'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#8B95AD'; }}
               >
                 {link.label}
               </a>
             ))}
-            <div style={{ height: 1, background: '#E6EBF5', margin: '4px 0' }} />
+            <div style={{ height: 1, background: '#242C3E', margin: '4px 0' }} />
             <Link href="/dashboard" onClick={() => setMenuOpen(false)} style={{ textDecoration: 'none' }}>
-              <div style={{ padding: '11px 14px', fontSize: 15, color: '#7A869E', borderRadius: 12, cursor: 'pointer' }}>Log in</div>
+              <div style={{ padding: '11px 14px', fontSize: 15, color: '#8B95AD', borderRadius: 12, cursor: 'pointer' }}>Log in</div>
             </Link>
             <Link href="/new" onClick={() => setMenuOpen(false)} style={{ textDecoration: 'none' }}>
               <div style={{
                 padding: '11px 14px', fontSize: 15, fontWeight: 600,
-                color: '#FFFFFF', background: 'linear-gradient(135deg, #4F8CFF, #6E5BFF)',
+                color: '#FFFFFF', background: 'linear-gradient(135deg, #3E6FF0, #6A4EE8)',
                 borderRadius: 12, cursor: 'pointer', textAlign: 'center',
               }}>
                 Try it free

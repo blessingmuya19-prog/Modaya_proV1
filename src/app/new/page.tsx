@@ -122,16 +122,16 @@ function ModeCard({ hero, icon, title, body, chips, cta, onClick, busy, disabled
       style={{
         position: 'relative', textAlign: 'left', cursor: disabled ? 'default' : 'pointer',
         background: TC.surface,
-        border: hero ? `1.5px solid rgba(90,110,255,0.45)` : `1.5px solid ${TC.border}`,
+        border: hero ? `1.5px solid rgba(74,108,255,0.5)` : `1.5px solid ${TC.border}`,
         borderRadius: 22, padding: '28px 26px 24px', color: TC.text, fontFamily: FONT,
-        boxShadow: hero ? '0 18px 50px rgba(90,110,255,0.18)' : '0 8px 30px rgba(31,54,110,0.08)',
+        boxShadow: hero ? '0 18px 50px rgba(74,108,255,0.28)' : '0 8px 30px rgba(0,0,0,0.4)',
         display: 'flex', flexDirection: 'column', minHeight: 340, overflow: 'hidden',
         transition: 'transform 160ms ease, box-shadow 160ms ease',
       }}
       className={hero ? 'mode-card mode-card-hero' : 'mode-card'}>
       {hero && (
         <>
-          <span style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(90,110,255,0.07), transparent 55%)', pointerEvents: 'none' }} />
+          <span style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(91,130,255,0.10), transparent 55%)', pointerEvents: 'none' }} />
           <span style={{ position: 'absolute', top: 16, right: -34, transform: 'rotate(38deg)',
             background: TC.gold, color: '#3A2A05', fontSize: 10, fontWeight: 800, letterSpacing: '0.08em',
             padding: '3px 42px', textTransform: 'uppercase', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}>
@@ -144,7 +144,7 @@ function ModeCard({ hero, icon, title, body, chips, cta, onClick, busy, disabled
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: hero ? GLOW_GRADIENT : TC.surface3,
         color: hero ? '#fff' : TC.muted,
-        boxShadow: hero ? '0 8px 20px rgba(90,110,255,0.45)' : 'none', border: hero ? 'none' : `1px solid ${TC.border2}` }}>
+        boxShadow: hero ? '0 8px 20px rgba(74,108,255,0.5)' : 'none', border: hero ? 'none' : `1px solid ${TC.border2}` }}>
         {icon}
       </span>
       <span style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.025em', marginBottom: 8, position: 'relative' }}>{title}</span>
@@ -154,8 +154,8 @@ function ModeCard({ hero, icon, title, body, chips, cta, onClick, busy, disabled
         {chips.map((c, i) => (
           <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 999,
             fontSize: 11.5, fontWeight: 600,
-            background: hero ? 'rgba(90,110,255,0.08)' : TC.surface3,
-            border: `1px solid ${hero ? 'rgba(90,110,255,0.22)' : TC.border}`,
+            background: hero ? 'rgba(91,130,255,0.12)' : TC.surface3,
+            border: `1px solid ${hero ? 'rgba(91,130,255,0.30)' : TC.border}`,
             color: hero ? TC.accent : TC.muted }}>
             {c}
           </span>

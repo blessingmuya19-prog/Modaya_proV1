@@ -38,17 +38,17 @@ import type { EditorClip } from '../editor/EditorShell';
 
 const F = "'Inter Tight', Inter, system-ui, sans-serif";
 /**
- * Light, blue-and-white SaaS theme. `surface`/`s2`/`s3` are the white/near-
- * white panels and wells; `media` stays near-black for the video canvases.
+ * Dark, premium SaaS theme. `surface`/`s2`/`s3` are the charcoal raised
+ * panels and wells; `media` is the near-black video canvas (darkest of all).
  */
 const C = {
-  bg: '#F4F7FE', surface: '#FFFFFF', s2: '#F7F9FE', s3: '#EEF2FB',
-  b: '#E6EBF5', b2: '#D7DEF0', b3: '#D2DAEC',
-  accent: '#3B6FF6', accentH: '#5C8CFF',
-  text: '#0F1B33', sec: '#41506B', muted: '#7A869E', dim: '#9AA5BC',
-  green: '#16A34A', gold: '#F5B53F',
-  danger: '#E5484D', warn: '#D97824', broll: '#F0775B',
-  media: '#0B0F1A', mediaBorder: '#232B3D', mediaShade: 'rgba(15,27,51,0.55)',
+  bg: '#0B0F1A', surface: '#141A28', s2: '#181F30', s3: '#1F2739',
+  b: '#242C3E', b2: '#2E3750', b3: '#3A445E',
+  accent: '#5B82FF', accentH: '#7A9BFF',
+  text: '#F2F5FC', sec: '#B7C0D4', muted: '#8B95AD', dim: '#5E6885',
+  green: '#34D399', gold: '#F5B53F',
+  danger: '#F87171', warn: '#F0A24A', broll: '#F0775B',
+  media: '#05070D', mediaBorder: '#232B3D', mediaShade: 'rgba(0,0,0,0.55)',
 };
 
 type Phase = 'drop' | 'working' | 'result';
@@ -654,7 +654,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
   }, [totalS]);
 
   const resultVideo = (
-    <div style={{ ...previewBox(plan?.frame.ratio), background: C.media, borderRadius: 14, overflow: 'hidden', position: 'relative', border: `1px solid ${C.b3}`, boxShadow: '0 24px 70px rgba(31,54,110,0.18)' }}>
+    <div style={{ ...previewBox(plan?.frame.ratio), background: C.media, borderRadius: 14, overflow: 'hidden', position: 'relative', border: `1px solid ${C.b3}`, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
       {sequence && sourceUrl ? (
         <PreviewCanvas
           sequence={sequence} sourceUrl={sourceUrl} sourceId={projectId || 'main'}
@@ -873,7 +873,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
 
       {/* Versions popover */}
       {versionOpen && (
-        <div style={{ position: 'fixed', top: 58, right: 130, zIndex: 9500, width: 300, background: C.surface, border: `1px solid ${C.b3}`, borderRadius: 12, boxShadow: '0 24px 60px rgba(31,54,110,0.18)', padding: 8, maxHeight: '60vh', overflowY: 'auto' }}>
+        <div style={{ position: 'fixed', top: 58, right: 130, zIndex: 9500, width: 300, background: C.surface, border: `1px solid ${C.b3}`, borderRadius: 12, boxShadow: '0 24px 60px rgba(0,0,0,0.5)', padding: 8, maxHeight: '60vh', overflowY: 'auto' }}>
           <div style={{ fontSize: 12, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '6px 10px' }}>Versions</div>
           {[...versions].reverse().map(v => (
             <button key={v.id} onClick={() => { restoreVersion(v); setVersionOpen(false); }}
@@ -910,7 +910,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
 /* ─────────── comparison box ─────────── */
 function CompareBox({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ width: 'min(42vw, 300px)', aspectRatio: '9 / 16', background: C.media, borderRadius: 14, overflow: 'hidden', position: 'relative', border: `1px solid ${C.b3}`, boxShadow: '0 18px 50px rgba(31,54,110,0.16)' }}>
+    <div style={{ width: 'min(42vw, 300px)', aspectRatio: '9 / 16', background: C.media, borderRadius: 14, overflow: 'hidden', position: 'relative', border: `1px solid ${C.b3}`, boxShadow: '0 18px 50px rgba(0,0,0,0.45)' }}>
       <span style={{ position: 'absolute', top: 8, left: 8, zIndex: 2, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: '#fff', background: 'rgba(15,27,51,0.55)', padding: '3px 8px', borderRadius: 6 }}>{title}</span>
       {children}
     </div>
@@ -1389,7 +1389,7 @@ function defaultPunchyProfile(durationS: number): StyleProfile {
 const primaryBtn: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 999,
   background: GLOW_GRADIENT, color: '#fff', border: 'none', fontFamily: F, fontSize: 14, fontWeight: 700,
-  cursor: 'pointer', boxShadow: '0 8px 24px rgba(90,110,255,0.40)',
+  cursor: 'pointer', boxShadow: '0 10px 30px rgba(74,108,255,0.5)',
 };
 const ghostBtn: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8, padding: '12px 18px', borderRadius: 10,

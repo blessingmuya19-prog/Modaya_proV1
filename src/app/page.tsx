@@ -11,7 +11,7 @@ import { Footer } from "@/components/landing/Footer";
 
 export default function HomePage() {
   return (
-    <div className="light-surface" style={{ background: "#F4F7FE", minHeight: "100vh" }}>
+    <div className="dark-surface" style={{ background: "#0B0F1A", minHeight: "100vh" }}>
       <Navbar />
       <main>
         <HeroSection />

@@ -26,24 +26,24 @@ export function AICapabilitiesSection() {
   const { ref, inView } = useInView(0.08);
 
   return (
-    <section id="ai" className="section-pad" style={{ position:'relative', zIndex:0, background:'linear-gradient(180deg,#F4F7FE 0%,#E9F0FE 50%,#F4F7FE 100%)', overflow:'hidden' }}>
+    <section id="ai" className="section-pad" style={{ position:'relative', zIndex:0, background:'linear-gradient(180deg,#0B0F1A 0%,#141A28 50%,#0B0F1A 100%)', overflow:'hidden' }}>
 
       {/* Glow */}
-      <div style={{ position:'absolute', top:'40%', left:'50%', transform:'translateX(-50%)', width:900, height:500, pointerEvents:'none', background:'radial-gradient(ellipse at center, rgba(79,140,255,0.06) 0%, transparent 70%)', filter:'blur(60px)' }} />
+      <div style={{ position:'absolute', top:'40%', left:'50%', transform:'translateX(-50%)', width:900, height:500, pointerEvents:'none', background:'radial-gradient(ellipse at center, rgba(91,130,255,0.06) 0%, transparent 70%)', filter:'blur(60px)' }} />
 
       <div className="section-inner" style={{ position:'relative', zIndex:1 }}>
 
         {/* Header */}
         <div style={{ textAlign:'center', marginBottom:'clamp(40px,6vw,80px)' }}>
-          <div style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 14px', borderRadius:9999, background:'rgba(79,140,255,0.08)', border:'1px solid rgba(79,140,255,0.18)', marginBottom:20 }}>
-            <span style={{ width:5, height:5, borderRadius:'50%', background:'#4F8CFF', display:'inline-block' }} />
-            <span style={{ fontSize:11, color:'#4F8CFF', fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase' }}>AI capabilities</span>
+          <div style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 14px', borderRadius:9999, background:'rgba(91,130,255,0.08)', border:'1px solid rgba(91,130,255,0.18)', marginBottom:20 }}>
+            <span style={{ width:5, height:5, borderRadius:'50%', background:'#6E92FF', display:'inline-block' }} />
+            <span style={{ fontSize:11, color:'#6E92FF', fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase' }}>AI capabilities</span>
           </div>
-          <h2 style={{ fontFamily:"'Inter Tight',sans-serif", fontWeight:700, fontSize:'clamp(30px,5vw,52px)', letterSpacing:'-0.025em', lineHeight:1.05, color:'#0F1B33', margin:'0 0 18px' }}>
+          <h2 style={{ fontFamily:"'Inter Tight',sans-serif", fontWeight:700, fontSize:'clamp(30px,5vw,52px)', letterSpacing:'-0.025em', lineHeight:1.05, color:'#F2F5FC', margin:'0 0 18px' }}>
             Everything an editor does.<br />
             <span style={{ color:'rgba(15,27,51,0.30)' }}>Done by AI.</span>
           </h2>
-          <p style={{ fontSize:'clamp(15px,1.2vw,17px)', color:'#41506B', maxWidth:480, margin:'0 auto', lineHeight:1.65 }}>
+          <p style={{ fontSize:'clamp(15px,1.2vw,17px)', color:'#B7C0D4', maxWidth:480, margin:'0 auto', lineHeight:1.65 }}>
             No plugins. No presets to learn. Just describe the edit and Modaya handles the rest.
           </p>
         </div>
@@ -54,18 +54,18 @@ export function AICapabilitiesSection() {
             const Icon = cap.icon;
             return (
               <div key={i} style={{ opacity: inView ? 1 : 0, transform: inView ? 'none' : 'translateY(28px)', transition:`all 550ms cubic-bezier(0.22,1,0.36,1) ${i * 70}ms` }}>
-                <div style={{ padding:'clamp(18px,2vw,32px) clamp(16px,1.8vw,28px)', background:'#FFFFFF', border:'1px solid #E6EBF5', borderRadius:18, height:'100%', display:'flex', flexDirection:'column', gap:14, cursor:'default', transition:'all 300ms ease' }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(79,140,255,0.22)'; e.currentTarget.style.background = '#F7F9FE'; e.currentTarget.style.transform = 'translateY(-3px)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#D7DEF0'; e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.transform = ''; }}
+                <div style={{ padding:'clamp(18px,2vw,32px) clamp(16px,1.8vw,28px)', background:'#141A28', border:'1px solid #242C3E', borderRadius:18, height:'100%', display:'flex', flexDirection:'column', gap:14, cursor:'default', transition:'all 300ms ease' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(91,130,255,0.22)'; e.currentTarget.style.background = '#181F30'; e.currentTarget.style.transform = 'translateY(-3px)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#2E3750'; e.currentTarget.style.background = '#141A28'; e.currentTarget.style.transform = ''; }}
                 >
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                    <div style={{ width:44, height:44, borderRadius:12, background:'rgba(79,140,255,0.08)', border:'1px solid rgba(79,140,255,0.16)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                      <Icon size={20} color="#4F8CFF" strokeWidth={1.6} />
+                    <div style={{ width:44, height:44, borderRadius:12, background:'rgba(91,130,255,0.08)', border:'1px solid rgba(91,130,255,0.16)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                      <Icon size={20} color="#6E92FF" strokeWidth={1.6} />
                     </div>
-                    <span style={{ fontSize:9, fontWeight:700, color:'#4F8CFF', letterSpacing:'0.1em', background:'rgba(79,140,255,0.08)', border:'1px solid rgba(79,140,255,0.18)', padding:'3px 10px', borderRadius:9999 }}>{cap.tag}</span>
+                    <span style={{ fontSize:9, fontWeight:700, color:'#6E92FF', letterSpacing:'0.1em', background:'rgba(91,130,255,0.08)', border:'1px solid rgba(91,130,255,0.18)', padding:'3px 10px', borderRadius:9999 }}>{cap.tag}</span>
                   </div>
-                  <h3 style={{ fontFamily:"'Inter Tight',sans-serif", fontSize:19, fontWeight:700, color:'#0F1B33', letterSpacing:'-0.03em', margin:0 }}>{cap.title}</h3>
-                  <p style={{ fontSize:14, color:'#41506B', lineHeight:1.7, margin:0 }}>{cap.body}</p>
+                  <h3 style={{ fontFamily:"'Inter Tight',sans-serif", fontSize:19, fontWeight:700, color:'#F2F5FC', letterSpacing:'-0.03em', margin:0 }}>{cap.title}</h3>
+                  <p style={{ fontSize:14, color:'#B7C0D4', lineHeight:1.7, margin:0 }}>{cap.body}</p>
                 </div>
               </div>
             );

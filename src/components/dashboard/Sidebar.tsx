@@ -47,8 +47,8 @@ export function Sidebar() {
           <button style={{
             width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
             padding: '11px', fontSize: 13.5, fontWeight: 700, letterSpacing: '-0.01em', fontFamily: FONT,
-            background: 'linear-gradient(135deg,#4F8CFF,#6E5BFF)', color: '#fff', border: 'none', borderRadius: 999, cursor: 'pointer',
-            boxShadow: '0 8px 22px rgba(90,110,255,0.40)',
+            background: 'linear-gradient(135deg,#3E6FF0,#6A4EE8)', color: '#fff', border: 'none', borderRadius: 999, cursor: 'pointer',
+            boxShadow: '0 8px 22px rgba(74,108,255,0.5)',
             transition: 'all 150ms ease',
           }}
             onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.filter = 'brightness(1.05)'; }}
@@ -96,7 +96,7 @@ export function Sidebar() {
             <span style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '-0.01em', fontFamily: FONT, color: TC.muted }}>{STORAGE_USED}% used</span>
           </div>
           <div style={{ height: 5, background: TC.surface3, borderRadius: 9999 }}>
-            <div style={{ height: '100%', width: `${STORAGE_USED}%`, background: 'linear-gradient(90deg,#4F8CFF,#6E5BFF)', borderRadius: 9999 }} />
+            <div style={{ height: '100%', width: `${STORAGE_USED}%`, background: 'linear-gradient(90deg,#3E6FF0,#6A4EE8)', borderRadius: 9999 }} />
           </div>
         </div>
 

@@ -226,21 +226,19 @@ body {
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
-/* Shimmer skeleton (light blue-and-white SaaS surfaces) */
+/* Shimmer skeleton (dark charcoal SaaS surfaces) */
 .shimmer-light {
-  background: linear-gradient(90deg, #EEF2FB 0%, #F7F9FE 50%, #EEF2FB 100%);
+  background: linear-gradient(90deg, #141A28 0%, #1F2739 50%, #141A28 100%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
 
-/* Light, blue-and-white SaaS surface scope (marketing/landing page).
-   The app shell is light; only the pro editor keeps the dark theme, so we
-   scope the light scrollbar/text default to the landing root rather than
-   flipping the global dark vars. */
-.light-surface { background-color: #F4F7FE; color: #0F1B33; }
-.light-surface ::-webkit-scrollbar-track { background: #F4F7FE; }
-.light-surface ::-webkit-scrollbar-thumb { background: #C7D0E4; border-radius: 3px; }
-.light-surface ::-webkit-scrollbar-thumb:hover { background: #9AA5BC; }
+/* Dark SaaS surface scope (marketing/landing page). Scopes the scrollbar
+   and base text to the dark chrome without touching the pro editor vars. */
+.dark-surface { background-color: #0B0F1A; color: #F2F5FC; }
+.dark-surface ::-webkit-scrollbar-track { background: #0B0F1A; }
+.dark-surface ::-webkit-scrollbar-thumb { background: #2E3750; border-radius: 3px; }
+.dark-surface ::-webkit-scrollbar-thumb:hover { background: #3A445E; }
 
 /* ─────────────────────────────────────────────
    REDUCED MOTION
