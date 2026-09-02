@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { setMedia, analyseFile, MediaEntry } from '@/lib/videoStore';
 import { capturePoster, savePoster } from '@/lib/thumbnailStore';
 import { saveMediaFile } from '@/lib/mediaDb';
+import { backupFootageToCloud } from '@/lib/mediaCloud';
 
 const PRESETS = [
   { Icon: Zap,        label: 'Make it faster',  fill: 'Make this video faster and remove all unnecessary pauses and dead air.' },
@@ -79,6 +80,9 @@ export default function UploadPage() {
           durationS:   meta.durationS,
           filename:    meta.filename,
         });
+        // Durable server copy so the project reopens on any device (no-op on
+        // read-only serverless hosts, where IndexedDB remains the store).
+        backupFootageToCloud(data.projectId, file, { filename: meta.filename });
         setProjectId(data.projectId);
         setStage('processing');
       } else if (res.status === 401) {

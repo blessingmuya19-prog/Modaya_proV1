@@ -22,7 +22,7 @@ import type { ClipSuggestion } from '@/lib/ai/clips';
 import { parseClipRequest } from '@/lib/ai/clips';
 import { scanVideo, compactScan, type VisualScan, type Keyframe } from '@/lib/ai/visualScan';
 import { analyseFile } from '@/lib/videoStore';
-import { loadMediaFile } from '@/lib/mediaDb';
+import { getProjectMedia } from '@/lib/mediaCloud';
 import { getProjectFrames } from '@/lib/thumbnailStore';
 
 /* ──────────────── STAGGER FADE-UP ──────────────── */
@@ -782,7 +782,7 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
     audioState.current = 'pending';
     (async () => {
       try {
-        const stored = await loadMediaFile(projectId);
+        const stored = await getProjectMedia(projectId);
         if (!stored || cancelled) { audioState.current = 'failed'; return; }
         const env = await analyseAudio(stored.blob);
         if (cancelled) return;
@@ -804,7 +804,7 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
     const stop = new AbortController();
     (async () => {
       try {
-        const stored = await loadMediaFile(projectId);
+        const stored = await getProjectMedia(projectId);
         if (!stored || stop.signal.aborted) return;
         const seen = await scanVideo(stored.blob, { signal: stop.signal });
         if (!seen || stop.signal.aborted) return;
@@ -830,7 +830,7 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
     say({ role: 'ai', text: 'Listening to the audio and writing down what is said…' });
 
     try {
-      const stored = await loadMediaFile(projectId);
+      const stored = await getProjectMedia(projectId);
       if (!stored) {
         replaceLast("I can't find the media for this project in this browser — reopen it and try again.");
         setAsr('failed');
@@ -948,7 +948,7 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
 
     try {
       // The target's own audio decides which sections survive the cut
-      const stored = await loadMediaFile(projectId);
+      const stored = await getProjectMedia(projectId);
       const env    = stored ? await analyseAudio(stored.blob) : null;
       const dur    = stored?.durationS || totalS;
 

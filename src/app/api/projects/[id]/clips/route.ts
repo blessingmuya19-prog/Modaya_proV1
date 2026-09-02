@@ -163,7 +163,23 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   //    and audio together, so it can lift action-heavy moments the text model
   //    misses. Needs TWELVELABS_API_KEY and a reachable video URL; degrades to
   //    nothing when absent. ──────────────────────────────────────────────────
-  const videoUrl = typeof body.videoUrl === 'string' ? body.videoUrl : null;
+  let videoUrl = typeof body.videoUrl === 'string' ? body.videoUrl : null;
+  // No explicit URL? If the footage is durably stored and this deployment has
+  // a public origin, mint a short-lived signed URL Pegasus can fetch — this is
+  // the hosted-video staging the visual ranker always needed.
+  if (!videoUrl) {
+    const ext = project?.media?.main?.ext;
+    const origin = (process.env.PUBLIC_BASE_URL ?? '').trim();
+    if (ext && origin && project) {
+      const { mediaStore, signMediaUrl } = await import('@/lib/server/mediaStore');
+      if (mediaStore().durable) {
+        try {
+          const signed = signMediaUrl(project.id, 'main', ext);
+          if (/^https?:\/\//.test(signed)) videoUrl = signed;
+        } catch { /* signing is best-effort; ranker degrades */ }
+      }
+    }
+  }
   if (twelveLabsReady()) {
     const r = await rankHighlights(videoUrl, durationS);
     if (r.ok && r.segments?.length) {

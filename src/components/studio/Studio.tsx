@@ -16,7 +16,8 @@ import Link from 'next/link';
 import { ArrowLeft, Film, Upload, Wand2, Download, RefreshCw, Sparkles, Send, SlidersHorizontal, CheckCircle2, Loader2 } from 'lucide-react';
 import { LogoMark } from '../ui/Logo';
 import { getMedia, setMedia, subscribeMedia, analyseFile, type MediaEntry } from '@/lib/videoStore';
-import { loadMediaFile, saveMediaFile } from '@/lib/mediaDb';
+import { saveMediaFile } from '@/lib/mediaDb';
+import { getProjectMedia, uploadProjectMedia } from '@/lib/mediaCloud';
 import { analyseAudio, analyseReference, interestCurve } from '@/lib/ai/analyseReference';
 import type { StyleProfile } from '@/lib/ai/styleProfile';
 import { composeStudioPlan, type StudioPlan, type TranscriptLine } from '@/lib/studio/editPlan';
@@ -63,17 +64,31 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
   useEffect(() => {
     if (!projectId) return;
     setMediaState(getMedia(projectId));
-    // Rehydrate from IndexedDB on a fresh tab, exactly like the pro editor.
+    // Rehydrate on a fresh tab / new device: IndexedDB first, then the
+    // durable server store (the blob is re-cached locally as it arrives).
     if (!getMedia(projectId)) {
-      void loadMediaFile(projectId).then(stored => {
-        if (stored && !getMedia(projectId)) {
+      void getProjectMedia(projectId).then(stored => {
+        if (!stored || getMedia(projectId)) return;
+        // Re-derive real dimensions/duration (the server copy stores bytes,
+        // not the probed metadata), then cache the corrected record locally.
+        const file = new File([stored.blob], stored.filename, { type: stored.mimeType });
+        void analyseFile(file).then(meta => {
+          if (getMedia(projectId)) return;
           setMedia(projectId, {
             objectUrl: URL.createObjectURL(stored.blob),
-            mimeType: stored.mimeType, mediaType: stored.mediaType, aspectRatio: stored.aspectRatio,
-            width: stored.width, height: stored.height, durationS: stored.durationS, filename: stored.filename,
+            mimeType: stored.mimeType, mediaType: stored.mediaType,
+            aspectRatio: meta?.aspectRatio ?? stored.aspectRatio,
+            width: meta?.width ?? stored.width, height: meta?.height ?? stored.height,
+            durationS: meta?.durationS ?? stored.durationS, filename: stored.filename,
           });
+          void saveMediaFile(projectId, stored.blob, {
+            mimeType: stored.mimeType, mediaType: stored.mediaType,
+            aspectRatio: meta?.aspectRatio ?? stored.aspectRatio,
+            width: meta?.width ?? 0, height: meta?.height ?? 0,
+            durationS: meta?.durationS ?? 0, filename: stored.filename,
+          }).catch(() => {});
           setMediaState(getMedia(projectId));
-        }
+        });
       });
     }
     return subscribeMedia(id => { if (id === projectId) setMediaState(getMedia(projectId)); });
@@ -179,7 +194,7 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
   const run = useCallback(async (refFile?: File) => {
     if (!projectId) return;
     setError(null);
-    const stored = await loadMediaFile(projectId);
+    const stored = await getProjectMedia(projectId);
     const entry = getMedia(projectId);
     const blob = stored?.blob;
     if (!blob) { setError('Upload your footage first.'); return; }
@@ -301,6 +316,8 @@ export default function Studio({ projectId, projectName }: { projectId: string; 
       mimeType: entry.mimeType, mediaType: entry.mediaType, aspectRatio: entry.aspectRatio,
       width: entry.width, height: entry.height, durationS: entry.durationS, filename: entry.filename,
     }).catch(() => {});
+    // Durable server copy (no-op when the host has no durable storage).
+    void uploadProjectMedia(projectId, 'main', f, f.name).catch(() => {});
   }, [projectId, setMediaEntry]);
 
   /**

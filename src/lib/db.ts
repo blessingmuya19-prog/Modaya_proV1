@@ -58,6 +58,12 @@ export interface Project {
   sizeMb:      number;
   /** Poster frame captured at upload, stored as a small JPEG data URL */
   thumbnail:   string;
+  /** Durable media held in the server object store (ext per role), so a
+      reopened project knows which objects exist and can stream them back. */
+  media?: {
+    main?: { ext: string };
+    refs?: { ext: string }[];
+  };
   /** Speech recognition output, once it has run. */
   transcript?: Transcript;
   /** The timeline as it stood before the last AI edit, so one step can be

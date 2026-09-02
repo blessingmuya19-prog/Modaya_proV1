@@ -52,7 +52,7 @@ what happened.
 | --- | --- |
 | Framework | Next.js 16 (App Router), React 19, TypeScript |
 | Rendering | Custom **canvas compositor** (`src/lib/render/engine.ts`) — cuts, push-ins, grading, overlays, double-buffered playback |
-| Persistence (media) | Browser **IndexedDB** (`src/lib/mediaDb.ts`) — per-device |
+| Persistence (media) | Browser **IndexedDB** (`src/lib/mediaDb.ts`) for instant recovery, plus a durable **server object store** (`src/lib/server/mediaStore.ts` + `mediaCloud.ts`): local disk on self-host, S3/R2 in the cloud, in-memory fallback on serverless |
 | Persistence (accounts/projects) | In-process store (`src/lib/db.ts`) — **see limitations** |
 | Auth | Email/password, bcrypt hashing, JWT sessions |
 | AI text | Provider-agnostic (`src/lib/ai/llm.ts`): Groq, Gemini, OpenRouter, Cloudflare, local Ollama — auto-detected |
@@ -240,18 +240,45 @@ branch deploys), then **redeploy** — variables are read at build time.
 | `src/lib/studio/editPlan.ts` | The EditPlan brain: hook-first moment selection, 9:16/16:9 format, real captions, punch-ins, B-roll cutaways |
 | `src/lib/studio/refine.ts` | Maps "make it faster / more punch-ins / more captions" onto the StyleProfile and regenerates the plan |
 | `src/lib/studio/pipeline.ts` | Pure Studio spine: ordered stages, progress, grounded reference-match score |
-| `src/lib/db.ts` / `mediaDb.ts` | Server store (ephemeral on Vercel) / browser media |
+| `src/lib/db.ts` / `mediaDb.ts` | Server project records / browser IndexedDB media |
+| `src/lib/server/mediaStore.ts` | Durable object store: S3/R2 (SigV4), local fs, in-memory; signed media URLs |
+| `src/lib/mediaKeys.ts` / `mediaCloud.ts` | Isomorphic object-key paths / browser client (capability, upload, cross-device rehydrate) |
+| `src/app/api/media/…` | Media routes: PUT bytes, Range-aware GET (cookie or HMAC token), DELETE cascade |
 
 ---
 
-## 7. Suggested next steps (in priority order)
+## 7. Durable media storage
 
-1. **Durable storage** — managed DB for accounts/projects + object storage for
-   media; this also unlocks a public URL for the TwelveLabs ranker. (Real-time
-   browser export now exists; a future ffmpeg/WebCodecs path could export
-   faster than real time.)
-2. **Pegasus upload staging** — a route that hosts/links uploaded video so the
-   visual ranker works on browser uploads.
+Source footage lives in the browser (IndexedDB) for instant tab-refresh
+recovery, and is *also* uploaded to a durable server object store so a project
+reopens on any device and a remote ranker can fetch it.
+
+- `src/lib/server/mediaStore.ts` — swappable object store with no SDK / no new
+  dependencies. Drivers chosen by environment: **S3/R2-compatible** (hand-rolled
+  SigV4 signing over `fetch`, works with Cloudflare R2, AWS S3, MinIO, B2) when
+  the S3 vars are set; **local filesystem** (`<DATA_DIR>/media`, default
+  `./data/media`) for dev and self-hosted servers; **in-memory** fallback on
+  read-only serverless hosts, where the client quietly keeps using IndexedDB.
+- `src/lib/mediaKeys.ts` — isomorphic per-project object keys
+  (`<project>/main.<ext>`, `/ref/<n>`, `/broll/<n>`, `/out`).
+- `src/app/api/media/…` — `PUT` bytes (auth + ownership checked), `GET` stream
+  with HTTP **Range** support for seeking; accepts the session cookie or a
+  short-lived **HMAC-signed URL** (`?token&exp`) so an external service can
+  reach the footage. Project deletion cascades to stored objects.
+- `src/lib/mediaCloud.ts` — browser client: capability probe, fire-and-forget
+  upload after a local save, and `getProjectMedia()` which reads IndexedDB
+  first then the server copy (re-probing metadata and re-caching locally).
+
+With durable storage **and** `PUBLIC_BASE_URL` set, the clips route
+automatically mints a signed URL for the footage so TwelveLabs Pegasus can rank
+the visuals — no separate upload step. All of it degrades to the old behaviour
+when storage is absent.
+
+## 8. Suggested next steps (in priority order)
+
+1. ~~Durable storage + Pegasus upload staging~~ — done (section 7).
+2. **Separate B-roll upload** — the drop zone + `/broll/` objects so cutaways
+   draw from a dedicated library instead of reusing source windows.
 3. Make the left-nav edit panels (effects/transitions/text) actually apply
    operations, or clearly label them as previews.
 4. Faster-than-real-time export (WebCodecs/ffmpeg-wasm) for long videos.
