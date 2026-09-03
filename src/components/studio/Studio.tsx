@@ -441,9 +441,9 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     // The output frame follows the plan's format (9:16 vertical for shorts),
     // not the source media's shape — the renderer cover-crops to fit it.
     return buildSequence(clips as never[], {
-      durationS: totalS,
-      width: frame.width,
-      height: frame.height,
+      durationS: totalS || 1,
+      width: frame.width || 1080,
+      height: frame.height || 1920,
       sourceId: projectId || 'main',
       style: styleLayer,
     });
@@ -815,8 +815,9 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
   }
 
   /* ─────────── result phase ─────────── */
-  const mm = String(Math.floor(totalS / 60));
-  const ss = String(Math.floor(totalS % 60)).padStart(2, '0');
+  const safeTotal = Number.isFinite(totalS) && totalS > 0 ? totalS : 0;
+  const mm = String(Math.floor(safeTotal / 60));
+  const ss = String(Math.floor(safeTotal % 60)).padStart(2, '0');
   const currentVersion = versions.length ? versions[versions.length - 1] : null;
 
   /** Synced playback for side-by-side: scrub/play both by progress fraction. */

@@ -240,7 +240,8 @@ const ICON: Record<EditMarkerType, string> = {
 export function markerIcon(t: EditMarkerType): string { return ICON[t]; }
 
 export function fmtTime(s: number): string {
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
+  const safe = Number.isFinite(s) && s > 0 ? s : 0;
+  const m = Math.floor(safe / 60);
+  const sec = Math.floor(safe % 60);
   return `${m}:${String(sec).padStart(2, '0')}`;
 }
