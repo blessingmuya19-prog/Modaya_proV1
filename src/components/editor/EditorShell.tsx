@@ -51,7 +51,7 @@ import {
   AlignLeft, AlignCenter, AlignRight,
   Bold, Italic, Underline, Scissors, MousePointer,
   ArrowLeft, Send, RotateCcw, ChevronDown, Film,
-  Volume2, VolumeX, Mic, Music,
+  Volume2, VolumeX, Mic, Music, Users, Sparkles,
 } from 'lucide-react';
 import {
   DEFAULT_MIXER_CONFIG, MIX_PRESETS, type MultiTrackMixerConfig,
@@ -59,6 +59,9 @@ import {
 import {
   getDuckingGainAt, speechSegmentsFromTranscript, type SpeechSegment,
 } from '@/lib/audio/ducking';
+import {
+  diarizeTranscript, type DiarizationResult, type SpeakerStats,
+} from '@/lib/ai/diarization';
 
 /* ── App palette ── */
 const C = {
@@ -1082,13 +1085,38 @@ function AudioPanel({
   onUpdateAudioMix,
   playheadS = 0,
   transcriptSegments = [],
+  rawTranscriptSegments = [],
 }: {
   audioMix?: MultiTrackMixerConfig;
   onUpdateAudioMix?: (mix: MultiTrackMixerConfig) => void;
   playheadS?: number;
   transcriptSegments?: SpeechSegment[];
+  rawTranscriptSegments?: import('@/lib/mediaDb').StoredTranscriptSegment[];
 }) {
   const mix = audioMix;
+  const [speakerTrim, setSpeakerTrim] = React.useState<Record<string, number>>({});
+  const [rebalanced, setRebalanced] = React.useState(false);
+
+  const diarization = React.useMemo(() => {
+    if (!rawTranscriptSegments || rawTranscriptSegments.length === 0) return null;
+    return diarizeTranscript(rawTranscriptSegments);
+  }, [rawTranscriptSegments]);
+
+  const handleAutoRebalance = () => {
+    if (!diarization) return;
+    setRebalanced(true);
+    const newTrims: Record<string, number> = {};
+    for (const spk of diarization.speakers) {
+      newTrims[spk.id] = spk.targetGainDb;
+    }
+    setSpeakerTrim(newTrims);
+    if (onUpdateAudioMix) {
+      onUpdateAudioMix({
+        ...mix,
+        voiceEnhance: true,
+      });
+    }
+  };
 
   const setMix = (patch: Partial<MultiTrackMixerConfig>) => {
     if (!onUpdateAudioMix) return;
@@ -1211,6 +1239,64 @@ function AudioPanel({
             </div>
           </div>
         </>
+      )}
+
+      <Divider />
+
+      {/* Multi-Speaker Diarization & Auto-Rebalancing Section */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+        <SectionLabel>Speaker Diarization & Leveling</SectionLabel>
+        {diarization && diarization.speakers.length > 0 && (
+          <button
+            onClick={handleAutoRebalance}
+            style={{
+              padding:'3px 8px', borderRadius:9999, border:'1px solid rgba(56,189,248,0.4)',
+              background:'rgba(56,189,248,0.12)', color:'#38BDF8', fontSize:10, fontWeight:600,
+              cursor:'pointer', display:'flex', alignItems:'center', gap:4,
+            }}
+          >
+            <Sparkles size={10} /> {rebalanced ? 'Rebalanced' : 'Auto-Balance'}
+          </button>
+        )}
+      </div>
+
+      {diarization && diarization.speakers.length > 0 ? (
+        <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:12 }}>
+          {diarization.speakers.map(spk => {
+            const currentGainDb = speakerTrim[spk.id] ?? spk.targetGainDb;
+            return (
+              <div key={spk.id} style={{ padding:'7px 9px', background:C.s3, borderRadius:7, border:`1px solid ${C.b2}` }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                    <div style={{ width:7, height:7, borderRadius:'50%', background:spk.color }} />
+                    <span style={{ ...ty.propVal, fontSize:11, fontWeight:600 }}>{spk.label}</span>
+                  </div>
+                  <span style={{ ...ty.meta, fontSize:10, color:C.sec }}>
+                    {spk.percentage}% ({spk.totalTimeS}s)
+                  </span>
+                </div>
+                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                  <input
+                    type="range" min="-6.0" max="6.0" step="0.5"
+                    value={currentGainDb}
+                    onChange={e => setSpeakerTrim(prev => ({ ...prev, [spk.id]: Number(e.target.value) }))}
+                    style={{ flex:1, accentColor: spk.color, cursor:'pointer' }}
+                  />
+                  <span style={{ ...ty.niVal, minWidth:42, textAlign:'right', fontSize:10 }}>
+                    {currentGainDb > 0 ? `+${currentGainDb.toFixed(1)}` : currentGainDb.toFixed(1)} dB
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div style={{ padding:'8px 10px', background:C.s2, borderRadius:7, border:`1px solid ${C.b2}`, marginBottom:12 }}>
+          <span style={{ ...ty.meta, fontSize:10.5, color:C.muted, display:'block', lineHeight:1.35 }}>
+            <Users size={11} style={{ display:'inline', verticalAlign:'middle', marginRight:4 }} />
+            Transcribe audio in the AI editor to identify multiple speakers and automatically normalize speech levels.
+          </span>
+        </div>
       )}
 
       <Divider />
@@ -1377,6 +1463,7 @@ interface PropertiesPanelProps {
   audioMix?: MultiTrackMixerConfig;
   onUpdateAudioMix?: (mix: MultiTrackMixerConfig) => void;
   transcriptSegments?: SpeechSegment[];
+  rawTranscriptSegments?: import('@/lib/mediaDb').StoredTranscriptSegment[];
   playheadS?: number;
   totalS?: number;
   mediaEntry?: ReturnType<typeof getMedia> | null;
@@ -1395,6 +1482,7 @@ function PropertiesPanelBase({
   audioMix = DEFAULT_MIXER_CONFIG,
   onUpdateAudioMix,
   transcriptSegments = [],
+  rawTranscriptSegments = [],
   playheadS = 0,
   totalS = 60,
   mediaEntry = null,
@@ -1407,7 +1495,7 @@ function PropertiesPanelBase({
     if (tab === 'Effects')     return <EffectsPanel clips={clips} styleLayer={styleLayer} onUpdateStyleLayer={onUpdateStyleLayer} />;
     if (tab === 'Overlays')    return <OverlaysPanel clips={clips} onUpdateClips={onUpdateClips} playheadS={playheadS} totalS={totalS} onPushHistory={onPushHistory} onSetTab={onSetTab} />;
     if (tab === 'Colour')      return <ColourPanel clips={clips} styleLayer={styleLayer} onUpdateStyleLayer={onUpdateStyleLayer} />;
-    if (tab === 'Audio')       return <AudioPanel audioMix={audioMix} onUpdateAudioMix={onUpdateAudioMix} playheadS={playheadS} transcriptSegments={transcriptSegments} />;
+    if (tab === 'Audio')       return <AudioPanel audioMix={audioMix} onUpdateAudioMix={onUpdateAudioMix} playheadS={playheadS} transcriptSegments={transcriptSegments} rawTranscriptSegments={rawTranscriptSegments} />;
     if (tab === 'Uploads')     return <UploadsPanel mediaEntry={mediaEntry} projectName={projectName} totalS={totalS} />;
     // Text / Canvas / Subtitles
     return <TextInspectorPanel clips={clips} onUpdateClips={onUpdateClips} playheadS={playheadS} totalS={totalS} onPushHistory={onPushHistory} />;
@@ -2713,6 +2801,7 @@ export function EditorShell({
   const [styledDur,    setStyledDur   ] = useState<number | null>(null);
   const [audioMix,     setAudioMix    ] = useState<MultiTrackMixerConfig>(DEFAULT_MIXER_CONFIG);
   const [speechSegments, setSpeechSegments] = useState<SpeechSegment[]>([]);
+  const [rawTranscriptSegments, setRawTranscriptSegments] = useState<import('@/lib/mediaDb').StoredTranscriptSegment[]>([]);
   const [playing,      setPlaying     ] = useState(false);
   const [phS,          setPhS         ] = useState(0);
   const [tab,          setTab         ] = useState('Text');
@@ -2722,6 +2811,7 @@ export function EditorShell({
     if (!projectId) return;
     loadTranscript(projectId).then(t => {
       if (t?.segments?.length) {
+        setRawTranscriptSegments(t.segments);
         setSpeechSegments(speechSegmentsFromTranscript(t));
       }
     }).catch(() => {});
@@ -2985,6 +3075,7 @@ export function EditorShell({
                   audioMix={audioMix}
                   onUpdateAudioMix={setAudioMix}
                   transcriptSegments={speechSegments}
+                  rawTranscriptSegments={rawTranscriptSegments}
                   playheadS={phS}
                   totalS={totalS}
                   mediaEntry={mediaEntry}

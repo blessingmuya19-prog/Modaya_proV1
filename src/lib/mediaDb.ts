@@ -158,11 +158,21 @@ export async function loadFrames(projectId: string): Promise<string[]> {
  * is the one place that reliably remembers, so the transcript lives here and
  * travels with each AI request.
  */
+export interface StoredTranscriptSegment {
+  startS: number;
+  endS: number;
+  text: string;
+  speaker?: string;
+  speakerId?: string;
+  rms?: number;
+}
+
 export interface StoredTranscript {
-  segments: { startS: number; endS: number; text: string }[];
+  segments: StoredTranscriptSegment[];
   language: string;
   model:    string;
   madeAt:   string;
+  speakers?: Array<{ id: string; label: string; color: string; volumeGain?: number }>;
 }
 
 export async function saveTranscript(projectId: string, t: StoredTranscript) {

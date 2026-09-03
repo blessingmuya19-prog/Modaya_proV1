@@ -349,4 +349,7 @@ when storage is absent.
    auto-ducking engine with attack/release envelopes (`src/lib/audio/ducking.ts`),
    multi-track sound mixing (`src/lib/audio/soundMixer.ts`), interactive Audio
    panel in Editor, and WebAudio gain graph integration in `engine.ts`.
-8. AI-assisted multi-speaker diarization and automated speaker rebalancing.
+8. ~~AI-assisted multi-speaker diarization and automated speaker rebalancing~~ — done:
+   acoustic pitch/energy analysis & conversational turn clustering (`src/lib/ai/diarization.ts`),
+   per-speaker loudness normalization & trim controls in Audio panel, and in-memory PCM leveling.
+9. Motion tracking and dynamic text/sticker anchoring to on-screen subjects.
