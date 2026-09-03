@@ -85,6 +85,9 @@ function probeVideoDuration(blob: Blob): Promise<number> {
   });
 }
 
+/** In-memory fast cache for uploaded footage within the current session. */
+const sessionFootageCache = new Map<string, FootageSource>();
+
 /** The footage bytes Modaya analyses, plus enough metadata to run. */
 interface FootageSource {
   blob: Blob;
@@ -95,23 +98,30 @@ interface FootageSource {
 
 /**
  * Resolve the project's footage bytes from the best available source:
- *   1. the persistent store (IndexedDB hot path, then the durable cloud), and
- *   2. this session's in-memory entry — it holds a `blob:` object URL from
+ *   1. the in-memory fast session cache,
+ *   2. the persistent store (IndexedDB hot path, then the durable cloud), and
+ *   3. this session's in-memory entry — it holds a `blob:` object URL from
  *      which the bytes can be fetched even when the file was too big for
  *      IndexedDB (600 MB cap / quota / private mode) on a host with no
- *      durable cloud. The footage is genuinely uploaded (it plays), so we use
- *      it rather than wrongly telling the user to re-upload.
+ *      durable cloud.
  * Returns null only when there is truly no footage anywhere.
  */
 async function resolveFootage(projectId: string, entry: MediaEntry | null): Promise<FootageSource | null> {
+  const inMem = sessionFootageCache.get(projectId);
+  if (inMem && inMem.blob && inMem.blob.size > 0) {
+    return inMem;
+  }
+
   const stored = await getProjectMedia(projectId).catch(() => null);
   if (stored?.blob && stored.blob.size > 0) {
-    return {
+    const src: FootageSource = {
       blob: stored.blob,
       filename: stored.filename || entry?.filename || 'footage.mp4',
       durationS: stored.durationS || entry?.durationS || 0,
       mimeType: stored.mimeType || entry?.mimeType || 'video/mp4',
     };
+    sessionFootageCache.set(projectId, src);
+    return src;
   }
 
   const url = entry?.objectUrl;
@@ -121,12 +131,14 @@ async function resolveFootage(projectId: string, entry: MediaEntry | null): Prom
       if (res.ok) {
         const blob = await res.blob();
         if (blob && blob.size > 0) {
-          return {
+          const src: FootageSource = {
             blob,
             filename: entry?.filename || 'footage.mp4',
             durationS: entry?.durationS || 0,
             mimeType: entry?.mimeType || blob.type || 'video/mp4',
           };
+          sessionFootageCache.set(projectId, src);
+          return src;
         }
       }
     } catch { /* object URL gone — fall through */ }
@@ -646,7 +658,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         // Rebuild context from the latest version's recipe.
         const last = existing[existing.length - 1];
         const footage = await resolveFootage(projectId, media);
-        if (!footage) { void run(); return; }
+        if (!footage) return;
         let env: Awaited<ReturnType<typeof analyseAudio>> = null;
         try { env = await analyseAudio(footage.blob); } catch { /* silent */ }
         const durationS = footage.durationS || media.durationS || 60;
@@ -674,8 +686,6 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           const refBlob = await getReferenceBlob(projectId, 0);
           if (refBlob) setRefUrl(URL.createObjectURL(refBlob.blob));
         } catch { /* reference is optional */ }
-      } else {
-        void run();
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -694,6 +704,12 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
       durationS: meta?.durationS ?? 0,
       filename: f.name,
     };
+    sessionFootageCache.set(projectId, {
+      blob: f,
+      filename: f.name,
+      durationS: meta?.durationS ?? 0,
+      mimeType: f.type || 'video/mp4',
+    });
     setMediaEntry(entry);
     await saveMediaFile(projectId, f, {
       mimeType: entry.mimeType, mediaType: entry.mediaType, aspectRatio: entry.aspectRatio,
@@ -1188,13 +1204,14 @@ function DropScreen({ projectId, projectName, mode, onModeChange, hasFootage, on
   const [linkError, setLinkError] = useState<string | null>(null);
   const [rangeText, setRangeText] = useState('');
   const [note, setNote] = useState('');
+  const [localError, setLocalError] = useState<string | null>(null);
   const ready = !!hasFootage || !!footName;
   const refReady = ref.kind !== 'none';
 
   const useLink = async () => {
     const url = linkUrl.trim();
     if (!url) return;
-    setLinkBusy(true); setLinkError(null);
+    setLinkBusy(true); setLinkError(null); setLocalError(null);
     try {
       const { fetchReferenceLink } = await import('@/lib/referenceLink');
       const res = await fetchReferenceLink(url);
@@ -1218,7 +1235,17 @@ function DropScreen({ projectId, projectName, mode, onModeChange, hasFootage, on
   const rangeValid = !rangeText.trim() || !!parseRange();
 
   const create = () => {
-    if (!ready || !rangeValid || linkBusy) return;
+    if (linkBusy) return;
+    if (!ready) {
+      setLocalError('Please select or drop your video footage first.');
+      footageRef.current?.click();
+      return;
+    }
+    if (!rangeValid) {
+      setLocalError('Please enter a valid time range format (e.g. 00:10 – 01:00).');
+      return;
+    }
+    setLocalError(null);
     const n = note.trim();
     if (ref.kind === 'none') { onStart(n); return; }
     onReference(ref.file, parseRange(), n);
@@ -1260,13 +1287,18 @@ function DropScreen({ projectId, projectName, mode, onModeChange, hasFootage, on
           <p style={{ color: C.dim, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px' }}>Your video</p>
           <DropZone
             label={hasFootage || footName ? (footName ?? 'Footage ready') : 'Your footage'}
-            sub={hasFootage || footName ? 'Tap to replace' : 'Upload the video you want edited'}
+            sub={hasFootage || footName ? 'Ready · tap or drop another video to replace' : 'Upload or drop the video you want edited'}
             icon={<Film size={22} />}
             onClick={() => footageRef.current?.click()}
             filled={!!(hasFootage || footName)}
+            onFileDrop={f => {
+              setFootName(f.name);
+              setLocalError(null);
+              void onFootage(f);
+            }}
           />
           <input ref={footageRef} type="file" accept="video/*" style={{ display: 'none' }}
-            onChange={e => { const f = e.target.files?.[0]; if (f) { setFootName(f.name); void onFootage(f); } e.target.value = ''; }} />
+            onChange={e => { const f = e.target.files?.[0]; if (f) { setFootName(f.name); setLocalError(null); void onFootage(f); } e.target.value = ''; }} />
 
           {/* Reference block — front-and-centre in reference mode, collapsed by
               default in plain Edit mode. The reference is STYLE material, never
@@ -1478,10 +1510,23 @@ function DropScreen({ projectId, projectName, mode, onModeChange, hasFootage, on
               fontFamily: F, fontSize: 14, lineHeight: 1.5, padding: '12px 14px', resize: 'vertical', outline: 'none' }}
           />
 
-          {error && <p style={{ color: C.danger, fontSize: 13, margin: '16px 0 0' }}>{error}</p>}
+          {(localError || error) && (
+            <p style={{
+              color: C.danger,
+              fontSize: 13,
+              margin: '16px 0 0',
+              background: 'rgba(239, 68, 68, 0.1)',
+              padding: '10px 14px',
+              borderRadius: 8,
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              lineHeight: 1.4,
+            }}>
+              {localError || error}
+            </p>
+          )}
 
           <div style={{ marginTop: 26 }}>
-            <GlowButton size="lg" fullWidth onClick={create} disabled={!ready || !rangeValid || linkBusy}
+            <GlowButton size="lg" fullWidth onClick={create} disabled={linkBusy}
               icon={<Wand2 size={18} />}>
               {linkBusy ? 'Fetching reference…' : refReady ? 'Generate edit in this style' : 'Generate my edit'}
             </GlowButton>
@@ -1542,19 +1587,60 @@ function LinkIcon({ size = 16, color, style }: { size?: number; color?: string; 
   );
 }
 
-function DropZone({ label, sub, icon, onClick, filled }: { label: string; sub: string; icon: React.ReactNode; onClick: () => void; filled: boolean }) {
+function DropZone({
+  label,
+  sub,
+  icon,
+  onClick,
+  filled,
+  onFileDrop,
+}: {
+  label: string;
+  sub: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+  filled: boolean;
+  onFileDrop?: (file: File) => void;
+}) {
+  const [isDragOver, setIsDragOver] = useState(false);
+
   return (
-    <button onClick={onClick} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left',
-      padding: '22px 18px', borderRadius: 14, cursor: 'pointer',
-      background: filled ? `${C.accent}0e` : C.s2, border: `1.5px dashed ${filled ? C.accent + '66' : C.b3}`, color: C.text, transition: 'all 140ms' }}
+    <div
+      onClick={onClick}
+      onDragOver={e => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragOver(true);
+      }}
+      onDragLeave={e => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragOver(false);
+      }}
+      onDrop={e => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragOver(false);
+        const f = e.dataTransfer.files?.[0];
+        if (f && (f.type.startsWith('video/') || /\.(mp4|mov|webm|m4v|avi|mkv)$/i.test(f.name))) {
+          onFileDrop?.(f);
+        }
+      }}
+      style={{
+        width: '100%', display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left',
+        padding: '22px 18px', borderRadius: 14, cursor: 'pointer',
+        background: isDragOver ? `${C.accent}22` : filled ? `${C.accent}0e` : C.s2,
+        border: `1.5px dashed ${isDragOver ? C.accent : filled ? C.accent + '66' : C.b3}`,
+        color: C.text, transition: 'all 140ms'
+      }}
       onMouseEnter={e => { e.currentTarget.style.borderColor = C.accent + '88'; }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = filled ? C.accent + '66' : C.b3; }}>
+      onMouseLeave={e => { e.currentTarget.style.borderColor = isDragOver ? C.accent : filled ? C.accent + '66' : C.b3; }}>
       <span style={{ width: 44, height: 44, borderRadius: 11, background: filled ? `${C.accent}1c` : C.s3, display: 'flex', alignItems: 'center', justifyContent: 'center', color: filled ? C.accent : C.muted, flexShrink: 0 }}>{icon}</span>
       <span>
         <span style={{ display: 'block', fontWeight: 600, fontSize: 15, letterSpacing: '-0.01em' }}>{label}</span>
         <span style={{ display: 'block', color: C.muted, fontSize: 12.5, marginTop: 2 }}>{sub}</span>
       </span>
-    </button>
+    </div>
   );
 }
 
