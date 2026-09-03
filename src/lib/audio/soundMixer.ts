@@ -14,6 +14,8 @@ import {
   SpeechSegment,
   getDuckingGainAt,
 } from './ducking';
+import type { SfxMixConfig } from './sfxEngine';
+import { DEFAULT_SFX_CONFIG } from './sfxEngine';
 
 export type TrackType = 'master' | 'voice' | 'music' | 'sfx' | 'broll';
 
@@ -32,6 +34,7 @@ export interface MultiTrackMixerConfig {
   sfx:    ChannelMix;
   broll:  ChannelMix;
   ducking: DuckingOptions & { enabled: boolean };
+  sfxDesign?: SfxMixConfig;
   voiceEnhance: boolean;   // dialogue clarity & leveling
   preset?: 'dialogue_focus' | 'cinematic' | 'music_forward' | 'clean' | 'custom';
 }
@@ -47,6 +50,7 @@ export const DEFAULT_MIXER_CONFIG: MultiTrackMixerConfig = {
     enabled: true,
     duckVolume: 0.22, // ~ -13dB
   },
+  sfxDesign: DEFAULT_SFX_CONFIG,
   voiceEnhance: true,
   preset: 'dialogue_focus',
 };

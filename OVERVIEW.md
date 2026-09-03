@@ -367,3 +367,6 @@ when storage is absent.
    word-level timing interpolation & spring bounce scale/glow states (`src/lib/render/captionStyler.ts`),
    viral presets (MrBeast yellow pop, Hormozi green badge, Neon glow, Crimson punch, Clean minimal),
    canvas compositor word-by-word active rendering in `engine.ts`, and interactive Subtitles inspector panel in `EditorShell.tsx`.
+13. ~~Procedural Sound Effects (SFX) & Beat-Synced Audio Cue Engine~~ — done:
+   DSP procedural WebAudio synthesis for cinematic SFX (whoosh, pop, impact, riser, click, ding) without external dependencies (`src/lib/audio/sfxEngine.ts`),
+   spectral flux musical beat and tempo detection, automated sound cue placement on cuts and titles, and interactive sound design controls in Audio panel.

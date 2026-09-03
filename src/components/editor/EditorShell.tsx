@@ -81,6 +81,11 @@ import {
   type CaptionStylePreset,
   type CaptionAnimation,
 } from '@/lib/render/captionStyler';
+import {
+  synthesizeSfxPcm,
+  generateEditSoundCues,
+  type SfxType,
+} from '@/lib/audio/sfxEngine';
 
 /* ── App palette ── */
 const C = {
@@ -1576,12 +1581,14 @@ function UploadsPanel({
 }
 
 function AudioPanel({
+  clips = [],
   audioMix = DEFAULT_MIXER_CONFIG,
   onUpdateAudioMix,
   playheadS = 0,
   transcriptSegments = [],
   rawTranscriptSegments = [],
 }: {
+  clips?: EditorClip[];
   audioMix?: MultiTrackMixerConfig;
   onUpdateAudioMix?: (mix: MultiTrackMixerConfig) => void;
   playheadS?: number;
@@ -1591,6 +1598,34 @@ function AudioPanel({
   const mix = audioMix;
   const [speakerTrim, setSpeakerTrim] = React.useState<Record<string, number>>({});
   const [rebalanced, setRebalanced] = React.useState(false);
+
+  const auditionSfx = (type: SfxType) => {
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const pcm = synthesizeSfxPcm(type, ctx.sampleRate, { volume: 0.85 });
+      const buffer = ctx.createBuffer(1, pcm.length, ctx.sampleRate);
+      buffer.copyToChannel(pcm as Float32Array<ArrayBuffer>, 0);
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.connect(ctx.destination);
+      src.start();
+    } catch {}
+  };
+
+  const handleAutoSoundDesign = () => {
+    const cues = generateEditSoundCues(clips);
+    if (!onUpdateAudioMix) return;
+    onUpdateAudioMix({
+      ...mix,
+      sfxDesign: {
+        ...(mix.sfxDesign || { enabled: true, volume: 0.75, autoSoundDesign: true, beatSync: true, cues: [] }),
+        enabled: true,
+        cues,
+      },
+    });
+  };
 
   const diarization = React.useMemo(() => {
     if (!rawTranscriptSegments || rawTranscriptSegments.length === 0) return null;
@@ -1889,7 +1924,78 @@ function AudioPanel({
         </div>
       </div>
 
-      {/* B-Roll / SFX Channel */}
+      {/* Sound Effects & Design Section */}
+      <Divider />
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+        <SectionLabel>Sound Effects & Design</SectionLabel>
+        <button
+          onClick={handleAutoSoundDesign}
+          style={{
+            padding:'3px 8px', borderRadius:9999, border:'1px solid rgba(56,189,248,0.4)',
+            background:'rgba(56,189,248,0.12)', color:'#38BDF8', fontSize:10, fontWeight:600,
+            cursor:'pointer', display:'flex', alignItems:'center', gap:4,
+          }}
+        >
+          <Sparkles size={10} /> Auto-SFX
+        </button>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:4, marginBottom:10 }}>
+        {(['whoosh', 'pop', 'impact', 'riser', 'ding', 'click'] as SfxType[]).map(type => (
+          <button
+            key={type}
+            onClick={() => auditionSfx(type)}
+            style={{
+              padding:'6px 4px', background:C.s3, borderRadius:6, border:`1px solid ${C.b2}`,
+              cursor:'pointer', textAlign:'center', textTransform:'capitalize', fontSize:10.5,
+              color:C.text, display:'flex', alignItems:'center', justifyContent:'center', gap:3,
+            }}
+            title={`Audition ${type} sound effect`}
+          >
+            <Volume2 size={10} color={C.muted} /> {type}
+          </button>
+        ))}
+      </div>
+
+      {mix.sfxDesign?.cues && mix.sfxDesign.cues.length > 0 && (
+        <div style={{ padding:'6px 8px', background:C.s2, borderRadius:6, border:`1px solid ${C.b2}`, marginBottom:10 }}>
+          <span style={{ ...ty.meta, fontSize:10, color:'#34D399', display:'block' }}>
+            ✓ {mix.sfxDesign.cues.length} dynamic sound design cues mapped to cuts and titles
+          </span>
+        </div>
+      )}
+
+      {/* SFX Channel */}
+      <div style={{ marginBottom:10, padding:'7px 9px', background:C.s3, borderRadius:7, border:`1px solid ${C.b2}` }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+            <Volume2 size={12} color="#FACC15" />
+            <span style={{ ...ty.propVal, fontSize:11, fontWeight:600 }}>SFX / UI Design</span>
+          </div>
+          <button
+            onClick={() => setMix({ sfx: { ...mix.sfx, muted: !mix.sfx.muted } })}
+            style={{
+              background: mix.sfx.muted ? 'rgba(239,68,68,0.2)' : 'transparent',
+              border:`1px solid ${mix.sfx.muted ? '#EF4444' : C.b3}`,
+              borderRadius:4, padding:'2px 4px', color: mix.sfx.muted ? '#EF4444' : C.muted, cursor:'pointer',
+            }}
+          >
+            {mix.sfx.muted ? <VolumeX size={10} /> : <Volume2 size={10} />}
+          </button>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          <input
+            type="range" min="0" max="1.5" step="0.02" value={mix.sfx.muted ? 0 : mix.sfx.volume}
+            onChange={e => setMix({ sfx: { ...mix.sfx, volume: Number(e.target.value), muted: false } })}
+            style={{ flex:1, accentColor: '#FACC15', cursor:'pointer' }}
+          />
+          <span style={{ ...ty.niVal, minWidth:32, textAlign:'right' }}>
+            {mix.sfx.muted ? 'Mute' : `${Math.round(mix.sfx.volume * 100)}%`}
+          </span>
+        </div>
+      </div>
+
+      {/* B-Roll Channel */}
       <div style={{ marginBottom:10, padding:'7px 9px', background:C.s3, borderRadius:7, border:`1px solid ${C.b2}` }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
           <div style={{ display:'flex', alignItems:'center', gap:5 }}>
@@ -2000,7 +2106,7 @@ function PropertiesPanelBase({
     if (tab === 'Effects')     return <EffectsPanel clips={clips} styleLayer={styleLayer} onUpdateStyleLayer={onUpdateStyleLayer} />;
     if (tab === 'Overlays')    return <OverlaysPanel clips={clips} onUpdateClips={onUpdateClips} playheadS={playheadS} totalS={totalS} onPushHistory={onPushHistory} onSetTab={onSetTab} />;
     if (tab === 'Colour')      return <ColourPanel clips={clips} styleLayer={styleLayer} onUpdateStyleLayer={onUpdateStyleLayer} />;
-    if (tab === 'Audio')       return <AudioPanel audioMix={audioMix} onUpdateAudioMix={onUpdateAudioMix} playheadS={playheadS} transcriptSegments={transcriptSegments} rawTranscriptSegments={rawTranscriptSegments} />;
+    if (tab === 'Audio')       return <AudioPanel clips={clips} audioMix={audioMix} onUpdateAudioMix={onUpdateAudioMix} playheadS={playheadS} transcriptSegments={transcriptSegments} rawTranscriptSegments={rawTranscriptSegments} />;
     if (tab === 'Subtitles')   return <SubtitlesPanel clips={clips} onUpdateClips={onUpdateClips} onPushHistory={onPushHistory} playheadS={playheadS} />;
     if (tab === 'Uploads')     return <UploadsPanel mediaEntry={mediaEntry} projectName={projectName} totalS={totalS} />;
     // Text
