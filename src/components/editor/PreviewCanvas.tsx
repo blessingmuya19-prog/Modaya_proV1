@@ -106,11 +106,11 @@ export default function PreviewCanvas({
     const e = engineRef.current;
     if (!e) return;
     try {
-      if (Math.abs(playheadS - echoed.current) < 0.05) return;
-      if (Math.abs(e.time - playheadS) < 0.05) return;
-      e.seek(playheadS);
+      if (Math.abs(playheadS - echoed.current) < 0.04) return;
+      if (Math.abs(e.time - playheadS) < 0.04) return;
+      e.seek(playheadS, playing);
     } catch {}
-  }, [playheadS]);
+  }, [playheadS, playing]);
 
   return (
     <div ref={hostRef} style={{ position: 'relative', width: '100%', height: '100%', ...style }}>

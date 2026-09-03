@@ -91,7 +91,11 @@ export class PreviewEngine {
 
   attach(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    this.ctx    = canvas.getContext('2d', { alpha: false });
+    this.ctx    = canvas.getContext('2d', { alpha: false, desynchronized: true }) ?? canvas.getContext('2d', { alpha: false });
+    if (this.ctx) {
+      this.ctx.imageSmoothingEnabled = true;
+      this.ctx.imageSmoothingQuality = 'medium';
+    }
     this.ensurePool();
     this.renderFrame();
   }
@@ -117,6 +121,10 @@ export class PreviewEngine {
       const scale = Math.min(1, cap / Math.max(seq.width, seq.height));
       this.canvas.width  = Math.max(2, Math.round(seq.width  * scale));
       this.canvas.height = Math.max(2, Math.round(seq.height * scale));
+      if (this.ctx) {
+        this.ctx.imageSmoothingEnabled = true;
+        this.ctx.imageSmoothingQuality = 'medium';
+      }
     }
     this.syncSource(true);
     this.renderFrame();
@@ -134,6 +142,12 @@ export class PreviewEngine {
   private ensurePool() {
     if (this.pool.length) return;
     const onReady = () => { if (!this._playing && !this.destroyed) this.renderFrame(); };
+    const onBuffer = () => { this.stats.buffering = true; };
+    const onResume = () => {
+      this.stats.buffering = false;
+      if (this._playing && !this.destroyed) this.renderFrame();
+    };
+
     this.pool = [0, 1].map(() => {
       const v = document.createElement('video');
       v.playsInline  = true;
@@ -146,6 +160,10 @@ export class PreviewEngine {
       v.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px';
       v.addEventListener('loadeddata', onReady);
       v.addEventListener('seeked', onReady);
+      v.addEventListener('waiting', onBuffer);
+      v.addEventListener('stalled', onBuffer);
+      v.addEventListener('canplay', onResume);
+      v.addEventListener('playing', onResume);
       return v;
     });
     if (!this.overlayEl) {
@@ -161,6 +179,10 @@ export class PreviewEngine {
       ov.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px';
       ov.addEventListener('loadeddata', onReady);
       ov.addEventListener('seeked', onReady);
+      ov.addEventListener('waiting', onBuffer);
+      ov.addEventListener('stalled', onBuffer);
+      ov.addEventListener('canplay', onResume);
+      ov.addEventListener('playing', onResume);
       this.overlayEl = ov;
     }
   }
@@ -232,7 +254,7 @@ export class PreviewEngine {
   }
 
   /** Move the playhead. Repaints one composited frame even while paused. */
-  seek(t: number) {
+  seek(t: number, fast = false) {
     if (!this.seq) { this._time = Math.max(0, t); this.emitTime(true); return; }
     const clamped = Math.max(0, Math.min(this.seq.durationS, t));
     this._time = clamped;
@@ -243,7 +265,11 @@ export class PreviewEngine {
     if (clip && v.src) {
       const want = sourceTimeFor(clip, clamped);
       if (Math.abs(v.currentTime - want) > SEEK_EPSILON) {
-        try { v.currentTime = want; } catch {}
+        if (fast && 'fastSeek' in v && typeof (v as any).fastSeek === 'function') {
+          try { (v as any).fastSeek(want); } catch { try { v.currentTime = want; } catch {} }
+        } else {
+          try { v.currentTime = want; } catch {}
+        }
       }
     }
     this.emitTime(true);
@@ -279,7 +305,7 @@ export class PreviewEngine {
 
     // Pre-roll whatever comes after this clip
     const edge = nextBoundary(this.seq, this._time);
-    if (edge != null && edge - this._time < 2) {
+    if (edge != null && edge - this._time < 2.2) {
       const upcoming = baseClipAt(this.seq, edge + 0.001);
       if (upcoming && upcoming.id !== clip.id) {
         const nextUrl = this.sources.get(upcoming.sourceId);
@@ -288,7 +314,7 @@ export class PreviewEngine {
           if (spare.src !== nextUrl) { spare.src = nextUrl; try { spare.load(); } catch {} }
           spare.muted = true;
           const want = sourceTimeFor(upcoming, edge);
-          if (Math.abs(spare.currentTime - want) > 0.2) {
+          if (Math.abs(spare.currentTime - want) > 0.15) {
             try { spare.currentTime = want; } catch {}
           }
         }
@@ -305,15 +331,20 @@ export class PreviewEngine {
     const v    = this.el();
 
     if (clip) {
+      // Auto-recover if video paused unexpectedly due to buffer underrun in long video
+      if (this._playing && v.paused && !v.ended && v.readyState >= 2) {
+        void v.play().catch(() => {});
+      }
+
       // The element owns the clock while it is running — we only read it.
       const srcT = v.currentTime;
       const tlT  = clip.timelineIn + (srcT - clip.sourceIn);
 
       if (tlT >= clip.timelineOut - 0.001) {
-        // Clip finished — hand over to the pre-rolled element
+        // Clip finished — hand over to next clip
         this.advancePastClip(clip);
       } else {
-        this._time = tlT;
+        this._time = Math.max(clip.timelineIn, Math.min(clip.timelineOut, tlT));
         this.emitTime();
       }
       this.stats.buffering = v.readyState < 3;
@@ -344,21 +375,37 @@ export class PreviewEngine {
       return;
     }
 
+    // Check if next clip is continuous in the same video source (zero-gap uninterrupted playback)
+    const outgoing = this.el();
+    const nextUrl = this.sources.get(next.sourceId);
+    const isSameSource = outgoing.src === nextUrl;
+    const isContinuous = isSameSource && Math.abs(outgoing.currentTime - next.sourceIn) < 0.15;
+
+    if (isContinuous) {
+      this._time = next.timelineIn;
+      this.currentClipId = next.id;
+      this.stats.activeClip = next.id;
+      outgoing.muted = next.muted;
+      this.emitTime(true);
+      return;
+    }
+
     // Swap to the spare element, which has already been seeked to this point
     const spare   = this.other();
-    const nextUrl = this.sources.get(next.sourceId);
     if (nextUrl && spare.src === nextUrl) {
-      const outgoing = this.el();
       this.active = this.active === 0 ? 1 : 0;
       try { outgoing.pause(); } catch {}
       spare.muted = next.muted;
       void spare.play().catch(() => {});
+    } else if (isSameSource) {
+      try { outgoing.currentTime = next.sourceIn; } catch {}
+      outgoing.muted = next.muted;
     }
 
     this._time         = next.timelineIn;
     this.currentClipId = null;    // force a re-sync onto the new clip
     this.syncSource(false);
-    this.emitTime();
+    this.emitTime(true);
   }
 
   /* ─────────── B-roll cutaway ─────────── */
