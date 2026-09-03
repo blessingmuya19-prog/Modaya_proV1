@@ -20,8 +20,12 @@ export interface EditMarker {
   t: number;
   /** How long the thing lasts (captions / b-roll / a zoomed shot). */
   durS?: number;
-  /** Where it maps back to in the source footage, seconds (video markers). */
+  /** Where it maps back to in the source footage, seconds (video markers).
+   *  For a library B-roll this is a time inside that library clip instead. */
   sourceIn?: number;
+  /** True when this cutaway reads from an uploaded B-roll library clip
+   *  (rather than an unused window of the main footage). */
+  fromLibrary?: boolean;
   /** Ordinal among markers of the same kind (cut #0, zoom #1…), for mapping
    *  an edit onto the corresponding moment in the reference. */
   seq?: number;
@@ -71,6 +75,7 @@ export function buildEditMap(plan: StudioPlan): EditMarker[] {
     .forEach((c, i) => markers.push({
       id: `broll-${i}`, type: 'broll', t: c.startS,
       durS: c.endS - c.startS, sourceIn: c.sourceIn, label: 'B-roll', seq: brollN++,
+      fromLibrary: !!c.sourceId,
     }));
 
   // ── Captions: one band from the first to last line, not dozens of marks ──
@@ -135,7 +140,9 @@ export function explainMarker(m: EditMarker, ctx: ExplainCtx): string {
         : 'Burned-in captions of the words actually spoken.';
 
     case 'broll':
-      return 'B-roll cutaway from another strong moment in your footage — your audio keeps playing underneath.';
+      return m.fromLibrary
+        ? 'B-roll cutaway from your uploaded library — it illustrates what is being said while your audio keeps playing underneath.'
+        : 'B-roll cutaway from another strong moment in your footage — your audio keeps playing underneath.';
   }
 }
 

@@ -90,6 +90,50 @@ export async function deleteMediaFile(projectId: string) {
   await tx(STORE_FILE, 'readwrite', s => s.delete(projectId) as unknown as IDBRequest<undefined>);
 }
 
+/* ─────────────── B-roll library ─────────────── */
+
+/** Metadata for one uploaded B-roll clip. The bytes live in the files store
+ *  under `broll:<projectId>:<index>`; this record lists what exists so the
+ *  library can be restored (and re-indexed) on reopen. */
+export interface BrollMeta {
+  filename:  string;
+  mimeType:  string;
+  durationS: number;
+  width:     number;
+  height:    number;
+}
+
+const brollFileKey = (projectId: string, index: number) => `broll:${projectId}:${index}`;
+const BROLL_LIST_KEY = (projectId: string) => `broll-list:${projectId}`;
+
+export async function saveBrollLibrary(projectId: string, items: BrollMeta[]) {
+  if (!projectId) return;
+  await tx(STORE_VERSIONS, 'readwrite', s => s.put(items, BROLL_LIST_KEY(projectId)) as unknown as IDBRequest<BrollMeta[]>);
+}
+
+export async function loadBrollLibrary(projectId: string): Promise<BrollMeta[] | null> {
+  if (!projectId) return null;
+  return tx<BrollMeta[]>(STORE_VERSIONS, 'readonly', s => s.get(BROLL_LIST_KEY(projectId)) as unknown as IDBRequest<BrollMeta[]>);
+}
+
+export async function saveBrollFile(projectId: string, index: number, file: Blob, meta: BrollMeta) {
+  if (!projectId || !file || file.size > MAX_PERSIST_BYTES) return;
+  await tx(STORE_FILE, 'readwrite', s => s.put({ ...meta, blob: file }, brollFileKey(projectId, index)));
+}
+
+export async function loadBrollFile(projectId: string, index: number): Promise<(BrollMeta & { blob: Blob }) | null> {
+  if (!projectId) return null;
+  const rec = await tx<BrollMeta & { blob: Blob }>(STORE_FILE, 'readonly', s => s.get(brollFileKey(projectId, index)));
+  return rec && rec.blob ? rec : null;
+}
+
+export async function deleteBrollFiles(projectId: string, count: number) {
+  if (!projectId) return;
+  for (let i = 0; i < count; i++) {
+    await tx(STORE_FILE, 'readwrite', s => s.delete(brollFileKey(projectId, i)) as unknown as IDBRequest<undefined>);
+  }
+}
+
 /* ─────────────── frame strip cache ─────────────── */
 
 interface FrameRecord { frames: string[]; count: number }

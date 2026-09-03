@@ -94,6 +94,9 @@ export interface EditorClipLike {
 export interface StyleLayer {
   [clipId: string]: {
     sourceIn?:  number;
+    /** Points this clip at a different media object (e.g. a B-roll library
+     *  clip) instead of the main footage. */
+    sourceId?:  string;
     transform?: Partial<Transform>;
     effects?:   Partial<Effects>;
   };
@@ -118,10 +121,11 @@ export function buildSequence(
       label:       c.label,
       timelineIn:  Math.max(0, c.startS),
       timelineOut: Math.min(opts.durationS || c.endS, c.endS),
-      sourceId:    opts.sourceId,
       /* A styled clip reads from wherever the edit says — that's what makes a
          ripple edit possible: the programme is continuous while the source
-         jumps around the original file. */
+         jumps around the original file. A B-roll cutaway additionally reads
+         from a *different* media object (its own sourceId). */
+      sourceId:    st?.sourceId ?? opts.sourceId,
       sourceIn:    st?.sourceIn ?? Math.max(0, c.startS),
       transform:   { ...DEFAULT_TRANSFORM, ...(st?.transform ?? {}) },
       effects:     { ...DEFAULT_EFFECTS,   ...(st?.effects   ?? {}) },

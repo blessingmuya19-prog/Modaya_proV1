@@ -16,8 +16,8 @@ import Link from 'next/link';
 import { ArrowLeft, Film, Upload, Wand2, Download, RefreshCw, Sparkles, Send, SlidersHorizontal, CheckCircle2, Loader2, Plus } from 'lucide-react';
 import { LogoMark } from '../ui/Logo';
 import { getMedia, setMedia, subscribeMedia, analyseFile, type MediaEntry } from '@/lib/videoStore';
-import { saveMediaFile } from '@/lib/mediaDb';
-import { getProjectMedia, uploadProjectMedia, getReferenceBlob } from '@/lib/mediaCloud';
+import { saveMediaFile, saveBrollLibrary, saveBrollFile, loadBrollLibrary, deleteBrollFiles, type BrollMeta } from '@/lib/mediaDb';
+import { getProjectMedia, uploadProjectMedia, getReferenceBlob, getBrollLibrary, backupBrollToCloud, trimCloudBroll } from '@/lib/mediaCloud';
 import { analyseAudio, analyseReference, interestCurve } from '@/lib/ai/analyseReference';
 import type { StyleProfile } from '@/lib/ai/styleProfile';
 import { composeStudioPlan, type StudioPlan, type TranscriptLine } from '@/lib/studio/editPlan';
@@ -52,6 +52,38 @@ const C = {
 };
 
 type Phase = 'drop' | 'working' | 'result';
+
+/** One clip in the project's B-roll library — extra footage dropped purely as
+ *  cutaway material. The plan reads silent windows from these instead of
+ *  recycling parts of the main footage. */
+interface BrollItem {
+  blob:      Blob;
+  /** Object URL for the renderer (one per clip, revoked on removal). */
+  url:       string;
+  name:      string;
+  mimeType:  string;
+  /** Probed from the bytes; 0 until the probe settles. */
+  durationS: number;
+}
+
+/** The source id the renderer knows a library clip by (registered via
+ *  engine.setSource alongside the main footage). */
+const brollSourceId = (index: number) => `broll-${index}`;
+
+/** Probe a video blob's duration without keeping a player around. */
+function probeVideoDuration(blob: Blob): Promise<number> {
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(blob);
+    const el = document.createElement('video');
+    el.preload = 'metadata';
+    el.muted = true;
+    const done = (d: number) => { URL.revokeObjectURL(url); resolve(d); };
+    el.onloadedmetadata = () => done(isFinite(el.duration) ? el.duration : 0);
+    el.onerror = () => done(0);
+    setTimeout(() => done(isFinite(el.duration) ? el.duration : 0), 4000);
+    el.src = url;
+  });
+}
 
 /** The footage bytes Modaya analyses, plus enough metadata to run. */
 interface FootageSource {
@@ -205,6 +237,110 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
   /** Free-text instruction from the drop screen, used to label Version 1. */
   const initialNoteRef = useRef('');
 
+  // ── B-roll library: optional extra clips used purely as cutaways ──
+  const [brollItems, setBrollItems] = useState<BrollItem[]>([]);
+  /** Mirror for callbacks (run/applyPlan) so they never see stale items. */
+  const brollRef = useRef<BrollItem[]>([]);
+  brollRef.current = brollItems;
+  /** Highest count ever persisted locally, so a shrink can delete the extras. */
+  const brollPersistedCountRef = useRef(0);
+
+  /** Rewrite the local IndexedDB copy of the library (blobs by index). */
+  const persistBrollLocal = useCallback(async (items: BrollItem[]) => {
+    if (!projectId) return;
+    const prevCount = brollPersistedCountRef.current;
+    const meta: BrollMeta[] = items.map(it => ({
+      filename: it.name, mimeType: it.mimeType,
+      durationS: it.durationS, width: 0, height: 0,
+    }));
+    await saveBrollLibrary(projectId, meta).catch(() => {});
+    for (let i = 0; i < items.length; i++) {
+      await saveBrollFile(projectId, i, items[i].blob, meta[i]).catch(() => {});
+    }
+    if (prevCount > items.length) {
+      await deleteBrollFiles(projectId, prevCount).catch(() => {});
+    }
+    brollPersistedCountRef.current = items.length;
+  }, [projectId]);
+
+  /** Drop-screen: files added to the B-roll library. Durations are probed
+   *  from the bytes (the plan needs them to bound its cutaway windows). */
+  const addBrollFiles = useCallback((files: File[]) => {
+    const vids = files.filter(f => f.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|mkv)$/i.test(f.name));
+    if (!vids.length) return;
+    const added: BrollItem[] = vids.map(f => ({
+      blob: f, url: URL.createObjectURL(f), name: f.name,
+      mimeType: f.type || 'video/mp4', durationS: 0,
+    }));
+    const next = [...brollRef.current, ...added];
+    brollRef.current = next;                 // visible to a second drop in the same tick
+    setBrollItems(next);
+    void persistBrollLocal(next);
+    // Probe the new clips, then persist the corrected durations.
+    void Promise.all(added.map(a => probeVideoDuration(a.blob))).then(durs => {
+      const updated = brollRef.current.map(it => {
+        const k = added.findIndex(a => a.blob === it.blob && it.durationS === 0);
+        return k >= 0 && durs[k] > 0 ? { ...it, durationS: durs[k] } : it;
+      });
+      brollRef.current = updated;
+      setBrollItems(updated);
+      void persistBrollLocal(updated);
+    });
+  }, [persistBrollLocal]);
+
+  /** Drop-screen: remove one library clip (indexes shift down). */
+  const removeBroll = useCallback((index: number) => {
+    const prev = brollRef.current;
+    if (index < 0 || index >= prev.length) return;
+    URL.revokeObjectURL(prev[index].url);
+    const next = prev.filter((_, i) => i !== index);
+    brollRef.current = next;
+    setBrollItems(next);
+    void persistBrollLocal(next);
+    void trimCloudBroll(projectId, next.length);
+  }, [persistBrollLocal, projectId]);
+
+  /** Sources the renderer must know about, id → object URL. */
+  const brollSources = useMemo(() => {
+    const map: Record<string, string> = {};
+    brollItems.forEach((it, i) => { map[brollSourceId(i)] = it.url; });
+    return map;
+  }, [brollItems]);
+
+  // Rehydrate the library on reopen: IndexedDB first, then the durable store.
+  useEffect(() => {
+    if (!projectId) return;
+    let alive = true;
+    void (async () => {
+      const stored = await getBrollLibrary(projectId).catch(() => [] as Awaited<ReturnType<typeof getBrollLibrary>>);
+      if (!alive || !stored.length) return;
+      brollPersistedCountRef.current = stored.length;
+      const items: BrollItem[] = stored.map(it => ({
+        blob: it.blob, url: URL.createObjectURL(it.blob),
+        name: it.filename, mimeType: it.mimeType, durationS: it.durationS,
+      }));
+      setBrollItems(items);
+      if (items.some(it => !it.durationS)) {
+        const durs = await Promise.all(items.map(it => it.durationS || probeVideoDuration(it.blob)));
+        if (!alive) return;
+        setBrollItems(items.map((it, i) => ({ ...it, durationS: durs[i] || it.durationS })));
+      }
+    })();
+    return () => { alive = false; };
+  }, [projectId]);
+
+  /** When the library (re)hydrates into an already-finished project, rebuild
+   *  the current version's plan so its cutaways read from the library instead
+   *  of silently falling back to source windows. Deterministic: the same
+   *  profile + seed + library always produces the same plan. */
+  useEffect(() => {
+    if (phase !== 'result' || !ctxRef.current || !profileRef.current) return;
+    if (!brollItems.length) return;
+    if (brollItems.some(it => !it.durationS)) return;   // probe still pending
+    applyPlan(profileRef.current, seedRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brollItems, phase]);
+
   /** Compose the EditPlan from the current profile and push it to the preview.
    *  Shared by the first run, Regenerate and every chat refinement. Returns
    *  the plan plus the grounded reference-match score. */
@@ -215,6 +351,9 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
       profile, sourceDurationS: ctx.durationS,
       interest: ctx.interest, onsets: ctx.onsets,
       transcript: ctx.transcript.length ? ctx.transcript : undefined,
+      // Uploaded cutaway library, when one exists — the plan then reads its
+      // B-roll windows from these clips instead of the main footage.
+      brollLibrary: brollRef.current.map((it, i) => ({ id: brollSourceId(i), durationS: it.durationS })),
       seed,
     });
     setPlan(plan);
@@ -223,7 +362,12 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     const layer: StyleLayer = {};
     for (const c of plan.clips) {
       if (c.type === 'video') {
-        layer[c.id] = { sourceIn: c.sourceIn, transform: c.transform, effects: c.effects };
+        layer[c.id] = {
+          sourceIn: c.sourceIn,
+          // A library cutaway reads from its own media object.
+          ...(c.sourceId ? { sourceId: c.sourceId } : {}),
+          transform: c.transform, effects: c.effects,
+        };
       }
     }
     setClips(mapped);
@@ -317,6 +461,14 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     const footage = await resolveFootage(projectId, entry);
     if (!footage) { setError('Upload your footage first.'); setPhase('drop'); return; }
     const blob = footage.blob;
+
+    // Durable backup of the B-roll library (fire-and-forget): the plan reads
+    // these clips, so a reopened project needs them on any device.
+    const library = brollRef.current;
+    if (library.length) {
+      library.forEach((it, i) => backupBrollToCloud(projectId, i, it.blob, { filename: it.name }));
+      void trimCloudBroll(projectId, library.length);
+    }
 
     const withRef = !!refFile;
     cancelRef.current = false;
@@ -633,6 +785,9 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         onReference={(ref, range, note) => { initialNoteRef.current = note; void run({ ref, range }); }}
         onStart={(note) => { initialNoteRef.current = note; void run({ ref: null }); }}
         refInputRef={refInput}
+        broll={brollItems}
+        onBroll={addBrollFiles}
+        onRemoveBroll={removeBroll}
         error={error}
       />
     );
@@ -665,7 +820,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     <div style={{ ...previewBox(plan?.frame.ratio), background: C.media, borderRadius: 14, overflow: 'hidden', position: 'relative', border: `1px solid ${C.b3}`, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
       {sequence && sourceUrl ? (
         <PreviewCanvas
-          sequence={sequence} sourceUrl={sourceUrl} sourceId={projectId || 'main'}
+          sequence={sequence} sourceUrl={sourceUrl} sourceId={projectId || 'main'} extraSources={brollSources}
           playing={playing} playheadS={playhead}
           onTime={setPlayhead} onPaused={() => setPlaying(false)} onEnded={() => { setPlaying(false); setPlayhead(0); }}
         />
@@ -781,7 +936,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
                   <SideBox highlight={!!selectedMarker} label="YOUR EDIT">
                     {sequence && sourceUrl ? (
                       <PreviewCanvas
-                        sequence={sequence} sourceUrl={sourceUrl} sourceId={projectId || 'main'}
+                        sequence={sequence} sourceUrl={sourceUrl} sourceId={projectId || 'main'} extraSources={brollSources}
                         playing={playing} playheadS={playhead}
                         onTime={setPlayhead} onPaused={() => setPlaying(false)}
                         onEnded={() => { setPlaying(false); setPlayhead(0); }}
@@ -901,7 +1056,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
       {sequence && sourceUrl && (
         <ExportModal
           open={expOpen} onClose={() => setExpOpen(false)}
-          sequence={sequence} sourceUrl={sourceUrl} sourceId={projectId || 'main'}
+          sequence={sequence} sourceUrl={sourceUrl} sourceId={projectId || 'main'} extraSources={brollSources}
           projectName={projectName}
         />
       )}
@@ -1000,15 +1155,20 @@ type RefState =
   | { kind: 'file'; file: File }
   | { kind: 'link'; url: string; file: File };
 
-function DropScreen({ projectId, projectName, mode, onModeChange, hasFootage, onFootage, onReference, onStart, refInputRef, error }: {
+function DropScreen({ projectId, projectName, mode, onModeChange, hasFootage, onFootage, onReference, onStart, refInputRef, broll, onBroll, onRemoveBroll, error }: {
   projectId: string; projectName: string; mode: 'edit' | 'reference'; onModeChange: (m: 'edit' | 'reference') => void;
   hasFootage: boolean;
   onFootage: (f: File) => void;
   onReference: (ref: File | null, range: { startS: number; endS: number } | null, note: string) => void;
   onStart: (note: string) => void;
-  refInputRef: React.RefObject<HTMLInputElement | null>; error: string | null;
+  refInputRef: React.RefObject<HTMLInputElement | null>;
+  broll: BrollItem[];
+  onBroll: (files: File[]) => void;
+  onRemoveBroll: (index: number) => void;
+  error: string | null;
 }) {
   const footageRef = useRef<HTMLInputElement>(null);
+  const brollInputRef = useRef<HTMLInputElement>(null);
   const [footName, setFootName] = useState<string | null>(null);
   const [showLink, setShowLink] = useState(false);
   /** In plain Edit mode the optional reference block starts collapsed. */
@@ -1246,6 +1406,69 @@ function DropScreen({ projectId, projectName, mode, onModeChange, hasFootage, on
                 : <p style={{ color: C.dim, fontSize: 11, margin: '6px 2px 0' }}>Only learn the style from this part of a long reference.</p>}
             </>
           )}
+
+          {/* B-roll library — optional extra clips used only as silent
+              cutaways. Without a library, Modaya cuts cutaways from unused
+              parts of the main footage; with one, it prefers these. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '20px 0 8px' }}>
+            <p style={{ color: C.dim, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>
+              B-roll library · optional
+            </p>
+            {broll.length > 0 && (
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
+                color: C.muted, background: C.s3, borderRadius: 999, padding: '2px 8px' }}>
+                {broll.length} clip{broll.length === 1 ? '' : 's'}
+              </span>
+            )}
+          </div>
+          <div
+            onDragOver={e => { e.preventDefault(); }}
+            onDrop={e => { e.preventDefault(); const fs = Array.from(e.dataTransfer.files ?? []); if (fs.length) onBroll(fs); }}
+            style={{ background: broll.length ? C.s2 : 'transparent', border: broll.length ? `1.5px solid ${C.b3}` : 'none',
+              borderRadius: 14, padding: broll.length ? 14 : 0 }}>
+            <input ref={brollInputRef} type="file" accept="video/*" multiple style={{ display: 'none' }}
+              onChange={e => { const fs = Array.from(e.target.files ?? []); if (fs.length) onBroll(fs); e.target.value = ''; }} />
+            {broll.length ? (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {broll.map((it, i) => (
+                    <div key={`${it.name}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
+                      background: C.s3, borderRadius: 9 }}>
+                      <span style={{ width: 30, height: 30, borderRadius: 7, background: C.s2, display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', color: C.broll, flexShrink: 0, fontSize: 13 }}>▣</span>
+                      <span style={{ minWidth: 0, flex: 1 }}>
+                        <span style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name}</span>
+                        <span style={{ display: 'block', fontSize: 10.5, color: C.dim, marginTop: 1 }}>
+                          {it.durationS ? `${fmtTime(it.durationS)} · cutaway clip` : 'cutaway clip'}
+                        </span>
+                      </span>
+                      <button onClick={() => onRemoveBroll(i)} title="Remove"
+                        style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 13, fontFamily: F, flexShrink: 0, padding: 4 }}>
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => brollInputRef.current?.click()}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '10px 2px 0', background: 'none', border: 'none',
+                    color: C.muted, cursor: 'pointer', fontSize: 12, fontFamily: F, padding: 0 }}>
+                  <Plus size={13} /> Add more clips
+                </button>
+              </>
+            ) : (
+              <button onClick={() => brollInputRef.current?.click()}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
+                  padding: '14px 18px', borderRadius: 14, cursor: 'pointer',
+                  background: C.s2, border: `1.5px dashed ${C.b3}`, color: C.text, fontFamily: F }}>
+                <span style={{ width: 38, height: 38, borderRadius: 10, background: C.s3, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, flexShrink: 0, fontSize: 15 }}>▣</span>
+                <span style={{ flex: 1 }}>
+                  <span style={{ display: 'block', fontWeight: 600, fontSize: 14 }}>Add B-roll for cutaways</span>
+                  <span style={{ display: 'block', color: C.dim, fontSize: 12, marginTop: 1 }}>Extra clips Modaya can cut to while you keep talking — drop them here or browse</span>
+                </span>
+                <Plus size={16} color={C.muted} />
+              </button>
+            )}
+          </div>
 
           <p style={{ color: C.dim, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '20px 0 8px' }}>Instructions · optional</p>
           <textarea
