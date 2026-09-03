@@ -146,15 +146,27 @@ async function resolveFootage(projectId: string, entry: MediaEntry | null): Prom
   return null;
 }
 
-function clipToEditor(c: { id: string; trackId?: string; label: string; startS: number; endS: number; type?: string; textPosition?: string; textAlign?: string }): EditorClip {
+function clipToEditor(c: {
+  id: string;
+  trackId?: string;
+  label: string;
+  startS: number;
+  endS: number;
+  type?: string;
+  textPosition?: string;
+  textAlign?: string;
+  textStyle?: unknown;
+}): EditorClip {
   return {
     id: c.id,
     trackId: c.trackId ?? (c.type === 'text' ? 'text' : 'video'),
     label: c.label,
-    startS: c.startS, endS: c.endS,
+    startS: c.startS,
+    endS: c.endS,
     type: (c.type ?? 'video') as EditorClip['type'],
     textPosition: c.textPosition as EditorClip['textPosition'] | undefined,
     textAlign: c.textAlign as EditorClip['textAlign'] | undefined,
+    textStyle: c.textStyle as EditorClip['textStyle'] | undefined,
   };
 }
 
@@ -363,6 +375,10 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     const sourceRatio: '16:9' | '9:16' | '1:1' = curMedia && curMedia.width && curMedia.height
       ? (curMedia.width >= curMedia.height * 1.25 ? '16:9' : curMedia.height >= curMedia.width * 1.25 ? '9:16' : '1:1')
       : '16:9';
+
+    if (!profile.sourceName && (ctx.sourceName || projectName)) {
+      profile.sourceName = ctx.sourceName || projectName;
+    }
 
     const plan = composeStudioPlan({
       profile, sourceDurationS: ctx.durationS,

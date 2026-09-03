@@ -98,13 +98,14 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
     changed = true; did.push('restored original video format');
   }
 
-  const wantsFast = /\b(faster|snappier|more energetic|more energy|energetic|more dynamic|punchier|more punchy|tighter|speed up|too slow|drags?)\b/.test(text)
-    || (/\bslow\b/.test(text.replace(/not?\s+slow|less?\s+slow/g, '')) && /too|make|more|faster/.test(text));
-  const wantsSlow = /\b(slower|calm|calmer|more relaxed|less energetic|slow down|too fast|rushed|breathing room)\b/.test(text);
+  // Pacing & Energy
+  const wantsFast = /\b(faster|snappier|more energetic|more energy|energetic|more dynamic|punchier|more punchy|tighter|speed up|too slow|drags?)\b/i.test(text)
+    || (/\bslow\b/i.test(text.replace(/not?\s+slow|less?\s+slow/g, '')) && /too|make|more|faster/i.test(text));
+  const wantsSlow = /\b(slower|calm|calmer|more relaxed|less energetic|slow down|too fast|rushed|breathing room)\b/i.test(text);
 
   // "the intro/start/beginning is too slow" → tighten overall (start-first is
   // a future refinement; we honour the clear intent: less dead air, faster cut).
-  const introSlow = /\b(intro|start|beginning|opening|hook)\b/.test(text) && /\b(slow|drag|long|boring)\b/.test(text);
+  const introSlow = /\b(intro|start|beginning|opening|hook)\b/i.test(text) && /\b(slow|drag|long|boring)\b/i.test(text);
 
   if (introSlow) {
     if (setPacing(p, 1.3)) { changed = true; did.push('tightened the pacing and cut more dead air, especially up front'); }
@@ -118,10 +119,10 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
   }
 
   // Punch-ins / zooms
-  const moreZoom = /\b(more|lots? of|extra|add|use more|bigger)\b.*\b(punch-?ins?|zoom|push-?ins?|close-?ups?)\b/.test(text)
-    || /\bpunch-?ins?\b.*\bmore\b/.test(text);
-  const lessZoom = /\b(less|fewer|no|remove|stop|without|disable|don.?t)\b.*\b(punch-?ins?|zoom|push-?ins?|close-?ups?)\b/.test(text)
-    || /\b(no zoom|stop zooming|flat camera|no punch-?ins?)\b/.test(text);
+  const moreZoom = /\b(more|lots? of|extra|add|use more|bigger)\b.*\b(punch-?ins?|zoom|push-?ins?|close-?ups?)\b/i.test(text)
+    || /\bpunch-?ins?\b.*\bmore\b/i.test(text);
+  const lessZoom = /\b(less|fewer|no|remove|stop|without|disable|don.?t)\b.*\b(punch-?ins?|zoom|push-?ins?|close-?ups?)\b/i.test(text)
+    || /\b(no zoom|stop zooming|flat camera|no punch-?ins?)\b/i.test(text);
   if (moreZoom) {
     p.punchInRate = clamp(p.punchInRate + 0.25, 0, 0.95);
     p.punchInMax  = clamp(p.punchInMax + 0.03, 1.06, 1.4);
@@ -132,18 +133,56 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
     changed = true; did.push('removed all punch-ins and zooms');
   }
 
-  // Captions
-  const moreCaps = /\b(more|bigger|louder|emphasi[sz]e|use .{0,12}captions?|captions? more|add captions?|show captions?|turn on (captions?|subtitles?))\b.*\b(captions?|subtitles?|text)?\b/.test(text)
-    || (/\bcaptions?\b/.test(text) && /\bmore|reference|like|add|on\b/.test(text));
-  const lessCaps = /\b(no|remove|less|fewer|get rid of|drop|turn off|disable|without)\b.*\b(captions?|subtitles?)\b/.test(text)
-    || /\b(captions?|subtitles?)\b.*\b(off|gone|away)\b/.test(text);
-  if (moreCaps) {
-    p.captions = { present: true, position: p.captions?.position ?? 'lower', emphasis: clamp((p.captions?.emphasis ?? 0.4) + 0.25, 0, 1) };
-    if (setPacing(p, 1.05)) { /* denser shots → captions land more often */ }
-    changed = true; did.push('brought the reference-style captions in');
+  // Captions & Subtitles
+  const wantsCenterCaps = /\b(center|centre|middle)\b.*\b(captions?|subtitles?|text)\b/i.test(text)
+    || /\b(captions?|subtitles?)\b.*\b(center|centre|middle)\b/i.test(text);
+  const wantsLowerCaps = /\b(lower|bottom|down)\b.*\b(captions?|subtitles?|text)\b/i.test(text)
+    || /\b(captions?|subtitles?)\b.*\b(lower|bottom)\b/i.test(text);
+
+  const whereAreCaps = /\b(where.?s|where are|can.?t see|don.?t see|why no|why aren.?t there)\b.*\b(captions?|subtitles?|text)\b/i.test(text)
+    || /\b(captions?|subtitles?)\b.*\b(where|missing|not showing|not visible|gone)\b/i.test(text);
+
+  const lessCaps = /\b(no|remove|less|fewer|get rid of|drop|turn off|disable|without|hide|delete)\b.*\b(captions?|subtitles?)\b/i.test(text)
+    || /\b(captions?|subtitles?)\b.*\b(off|gone|away|hidden)\b/i.test(text);
+  const moreCaps = !lessCaps && (
+    /\b(more|bigger|louder|emphasi[sz]e|use .{0,12}captions?|captions? more|add captions?|show captions?|generate captions?|turn on (captions?|subtitles?)|put captions?|include captions?)\b/i.test(text)
+    || (/\bcaptions?\b/i.test(text) && /\b(more|reference|like|add|on|enable)\b/i.test(text))
+  );
+
+  if (whereAreCaps) {
+    p.captions = { present: true, position: p.captions?.position ?? 'lower', emphasis: 0.7 };
+    changed = true;
+    did.push('generated and placed high-contrast captions across your key video moments');
   } else if (lessCaps) {
     p.captions = { ...(p.captions ?? { present: false, position: 'lower' as const, emphasis: 0 }), present: false };
-    changed = true; did.push('removed the captions');
+    changed = true;
+    did.push('removed the captions');
+  } else if (wantsCenterCaps) {
+    p.captions = { present: true, position: 'centre', emphasis: 0.8 };
+    changed = true;
+    did.push('moved captions to the centre of the frame');
+  } else if (wantsLowerCaps) {
+    p.captions = { present: true, position: 'lower', emphasis: 0.6 };
+    changed = true;
+    did.push('positioned captions in the lower third');
+  } else if (moreCaps) {
+    p.captions = { present: true, position: p.captions?.position ?? 'lower', emphasis: clamp((p.captions?.emphasis ?? 0.4) + 0.25, 0, 1) };
+    if (setPacing(p, 1.05)) { /* denser shots → captions land more often */ }
+    changed = true;
+    did.push('generated and brought captions onto the timeline');
+  }
+
+  // Professional / Cinematic presets
+  const makePro = /\b(make it (look )?pro(fessional)?|cinematic|make it look good|improve|make it (cool|epic|awesome)|high quality)\b/i.test(text);
+  if (makePro) {
+    p.grade = { brightness: 0.02, contrast: 0.08, saturation: 0.08, warmth: 0.04 };
+    p.punchInRate = Math.max(p.punchInRate, 0.35);
+    p.punchInMax = 1.15;
+    p.captions = { present: true, position: 'lower', emphasis: 0.6 };
+    p.energy = clamp(p.energy + 0.1, 0, 1);
+    setPacing(p, 1.15);
+    changed = true;
+    did.push('applied cinematic color grading, dynamic punch-ins, and high-visibility captions');
   }
 
   // Colour grade
@@ -189,11 +228,38 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
     changed = true; did.push('cut the weaker sections tighter');
   }
 
+  // Explanatory and conversational questions
+  const asksWhatChanged = /\b(what did you (do|change)|what changed|show me (the )?changes|explain (the )?edit|why did you cut)\b/i.test(text);
+  const asksHowToExport = /\b(how (do|can) i (export|download|save|render)|where is export|how to export)\b/i.test(text);
+  const asksHelp = /\b(help|how (does this work|do i use this)|what can you do|what commands)\b/i.test(text);
+
   if (!changed) {
+    if (asksWhatChanged) {
+      return {
+        profile: base,
+        changed: false,
+        reply: `I analyzed your footage and applied style pacing (${base.pace}), color grading, ${base.punchInRate > 0 ? 'punch-in framing' : 'static framing'}, and ${base.captions.present ? 'synced captions' : 'no captions'}. You can tell me to change pacing, aspect ratio, captions, or color grade.`,
+      };
+    }
+    if (asksHowToExport) {
+      return {
+        profile: base,
+        changed: false,
+        reply: "Click the 'Export' button at the top right to render and download your high-definition MP4 video, or click 'Take full control' to fine-tune your cuts in the multi-track editor.",
+      };
+    }
+    if (asksHelp) {
+      return {
+        profile: base,
+        changed: false,
+        reply: "I can re-cut and style your video instantly! Try asking me: “don't cut anything / keep full video”, “add captions”, “move captions to center”, “16:9 widescreen”, “faster pacing”, “no punch-ins”, or “make it cinematic”.",
+      };
+    }
+
     return {
       profile: base,
       changed: false,
-      reply: "I can adjust your edit. Try saying: “don't cut anything / keep full video”, “make it 16:9 widescreen”, “no punch-ins”, “remove captions”, “faster pacing”, or “warmer grade”.",
+      reply: "I can adjust your edit. Try saying: “don't cut anything / keep full video”, “add captions”, “make it 16:9 widescreen”, “no punch-ins”, “faster pacing”, or “warmer grade”.",
     };
   }
 

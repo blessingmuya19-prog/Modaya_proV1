@@ -85,6 +85,19 @@ describe('composeStudioPlan — short mode', () => {
     }
   });
 
+  it('generates dynamic highlight captions when transcript is empty but captions are enabled', () => {
+    const fallbackPlan = composeStudioPlan({
+      profile: profile({ sourceName: 'My Awesome Video.mp4' }),
+      sourceDurationS: 300,
+      interest: interestWithSpike(),
+      transcript: [],
+    });
+    expect(fallbackPlan.captions).toBeGreaterThan(0);
+    const caps = fallbackPlan.clips.filter(c => c.type === 'text');
+    expect(caps.length).toBeGreaterThan(0);
+    expect(caps[0].label).toContain('My Awesome Video');
+  });
+
   it('keeps every clip inside the output and main shots non-overlapping', () => {
     // Base shots (trackId 'video') form the continuous talk track; B-roll
     // cutaways (trackId 'overlay') deliberately overlap them.

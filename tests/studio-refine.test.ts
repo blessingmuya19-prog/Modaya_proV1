@@ -137,4 +137,46 @@ describe('refineProfile', () => {
     expect(r.changed).toBe(false);
     expect(r.reply).toMatch(/pacing|punch|caption/i);
   });
+
+  it('intelligently answers "where\'s the captions"', () => {
+    const r = refineProfile(profile(), "where's the captions");
+    expect(r.changed).toBe(true);
+    expect(r.profile.captions.present).toBe(true);
+    expect(r.reply).toMatch(/captions/i);
+  });
+
+  it('handles caption position shifts', () => {
+    const center = refineProfile(profile(), 'move captions to center');
+    expect(center.changed).toBe(true);
+    expect(center.profile.captions.position).toBe('centre');
+
+    const lower = refineProfile(profile(), 'lower captions');
+    expect(lower.changed).toBe(true);
+    expect(lower.profile.captions.position).toBe('lower');
+  });
+
+  it('answers "what did you change" with contextual summary', () => {
+    const r = refineProfile(profile(), 'what did you change');
+    expect(r.changed).toBe(false);
+    expect(r.reply).toMatch(/analyzed your footage|pacing|grade|captions/i);
+  });
+
+  it('answers "how to export"', () => {
+    const r = refineProfile(profile(), 'how do i export my video');
+    expect(r.changed).toBe(false);
+    expect(r.reply).toMatch(/export/i);
+  });
+
+  it('answers "help"', () => {
+    const r = refineProfile(profile(), 'help me');
+    expect(r.changed).toBe(false);
+    expect(r.reply).toMatch(/uncut|captions|pacing/i);
+  });
+
+  it('applies pro/cinematic preset', () => {
+    const r = refineProfile(profile(), 'make it look professional');
+    expect(r.changed).toBe(true);
+    expect(r.profile.captions.present).toBe(true);
+    expect(r.profile.punchInRate).toBeGreaterThan(0.2);
+  });
 });

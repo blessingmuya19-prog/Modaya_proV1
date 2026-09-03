@@ -11,6 +11,7 @@
  * browser; the DOM side lives in engine.ts.
  */
 
+export type { TextPosition, TextAlign, TextStyle } from '@/lib/ai/operations';
 import type { TextPosition, TextAlign, TextStyle } from '@/lib/ai/operations';
 import type { MultiTrackMixerConfig } from '@/lib/audio/soundMixer';
 import { DEFAULT_MIXER_CONFIG } from '@/lib/audio/soundMixer';

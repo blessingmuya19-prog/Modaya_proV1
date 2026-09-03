@@ -21,7 +21,7 @@
 import type { StyleProfile } from '../ai/styleProfile';
 import { paceOf } from '../ai/styleProfile';
 import {
-  DEFAULT_TRANSFORM, DEFAULT_EFFECTS, type Transform, type Effects,
+  DEFAULT_TRANSFORM, DEFAULT_EFFECTS, type Transform, type Effects, type TextStyle,
 } from '../render/sequence';
 
 export interface TranscriptLine { startS: number; endS: number; text: string }
@@ -48,6 +48,9 @@ export interface PlannedShot {
   sourceId?: string;
   transform: Transform;
   effects: Effects;
+  textPosition?: 'top' | 'centre' | 'lower';
+  textAlign?: 'left' | 'centre' | 'right';
+  textStyle?: TextStyle;
 }
 
 export interface StudioPlan {
@@ -279,32 +282,81 @@ function captionClips(
   shots: Array<{ srcStart: number; outStart: number; outEnd: number }>,
   transcript: TranscriptLine[] | undefined,
   position: 'lower' | 'centre',
+  sourceName?: string,
 ): PlannedShot[] {
-  if (!transcript?.length) return [];
   const caps: PlannedShot[] = [];
   let n = 0;
-  for (const shot of shots) {
-    const len = shot.outEnd - shot.outStart;
-    for (const line of transcript) {
-      if (line.endS <= shot.srcStart || line.startS >= shot.srcStart + len) continue;
-      const text = line.text.trim().replace(/\s+/g, ' ');
-      if (!text) continue;
-      const tlS = shot.outStart + clamp(line.startS - shot.srcStart, 0, len);
-      const tlE = shot.outStart + clamp(line.endS - shot.srcStart, 0, len);
-      if (tlE - tlS < 0.15) continue;
-      caps.push({
-        id: `cap-${n++}`,
-        trackId: position === 'centre' ? 'text' : 'subs',
-        label: text.slice(0, 90),
-        startS: Number(tlS.toFixed(3)),
-        endS: Number(tlE.toFixed(3)),
-        type: 'text',
-        sourceIn: 0,
-        transform: { ...DEFAULT_TRANSFORM },
-        effects: { ...DEFAULT_EFFECTS },
-      });
+
+  const textStyle: TextStyle = {
+    font: 'sans',
+    bold: true,
+    size: position === 'centre' ? 'large' : 'medium',
+    colour: '#FFFFFF',
+    background: 'box',
+    uppercase: false,
+  };
+
+  if (transcript && transcript.length > 0) {
+    for (const shot of shots) {
+      const len = shot.outEnd - shot.outStart;
+      for (const line of transcript) {
+        if (line.endS <= shot.srcStart || line.startS >= shot.srcStart + len) continue;
+        const text = line.text.trim().replace(/\s+/g, ' ');
+        if (!text) continue;
+        const tlS = shot.outStart + clamp(line.startS - shot.srcStart, 0, len);
+        const tlE = shot.outStart + clamp(line.endS - shot.srcStart, 0, len);
+        if (tlE - tlS < 0.15) continue;
+        caps.push({
+          id: `cap-${n++}`,
+          trackId: position === 'centre' ? 'text' : 'subs',
+          label: text.slice(0, 90),
+          startS: Number(tlS.toFixed(3)),
+          endS: Number(tlE.toFixed(3)),
+          type: 'text',
+          sourceIn: 0,
+          textPosition: position,
+          textAlign: 'centre',
+          textStyle,
+          transform: { ...DEFAULT_TRANSFORM },
+          effects: { ...DEFAULT_EFFECTS },
+        });
+      }
     }
   }
+
+  // Fallback: If no transcript exists but captions were explicitly requested,
+  // place dynamic title/highlight caption cards across shots so captions are always visible.
+  if (caps.length === 0 && shots.length > 0) {
+    const cleanTitle = sourceName && sourceName !== 'modaya-default' && sourceName !== 'test'
+      ? sourceName.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ')
+      : 'Key Highlight';
+
+    for (let i = 0; i < shots.length; i++) {
+      const shot = shots[i];
+      const shotLen = shot.outEnd - shot.outStart;
+      if (shotLen < 1.0) continue;
+      const label = i === 0 ? `🔥 ${cleanTitle}` : `✨ Key Moment ${i + 1}`;
+      const startS = shot.outStart + 0.3;
+      const endS = shot.outStart + Math.min(shotLen - 0.2, 3.2);
+      if (endS - startS > 0.4) {
+        caps.push({
+          id: `cap-${n++}`,
+          trackId: position === 'centre' ? 'text' : 'subs',
+          label,
+          startS: Number(startS.toFixed(3)),
+          endS: Number(endS.toFixed(3)),
+          type: 'text',
+          sourceIn: 0,
+          textPosition: position,
+          textAlign: 'centre',
+          textStyle,
+          transform: { ...DEFAULT_TRANSFORM },
+          effects: { ...DEFAULT_EFFECTS },
+        });
+      }
+    }
+  }
+
   return caps;
 }
 
@@ -458,7 +510,7 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
   const caps = profile.captions.present
     ? captionClips(
         video.map(v => ({ srcStart: v.sourceIn, outStart: v.startS, outEnd: v.endS })),
-        transcript, profile.captions.position,
+        transcript, profile.captions.position, profile.sourceName,
       )
     : [];
 
