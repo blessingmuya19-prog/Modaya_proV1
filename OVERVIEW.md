@@ -240,16 +240,8 @@ Read this section before promising anything to a user.
 
 ### UI that is cosmetic
 
-7. The left-nav panels — **Transitions, Effects, Overlays, Colour**, and the
-   **Uploads** list — are static mockups built for the visual design. Selecting
-   options there does **not** alter the video. Real edits happen through the AI
-   chat (and clip cutting). The standalone `AIChatPanel`/`AIEditPanel`
-   components under `components/editor/` are earlier mockups; the live editor is
-   `EditorShell.tsx`.
-
-8. **Manual timeline editing is limited.** Scrubbing, zoom, keyboard transport
-   and cut-to-clip work, but there is no drag-to-move, split/razor, or
-   multi-track assembly by hand — the AI performs the edits.
+7. ~~The left-nav panels are static mockups~~ — **Done**: **Transitions**, **Visual Effects**, **Colour Look**, **Audio**, **Captions**, and **Text Overlays** are now live interactive panels connected directly to the sequence compositor (`styleLayer`, `clips`, `textStyle`) with instant preview updates and undo/redo history.
+8. **Manual timeline editing is limited.** Scrubbing, zoom, keyboard transport, split-at-playhead, cut-to-clip, and timeline reset are supported; full multi-track drag-to-reorder is best-effort or driven conversationally by the AI.
 
 ### Testing / ops
 
@@ -340,6 +332,9 @@ when storage is absent.
    (drop/browse multiple clips, listed and removable) persisted like the other
    media (`/broll/<n>` objects, IndexedDB + durable store, rehydrated on
    reopen), and cutaways prefer it over recycled source windows.
-3. Make the left-nav edit panels (effects/transitions/text) actually apply
-   operations, or clearly label them as previews.
+3. ~~Make the left-nav edit panels (effects/transitions/text) actually apply
+   operations~~ — done: interactive panels wired directly to sequence compositor,
+   style layers, timeline clips, and undo/redo stacks.
 4. Faster-than-real-time export (WebCodecs/ffmpeg-wasm) for long videos.
+5. Persistent database backends (SQLite / Postgres / Neon) for serverless deployments.
+6. Audio waveform rendering on timeline tracks.
