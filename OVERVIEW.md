@@ -377,3 +377,6 @@ when storage is absent.
 15. ~~AI Edit Timeline History, Version Branching & Visual Diff Snapshot Engine~~ — done:
    structural timeline clip diffing with addition/removal/trimming diagnostics (`src/lib/studio/editHistory.ts`),
    deterministic recipe fingerprinting, version delta comparison, and pacing/caption change tracking across edit versions.
+16. ~~Smart B-Roll Auto-Matcher with Semantic Topic Clustering & Cutaway Alignment~~ — done:
+   semantic keyword extraction & punchline avoidance (`src/lib/ai/brollMatcher.ts`),
+   automated candidate scoring against B-roll metadata/tags, and narrative cutaway placement.
