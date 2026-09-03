@@ -104,11 +104,11 @@ export async function sampleFrames(
 
   const frames: FrameSample[] = [];
   const startTime = Date.now();
-  const MAX_SAMPLE_TIME_MS = 10000; // 10s hard cutoff
+  const MAX_SAMPLE_TIME_MS = 5000; // 5s hard cutoff
 
   try {
     video.load();
-    if (!(await once('loadeddata', 8000))) return [];
+    if (!(await once('loadeddata', 4000))) return [];
 
     for (let i = 0; i < count; i++) {
       if (Date.now() - startTime > MAX_SAMPLE_TIME_MS) break;
@@ -117,7 +117,7 @@ export async function sampleFrames(
       // (within-window) time so cut times come out relative to the section.
       const rel = Math.min(windowLen - 0.05, i * step);
       video.currentTime = rangeStart + rel;
-      if (!(await once('seeked', 2000))) {
+      if (!(await once('seeked', 600))) {
         continue;
       }
       try {
@@ -125,7 +125,7 @@ export async function sampleFrames(
         frames.push(measureFrame(ctx, rel));
       } catch { /* tainted or not ready — skip */ }
       
-      if (i % 4 === 0) {
+      if (i % 2 === 0) {
         onProgress?.(i / count);
         // Yield to browser event loop to prevent watchdog tab crash
         await new Promise(r => setTimeout(r, 4));
@@ -249,7 +249,7 @@ export async function analyseReference(
     const sampleRange = range ? { startS: winStart, lenS: winLen } : undefined;
 
     onProgress?.({ stage: 'frames', progress: 0.05, message: range ? 'Watching that section of the reference…' : 'Watching the reference…' });
-    const frames = await sampleFrames(url, winLen, 4, 480,
+    const frames = await sampleFrames(url, winLen, 1, 36,
       p => onProgress?.({ stage: 'frames', progress: 0.05 + p * 0.6, message: 'Watching the reference…' }),
       sampleRange);
 

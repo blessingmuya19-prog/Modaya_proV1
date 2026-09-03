@@ -36,19 +36,65 @@ export async function decodeForAsr(file: Blob): Promise<Float32Array | null> {
   const Offline = (window.OfflineAudioContext
     ?? (window as unknown as { webkitOfflineAudioContext?: typeof OfflineAudioContext })
       .webkitOfflineAudioContext);
-  if (!Offline) return null;
+  const Ctor = (window.AudioContext
+    ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
+  if (!Offline && !Ctor) return null;
 
-  const ctx = new Offline(1, ASR_SAMPLE_RATE, ASR_SAMPLE_RATE);
   try {
-    const audio = await ctx.decodeAudioData(await file.arrayBuffer());
-    if (audio.numberOfChannels === 1) return audio.getChannelData(0);
+    let ctx: BaseAudioContext | null = null;
+    let sampleRate = ASR_SAMPLE_RATE;
 
-    // Mix to mono: speech recognition gains nothing from stereo, and it halves
-    // the upload.
-    const left  = audio.getChannelData(0);
-    const right = audio.getChannelData(1);
-    const mono  = new Float32Array(left.length);
-    for (let i = 0; i < left.length; i++) mono[i] = (left[i] + right[i]) / 2;
+    if (Offline) {
+      try {
+        ctx = new Offline(1, ASR_SAMPLE_RATE, ASR_SAMPLE_RATE);
+      } catch {
+        // Fallback for Safari/WebKit where OfflineAudioContext enforces >= 22050
+        try {
+          sampleRate = 22050;
+          ctx = new Offline(1, sampleRate, sampleRate);
+        } catch {
+          if (Ctor) ctx = new Ctor();
+        }
+      }
+    } else if (Ctor) {
+      ctx = new Ctor();
+    }
+
+    if (!ctx) return null;
+
+    const buf = await file.arrayBuffer();
+    const decodePromise = ctx.decodeAudioData(buf);
+    const timeoutPromise = new Promise<null>((_, reject) =>
+      setTimeout(() => reject(new Error('ASR decode timeout')), 6000)
+    );
+    const audio = await Promise.race([decodePromise, timeoutPromise]);
+    if (!audio) return null;
+
+    let mono: Float32Array;
+    if (audio.numberOfChannels === 1) {
+      mono = audio.getChannelData(0);
+    } else {
+      const left  = audio.getChannelData(0);
+      const right = audio.getChannelData(1);
+      mono = new Float32Array(left.length);
+      for (let i = 0; i < left.length; i++) mono[i] = (left[i] + right[i]) / 2;
+    }
+
+    // Resample down to 16 kHz if decoded at a higher rate
+    if (audio.sampleRate !== ASR_SAMPLE_RATE && audio.sampleRate > 0) {
+      const ratio = ASR_SAMPLE_RATE / audio.sampleRate;
+      const newLen = Math.round(mono.length * ratio);
+      const resampled = new Float32Array(newLen);
+      for (let i = 0; i < newLen; i++) {
+        const srcIdx = i / ratio;
+        const low = Math.floor(srcIdx);
+        const high = Math.min(mono.length - 1, low + 1);
+        const frac = srcIdx - low;
+        resampled[i] = mono[low] * (1 - frac) + mono[high] * frac;
+      }
+      return resampled;
+    }
+
     return mono;
   } catch {
     return null;      // no audio track, or a codec this browser cannot decode

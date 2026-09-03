@@ -29,7 +29,18 @@ export async function transcribeMedia(
       form.append('offsetS', String(chunks[i].offsetS));
       form.append('durationS', String(durationS));
 
-      const res = await fetch(`/api/projects/${projectId}/transcribe`, { method: 'POST', body: form });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      let res: Response;
+      try {
+        res = await fetch(`/api/projects/${projectId}/transcribe`, {
+          method: 'POST',
+          body: form,
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
       if (!res.ok) return lines.length ? lines : null;
       const data = await res.json().catch(() => null) as { segments?: Array<{ startS?: number; start?: number; endS?: number; end?: number; text?: string }> } | null;
       for (const sg of data?.segments ?? []) {
