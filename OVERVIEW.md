@@ -380,3 +380,15 @@ when storage is absent.
 16. ~~Smart B-Roll Auto-Matcher with Semantic Topic Clustering & Cutaway Alignment~~ — done:
    semantic keyword extraction & punchline avoidance (`src/lib/ai/brollMatcher.ts`),
    automated candidate scoring against B-roll metadata/tags, and narrative cutaway placement.
+17. ~~AI Voice Enhancer & Studio Sound Vocal De-Noising Engine~~ — done:
+   adaptive background noise floor estimation, room hum/rumble filtering (< 75 Hz),
+   3-band parametric vocal presence & warmth EQ, and broadcast soft-knee vocal compression (`src/lib/audio/voiceEnhancer.ts`).
+18. ~~Smart Zoom & Dynamic Punch-In Keyframing Engine~~ — done:
+   sentence- & punchline-aware speaker punch-ins, cinematic slow creeps, rhythmic jump zooms,
+   and cubic bezier/spring keyframe interpolation (`src/lib/render/smartZoom.ts`).
+19. ~~Social Media Multi-Platform Publisher & Video Metadata Generator~~ — done:
+   platform-tailored export specs (TikTok, YouTube Shorts, Reels, LinkedIn, X),
+   automated viral hook titles, transcript hashtag extraction, and optimal thumbnail timestamp selection (`src/lib/studio/publisher.ts`).
+20. ~~Real-Time Audio Beat & Rhythm Snap Grid Engine~~ — done:
+   tempo/BPM grid generation with downbeat and 1/4, 1/8, 1/16 subdivision ticks,
+   magnetic timeline playhead snapping, and bar-aligned rhythmic cut placement (`src/lib/audio/beatGrid.ts`).
