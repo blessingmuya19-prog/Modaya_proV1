@@ -392,3 +392,9 @@ when storage is absent.
 20. ~~Real-Time Audio Beat & Rhythm Snap Grid Engine~~ — done:
    tempo/BPM grid generation with downbeat and 1/4, 1/8, 1/16 subdivision ticks,
    magnetic timeline playhead snapping, and bar-aligned rhythmic cut placement (`src/lib/audio/beatGrid.ts`).
+21. ~~Auto-Silence & Filler-Word Remover Engine~~ — done:
+   automated RMS envelope dead-air detection, filler-word pruning ("um", "uh", "like", "you know"),
+   speech breath margin padding, and ripple-cut timeline generation (`src/lib/ai/silenceRemover.ts`).
+22. ~~Video Speed Ramping & Variable Time-Remapping Engine~~ — done:
+   smooth non-linear bezier speed curves, bidirectional source-to-output timestamp mapping,
+   and montage whip / action hit / hyperlapse presets (`src/lib/render/speedRamp.ts`).
