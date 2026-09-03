@@ -12,6 +12,8 @@
  */
 
 import type { TextPosition, TextAlign, TextStyle } from '@/lib/ai/operations';
+import type { MultiTrackMixerConfig } from '@/lib/audio/soundMixer';
+import { DEFAULT_MIXER_CONFIG } from '@/lib/audio/soundMixer';
 
 export type ClipKind = 'video' | 'audio' | 'text' | 'subtitle';
 
@@ -59,6 +61,7 @@ export interface Sequence {
   width:     number;
   height:    number;
   clips:     SequenceClip[];
+  audioMix?: MultiTrackMixerConfig;
 }
 
 export const DEFAULT_TRANSFORM: Transform = {
@@ -105,7 +108,7 @@ export interface StyleLayer {
 export function buildSequence(
   clips: EditorClipLike[],
   opts: { durationS: number; width: number; height: number; sourceId: string;
-          style?: StyleLayer },
+          style?: StyleLayer; audioMix?: MultiTrackMixerConfig },
 ): Sequence {
   const usable = (clips ?? []).filter(c => c.endS > c.startS);
 
@@ -153,6 +156,7 @@ export function buildSequence(
     width:     opts.width  || 1920,
     height:    opts.height || 1080,
     clips:     seqClips,
+    audioMix:  opts.audioMix,
   };
 }
 

@@ -345,4 +345,8 @@ when storage is absent.
    dynamic resampling per clip range, and local caching (`src/lib/waveformStore.ts`).
 6. ~~Persistent database backends (Postgres / Neon / FS / Mem)~~ — done: pluggable
    database drivers with auto-detection in `src/lib/server/dbAdapter.ts`.
-7. Audio ducking & multi-track sound mixing during speech segments.
+7. ~~Audio ducking & multi-track sound mixing during speech segments~~ — done:
+   auto-ducking engine with attack/release envelopes (`src/lib/audio/ducking.ts`),
+   multi-track sound mixing (`src/lib/audio/soundMixer.ts`), interactive Audio
+   panel in Editor, and WebAudio gain graph integration in `engine.ts`.
+8. AI-assisted multi-speaker diarization and automated speaker rebalancing.

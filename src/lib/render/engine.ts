@@ -485,24 +485,54 @@ export class PreviewEngine {
   }
 
   /**
-   * Tap the media elements' audio for export. The source nodes are connected
-   * ONLY to the supplied destination (a MediaStreamAudioDestinationNode),
-   * never to the speakers — so a real-time export records the audio without
-   * playing it out loud. Each element may only ever be wrapped once; this is
-   * used on an export-only engine with its own fresh video pool. Returns an
-   * unwire function.
+   * Tap the media elements' audio for export with multi-track mixing & ducking.
+   * The source nodes are connected ONLY to the supplied destination (a
+   * MediaStreamAudioDestinationNode), never to the speakers — so a real-time
+   * export records the audio without playing it out loud. Each element may only
+   * ever be wrapped once; this is used on an export-only engine with its own
+   * fresh video pool. Returns an unwire function.
    */
   wireAudio(ctx: AudioContext, dest: MediaStreamAudioDestinationNode): () => void {
-    // Only the base (talk-track) elements are wired. The cutaway element is
-    // deliberately left out: B-roll is shown silent over the base audio.
-    const nodes = this.pool.map(v => {
+    const audioMix = this.seq?.audioMix;
+    const masterGain = ctx.createGain();
+    masterGain.gain.value = audioMix ? (audioMix.master.muted ? 0 : audioMix.master.volume) : 1.0;
+    masterGain.connect(dest);
+
+    const voiceGain = ctx.createGain();
+    const voiceVol = audioMix ? (audioMix.voice.muted ? 0 : audioMix.voice.volume * (audioMix.voiceEnhance ? 1.08 : 1.0)) : 1.0;
+    voiceGain.gain.value = voiceVol;
+    voiceGain.connect(masterGain);
+
+    const baseNodes = this.pool.map(v => {
       const src = ctx.createMediaElementSource(v);
-      src.connect(dest);
+      src.connect(voiceGain);
       return src;
     });
     this.pool.forEach(v => { v.muted = false; });
-    if (this.overlayEl) this.overlayEl.muted = true;
-    return () => { nodes.forEach(n => { try { n.disconnect(); } catch {} }); };
+
+    let overlayNode: MediaElementAudioSourceNode | null = null;
+    let brollGain: GainNode | null = null;
+
+    if (this.overlayEl) {
+      if (audioMix && !audioMix.broll.muted && audioMix.broll.volume > 0.01) {
+        brollGain = ctx.createGain();
+        brollGain.gain.value = audioMix.broll.volume;
+        brollGain.connect(masterGain);
+        overlayNode = ctx.createMediaElementSource(this.overlayEl);
+        overlayNode.connect(brollGain);
+        this.overlayEl.muted = false;
+      } else {
+        this.overlayEl.muted = true;
+      }
+    }
+
+    return () => {
+      baseNodes.forEach(n => { try { n.disconnect(); } catch {} });
+      if (overlayNode) { try { overlayNode.disconnect(); } catch {} }
+      if (brollGain) { try { brollGain.disconnect(); } catch {} }
+      try { voiceGain.disconnect(); } catch {}
+      try { masterGain.disconnect(); } catch {}
+    };
   }
 
   destroy() {

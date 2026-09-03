@@ -51,7 +51,14 @@ import {
   AlignLeft, AlignCenter, AlignRight,
   Bold, Italic, Underline, Scissors, MousePointer,
   ArrowLeft, Send, RotateCcw, ChevronDown, Film,
+  Volume2, VolumeX, Mic, Music,
 } from 'lucide-react';
+import {
+  DEFAULT_MIXER_CONFIG, MIX_PRESETS, type MultiTrackMixerConfig,
+} from '@/lib/audio/soundMixer';
+import {
+  getDuckingGainAt, speechSegmentsFromTranscript, type SpeechSegment,
+} from '@/lib/audio/ducking';
 
 /* ── App palette ── */
 const C = {
@@ -222,6 +229,7 @@ const ICON_NAV = [
   { icon: Zap,                label: 'Effects'     },
   { icon: Layers,             label: 'Overlays'    },
   { icon: SlidersHorizontal,  label: 'Colour'      },
+  { icon: Volume2,            label: 'Audio'       },
   { icon: SubIcon,            label: 'Subtitles'   },
 ];
 
@@ -1069,12 +1077,306 @@ function UploadsPanel({
   );
 }
 
+function AudioPanel({
+  audioMix = DEFAULT_MIXER_CONFIG,
+  onUpdateAudioMix,
+  playheadS = 0,
+  transcriptSegments = [],
+}: {
+  audioMix?: MultiTrackMixerConfig;
+  onUpdateAudioMix?: (mix: MultiTrackMixerConfig) => void;
+  playheadS?: number;
+  transcriptSegments?: SpeechSegment[];
+}) {
+  const mix = audioMix;
+
+  const setMix = (patch: Partial<MultiTrackMixerConfig>) => {
+    if (!onUpdateAudioMix) return;
+    onUpdateAudioMix({
+      ...mix,
+      ...patch,
+      preset: patch.preset ?? 'custom',
+    });
+  };
+
+  const applyPreset = (name: string) => {
+    const p = MIX_PRESETS[name];
+    if (p && onUpdateAudioMix) {
+      onUpdateAudioMix({
+        ...mix,
+        ...p,
+      } as MultiTrackMixerConfig);
+    }
+  };
+
+  const currentDuckingGain = mix.ducking.enabled
+    ? getDuckingGainAt(playheadS, transcriptSegments, mix.ducking)
+    : 1.0;
+
+  const duckingDb = Math.round(20 * Math.log10(Math.max(0.01, mix.ducking.duckVolume)));
+
+  return (
+    <div style={{ flex:1, overflowY:'auto', padding:'12px' }}>
+      <SectionLabel>Mixing Presets</SectionLabel>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:4, marginBottom:12 }}>
+        {[
+          { id:'dialogue_focus', label:'Dialogue Focus', desc:'Shorts / Pods' },
+          { id:'cinematic',      label:'Cinematic',      desc:'Balanced' },
+          { id:'music_forward',  label:'Music Forward',  desc:'Beat Priority' },
+          { id:'clean',          label:'Clean / Flat',   desc:'No Ducking' },
+        ].map(pr => {
+          const isSelected = mix.preset === pr.id;
+          return (
+            <button key={pr.id} onClick={() => applyPreset(pr.id)} style={{
+              padding:'7px 8px', borderRadius:7, border:`1px solid ${isSelected ? C.accent+'66' : C.b2}`,
+              background: isSelected ? C.accent+'14' : C.s3, cursor:'pointer', textAlign:'left' as const,
+              transition:'all 120ms',
+            }}>
+              <span style={{ ...ty.propVal, fontSize:11, display:'block', color: isSelected ? C.accent : C.text }}>{pr.label}</span>
+              <span style={{ ...ty.meta, fontSize:9, color:C.muted, display:'block', marginTop:1 }}>{pr.desc}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <Divider />
+
+      {/* Auto-Ducking Section */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+        <SectionLabel>Auto Audio Ducking</SectionLabel>
+        <button
+          onClick={() => setMix({ ducking: { ...mix.ducking, enabled: !mix.ducking.enabled } })}
+          style={{
+            padding:'3px 8px', borderRadius:9999, border:`1px solid ${mix.ducking.enabled ? '#34D399' : C.b2}`,
+            background: mix.ducking.enabled ? 'rgba(52,211,153,0.15)' : C.s3,
+            color: mix.ducking.enabled ? '#34D399' : C.muted, fontSize:10, fontWeight:600, cursor:'pointer',
+          }}
+        >
+          {mix.ducking.enabled ? 'Enabled' : 'Disabled'}
+        </button>
+      </div>
+
+      {mix.ducking.enabled && (
+        <>
+          <div style={{ marginBottom:8 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
+              <span style={{ ...ty.propLabel }}>Ducking Depth</span>
+              <span style={{ ...ty.niVal }}>{duckingDb} dB ({Math.round(mix.ducking.duckVolume * 100)}%)</span>
+            </div>
+            <input
+              type="range" min="0.05" max="0.60" step="0.01" value={mix.ducking.duckVolume}
+              onChange={e => setMix({ ducking: { ...mix.ducking, duckVolume: Number(e.target.value) } })}
+              style={{ width:'100%', accentColor: '#34D399', cursor:'pointer' }}
+            />
+          </div>
+
+          <div style={{ marginBottom:8 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
+              <span style={{ ...ty.propLabel }}>Attack Time</span>
+              <span style={{ ...ty.niVal }}>{Math.round(mix.ducking.attackS * 1000)} ms</span>
+            </div>
+            <input
+              type="range" min="0.05" max="0.60" step="0.05" value={mix.ducking.attackS}
+              onChange={e => setMix({ ducking: { ...mix.ducking, attackS: Number(e.target.value) } })}
+              style={{ width:'100%', accentColor: C.accent, cursor:'pointer' }}
+            />
+          </div>
+
+          <div style={{ marginBottom:10 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
+              <span style={{ ...ty.propLabel }}>Release Time</span>
+              <span style={{ ...ty.niVal }}>{Math.round(mix.ducking.releaseS * 1000)} ms</span>
+            </div>
+            <input
+              type="range" min="0.2" max="1.5" step="0.05" value={mix.ducking.releaseS}
+              onChange={e => setMix({ ducking: { ...mix.ducking, releaseS: Number(e.target.value) } })}
+              style={{ width:'100%', accentColor: C.accent, cursor:'pointer' }}
+            />
+          </div>
+
+          {/* Ducking Live Level Monitor */}
+          <div style={{ padding:'6px 8px', background:C.s2, borderRadius:6, border:`1px solid ${C.b2}`, marginBottom:10 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3 }}>
+              <span style={{ ...ty.meta, fontSize:10 }}>Music Gain at {clipFmt(playheadS)}</span>
+              <span style={{ ...ty.niVal, fontSize:11, color: currentDuckingGain < 0.9 ? '#34D399' : C.text }}>
+                {Math.round(currentDuckingGain * 100)}% {currentDuckingGain < 0.9 ? '(Ducking)' : '(Full)'}
+              </span>
+            </div>
+            <div style={{ height:4, width:'100%', background:C.s3, borderRadius:2, overflow:'hidden' }}>
+              <div style={{
+                height:'100%', width:`${Math.round(currentDuckingGain * 100)}%`,
+                background: currentDuckingGain < 0.9 ? '#34D399' : C.accent,
+                transition:'width 80ms ease',
+              }} />
+            </div>
+          </div>
+        </>
+      )}
+
+      <Divider />
+
+      {/* Multi-track Channel Faders */}
+      <SectionLabel>Track Levels & Mixing</SectionLabel>
+
+      {/* Voice Channel */}
+      <div style={{ marginBottom:10, padding:'7px 9px', background:C.s3, borderRadius:7, border:`1px solid ${C.b2}` }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+            <Mic size={12} color="#34D399" />
+            <span style={{ ...ty.propVal, fontSize:11, fontWeight:600 }}>Voice / Dialogue</span>
+          </div>
+          <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+            <button
+              onClick={() => setMix({ voiceEnhance: !mix.voiceEnhance })}
+              style={{
+                background: mix.voiceEnhance ? 'rgba(52,211,153,0.15)' : 'transparent',
+                border:`1px solid ${mix.voiceEnhance ? '#34D399' : C.b3}`,
+                borderRadius:4, padding:'1px 5px', fontSize:9, color: mix.voiceEnhance ? '#34D399' : C.muted,
+                cursor:'pointer',
+              }}
+              title="Enhance speech clarity & compression"
+            >
+              Enhance
+            </button>
+            <button
+              onClick={() => setMix({ voice: { ...mix.voice, muted: !mix.voice.muted } })}
+              style={{
+                background: mix.voice.muted ? 'rgba(239,68,68,0.2)' : 'transparent',
+                border:`1px solid ${mix.voice.muted ? '#EF4444' : C.b3}`,
+                borderRadius:4, padding:'2px 4px', color: mix.voice.muted ? '#EF4444' : C.muted, cursor:'pointer',
+              }}
+              title={mix.voice.muted ? 'Unmute voice' : 'Mute voice'}
+            >
+              {mix.voice.muted ? <VolumeX size={10} /> : <Volume2 size={10} />}
+            </button>
+          </div>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          <input
+            type="range" min="0" max="1.5" step="0.02" value={mix.voice.muted ? 0 : mix.voice.volume}
+            onChange={e => setMix({ voice: { ...mix.voice, volume: Number(e.target.value), muted: false } })}
+            style={{ flex:1, accentColor: '#34D399', cursor:'pointer' }}
+          />
+          <span style={{ ...ty.niVal, minWidth:32, textAlign:'right' }}>
+            {mix.voice.muted ? 'Mute' : `${Math.round(mix.voice.volume * 100)}%`}
+          </span>
+        </div>
+      </div>
+
+      {/* Music Channel */}
+      <div style={{ marginBottom:10, padding:'7px 9px', background:C.s3, borderRadius:7, border:`1px solid ${C.b2}` }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+            <Music size={12} color="#A78BFA" />
+            <span style={{ ...ty.propVal, fontSize:11, fontWeight:600 }}>Music / Ambience</span>
+          </div>
+          <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+            <button
+              onClick={() => setMix({ music: { ...mix.music, ducking: !mix.music.ducking } })}
+              style={{
+                background: mix.music.ducking ? 'rgba(52,211,153,0.15)' : 'transparent',
+                border:`1px solid ${mix.music.ducking ? '#34D399' : C.b3}`,
+                borderRadius:4, padding:'1px 5px', fontSize:9, color: mix.music.ducking ? '#34D399' : C.muted,
+                cursor:'pointer',
+              }}
+              title="Enable ducking for background music"
+            >
+              Duck
+            </button>
+            <button
+              onClick={() => setMix({ music: { ...mix.music, muted: !mix.music.muted } })}
+              style={{
+                background: mix.music.muted ? 'rgba(239,68,68,0.2)' : 'transparent',
+                border:`1px solid ${mix.music.muted ? '#EF4444' : C.b3}`,
+                borderRadius:4, padding:'2px 4px', color: mix.music.muted ? '#EF4444' : C.muted, cursor:'pointer',
+              }}
+              title={mix.music.muted ? 'Unmute music' : 'Mute music'}
+            >
+              {mix.music.muted ? <VolumeX size={10} /> : <Volume2 size={10} />}
+            </button>
+          </div>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          <input
+            type="range" min="0" max="1.5" step="0.02" value={mix.music.muted ? 0 : mix.music.volume}
+            onChange={e => setMix({ music: { ...mix.music, volume: Number(e.target.value), muted: false } })}
+            style={{ flex:1, accentColor: '#A78BFA', cursor:'pointer' }}
+          />
+          <span style={{ ...ty.niVal, minWidth:32, textAlign:'right' }}>
+            {mix.music.muted ? 'Mute' : `${Math.round(mix.music.volume * 100)}%`}
+          </span>
+        </div>
+      </div>
+
+      {/* B-Roll / SFX Channel */}
+      <div style={{ marginBottom:10, padding:'7px 9px', background:C.s3, borderRadius:7, border:`1px solid ${C.b2}` }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+            <Volume2 size={12} color="#38BDF8" />
+            <span style={{ ...ty.propVal, fontSize:11, fontWeight:600 }}>B-Roll & Overlays</span>
+          </div>
+          <button
+            onClick={() => setMix({ broll: { ...mix.broll, muted: !mix.broll.muted } })}
+            style={{
+              background: mix.broll.muted ? 'rgba(239,68,68,0.2)' : 'transparent',
+              border:`1px solid ${mix.broll.muted ? '#EF4444' : C.b3}`,
+              borderRadius:4, padding:'2px 4px', color: mix.broll.muted ? '#EF4444' : C.muted, cursor:'pointer',
+            }}
+          >
+            {mix.broll.muted ? <VolumeX size={10} /> : <Volume2 size={10} />}
+          </button>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          <input
+            type="range" min="0" max="1.2" step="0.02" value={mix.broll.muted ? 0 : mix.broll.volume}
+            onChange={e => setMix({ broll: { ...mix.broll, volume: Number(e.target.value), muted: false } })}
+            style={{ flex:1, accentColor: '#38BDF8', cursor:'pointer' }}
+          />
+          <span style={{ ...ty.niVal, minWidth:32, textAlign:'right' }}>
+            {mix.broll.muted ? 'Mute' : `${Math.round(mix.broll.volume * 100)}%`}
+          </span>
+        </div>
+      </div>
+
+      {/* Master Output */}
+      <div style={{ marginBottom:10, padding:'7px 9px', background:C.s2, borderRadius:7, border:`1px solid ${C.b3}` }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+          <span style={{ ...ty.propVal, fontSize:11, fontWeight:700 }}>Master Output</span>
+          <button
+            onClick={() => setMix({ master: { ...mix.master, muted: !mix.master.muted } })}
+            style={{
+              background: mix.master.muted ? 'rgba(239,68,68,0.2)' : 'transparent',
+              border:`1px solid ${mix.master.muted ? '#EF4444' : C.b3}`,
+              borderRadius:4, padding:'2px 4px', color: mix.master.muted ? '#EF4444' : C.muted, cursor:'pointer',
+            }}
+          >
+            {mix.master.muted ? <VolumeX size={10} /> : <Volume2 size={10} />}
+          </button>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          <input
+            type="range" min="0" max="1.5" step="0.02" value={mix.master.muted ? 0 : mix.master.volume}
+            onChange={e => setMix({ master: { ...mix.master, volume: Number(e.target.value), muted: false } })}
+            style={{ flex:1, accentColor: C.accent, cursor:'pointer' }}
+          />
+          <span style={{ ...ty.niVal, minWidth:32, textAlign:'right' }}>
+            {mix.master.muted ? 'Mute' : `${Math.round(mix.master.volume * 100)}%`}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface PropertiesPanelProps {
   tab: string;
   clips?: EditorClip[];
   onUpdateClips?: (clips: EditorClip[]) => void;
   styleLayer?: StyleLayer;
   onUpdateStyleLayer?: (layer: StyleLayer) => void;
+  audioMix?: MultiTrackMixerConfig;
+  onUpdateAudioMix?: (mix: MultiTrackMixerConfig) => void;
+  transcriptSegments?: SpeechSegment[];
   playheadS?: number;
   totalS?: number;
   mediaEntry?: ReturnType<typeof getMedia> | null;
@@ -1090,6 +1392,9 @@ function PropertiesPanelBase({
   onUpdateClips,
   styleLayer = {},
   onUpdateStyleLayer,
+  audioMix = DEFAULT_MIXER_CONFIG,
+  onUpdateAudioMix,
+  transcriptSegments = [],
   playheadS = 0,
   totalS = 60,
   mediaEntry = null,
@@ -1102,6 +1407,7 @@ function PropertiesPanelBase({
     if (tab === 'Effects')     return <EffectsPanel clips={clips} styleLayer={styleLayer} onUpdateStyleLayer={onUpdateStyleLayer} />;
     if (tab === 'Overlays')    return <OverlaysPanel clips={clips} onUpdateClips={onUpdateClips} playheadS={playheadS} totalS={totalS} onPushHistory={onPushHistory} onSetTab={onSetTab} />;
     if (tab === 'Colour')      return <ColourPanel clips={clips} styleLayer={styleLayer} onUpdateStyleLayer={onUpdateStyleLayer} />;
+    if (tab === 'Audio')       return <AudioPanel audioMix={audioMix} onUpdateAudioMix={onUpdateAudioMix} playheadS={playheadS} transcriptSegments={transcriptSegments} />;
     if (tab === 'Uploads')     return <UploadsPanel mediaEntry={mediaEntry} projectName={projectName} totalS={totalS} />;
     // Text / Canvas / Subtitles
     return <TextInspectorPanel clips={clips} onUpdateClips={onUpdateClips} playheadS={playheadS} totalS={totalS} onPushHistory={onPushHistory} />;
@@ -2405,10 +2711,21 @@ export function EditorShell({
   /* Per-clip source/transform/effect overrides produced by the reference pass. */
   const [styleLayer,   setStyleLayer  ] = useState<StyleLayer>({});
   const [styledDur,    setStyledDur   ] = useState<number | null>(null);
+  const [audioMix,     setAudioMix    ] = useState<MultiTrackMixerConfig>(DEFAULT_MIXER_CONFIG);
+  const [speechSegments, setSpeechSegments] = useState<SpeechSegment[]>([]);
   const [playing,      setPlaying     ] = useState(false);
   const [phS,          setPhS         ] = useState(0);
   const [tab,          setTab         ] = useState('Text');
   const [expOpen,      setExpOpen     ] = useState(false);
+
+  useEffect(() => {
+    if (!projectId) return;
+    loadTranscript(projectId).then(t => {
+      if (t?.segments?.length) {
+        setSpeechSegments(speechSegmentsFromTranscript(t));
+      }
+    }).catch(() => {});
+  }, [projectId]);
 
   // Undo / Redo stacks
   const historyRef = useRef<EditorClip[][]>([]);
@@ -2487,8 +2804,9 @@ export function EditorShell({
       height:    mediaEntry?.height ?? 1080,
       sourceId:  projectId ?? 'main',
       style:     styleLayer,
+      audioMix,
     },
-  ), [liveClips, clips, totalS, mediaEntry?.width, mediaEntry?.height, projectId, styleLayer]);
+  ), [liveClips, clips, totalS, mediaEntry?.width, mediaEntry?.height, projectId, styleLayer, audioMix]);
 
   // When parent re-fetches clips (e.g. after navigation), sync
   useEffect(() => { setLiveClips(clips); }, [clips]);
@@ -2664,6 +2982,9 @@ export function EditorShell({
                   }}
                   styleLayer={styleLayer}
                   onUpdateStyleLayer={setStyleLayer}
+                  audioMix={audioMix}
+                  onUpdateAudioMix={setAudioMix}
+                  transcriptSegments={speechSegments}
                   playheadS={phS}
                   totalS={totalS}
                   mediaEntry={mediaEntry}
