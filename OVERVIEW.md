@@ -363,3 +363,7 @@ when storage is absent.
    saliency centroid estimation & camera deadzone pan smoothing (`src/lib/render/autoReframe.ts`),
    aspect ratio presets (9:16 Shorts/Reels, 16:9 Landscape, 1:1 Square, 4:5 Portrait, 21:9 Ultrawide),
    canvas compositor viewport resizing & dynamic tracking in `engine.ts`, and interactive Canvas panel in `EditorShell.tsx`.
+12. ~~Kinetic Word-by-Word Subtitle Karaoke Animation & Viral Caption Styles~~ — done:
+   word-level timing interpolation & spring bounce scale/glow states (`src/lib/render/captionStyler.ts`),
+   viral presets (MrBeast yellow pop, Hormozi green badge, Neon glow, Crimson punch, Clean minimal),
+   canvas compositor word-by-word active rendering in `engine.ts`, and interactive Subtitles inspector panel in `EditorShell.tsx`.

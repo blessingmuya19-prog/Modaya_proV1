@@ -18,6 +18,7 @@ import {
 } from './sequence';
 import { getTrackedPositionAt } from '@/lib/ai/motionTracker';
 import { getAutoReframeOffset } from './autoReframe';
+import { extractTimedWords, getWordAnimationState } from './captionStyler';
 
 export interface EngineStats {
   drawn:      number;
@@ -499,8 +500,75 @@ export class PreviewEngine {
       ctx.shadowOffsetY = Math.round(size * 0.06);
     }
 
-    ctx.fillStyle = style.colour ?? '#fff';
-    lines.forEach((line, i) => ctx.fillText(line, x, firstBaseline + i * lineH));
+    const hasKaraoke = (style.animation && style.animation !== 'none') || Boolean(style.highlightColour);
+
+    if (hasKaraoke && lines.length === 1) {
+      // Word-level kinetic rendering for single-line captions (standard for shorts / reels)
+      const timedWords = extractTimedWords(lines[0], clip.timelineIn, clip.timelineOut, style.words);
+      const spaceW = ctx.measureText(' ').width;
+      const wordWidths = timedWords.map(w => ctx.measureText(w.word).width);
+      const totalTextW = wordWidths.reduce((a, b) => a + b, 0) + spaceW * Math.max(0, timedWords.length - 1);
+
+      let curX = side === 'left' ? x : side === 'right' ? x - totalTextW : x - totalTextW / 2;
+
+      for (let i = 0; i < timedWords.length; i++) {
+        const tw = timedWords[i];
+        const wW = wordWidths[i];
+        const animState = getWordAnimationState(tw, this._time, style.animation ?? 'karaoke_pop');
+
+        ctx.save();
+        const wordCenterX = curX + wW / 2;
+        const wordCenterY = firstBaseline - size / 3;
+
+        if (animState.scale !== 1.0) {
+          ctx.translate(wordCenterX, wordCenterY);
+          ctx.scale(animState.scale, animState.scale);
+          ctx.translate(-wordCenterX, -wordCenterY);
+        }
+
+        if (animState.opacity < 1.0) {
+          ctx.globalAlpha *= animState.opacity;
+        }
+
+        // Pill box for active word if karaoke_box
+        if (animState.isActive && style.animation === 'karaoke_box') {
+          ctx.fillStyle = style.boxColour ?? 'rgba(0,0,0,0.85)';
+          const pillPadX = size * 0.25;
+          const pillPadY = size * 0.15;
+          ctx.fillRect(curX - pillPadX, firstBaseline - size - pillPadY, wW + pillPadX * 2, size * 1.3);
+        }
+
+        // Glow effect
+        if (animState.isActive && style.animation === 'karaoke_glow') {
+          ctx.shadowColor = style.highlightColour ?? '#38BDF8';
+          ctx.shadowBlur = Math.round(size * 0.6);
+        }
+
+        // Outline stroke
+        if (style.outlineColour) {
+          ctx.strokeStyle = style.outlineColour;
+          ctx.lineWidth = style.outlineWidth ?? Math.max(2, Math.round(size * 0.08));
+          ctx.lineJoin = 'round';
+          ctx.strokeText(tw.word, curX, firstBaseline);
+        }
+
+        // Fill text with highlight or base colour
+        ctx.fillStyle = animState.isActive ? (style.highlightColour ?? '#FACC15') : (style.colour ?? '#FFFFFF');
+        ctx.fillText(tw.word, curX, firstBaseline);
+        ctx.restore();
+
+        curX += wW + spaceW;
+      }
+    } else {
+      if (style.outlineColour) {
+        ctx.strokeStyle = style.outlineColour;
+        ctx.lineWidth = style.outlineWidth ?? Math.max(2, Math.round(size * 0.08));
+        ctx.lineJoin = 'round';
+        lines.forEach((line, i) => ctx.strokeText(line, x, firstBaseline + i * lineH));
+      }
+      ctx.fillStyle = style.colour ?? '#fff';
+      lines.forEach((line, i) => ctx.fillText(line, x, firstBaseline + i * lineH));
+    }
 
     ctx.restore();
   }

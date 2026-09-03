@@ -76,6 +76,11 @@ import {
   ASPECT_RATIO_PRESETS,
   generateAutoReframeTrajectory,
 } from '@/lib/render/autoReframe';
+import {
+  CAPTION_PRESETS,
+  type CaptionStylePreset,
+  type CaptionAnimation,
+} from '@/lib/render/captionStyler';
 
 /* ── App palette ── */
 const C = {
@@ -1345,6 +1350,187 @@ function TextInspectorPanel({
   );
 }
 
+function SubtitlesPanel({
+  clips = [],
+  onUpdateClips,
+  onPushHistory,
+  playheadS = 0,
+}: {
+  clips?: EditorClip[];
+  onUpdateClips?: (clips: EditorClip[]) => void;
+  onPushHistory?: (clips: EditorClip[]) => void;
+  playheadS?: number;
+}) {
+  const [selectedPreset, setSelectedPreset] = React.useState('mrbeast');
+  const [highlightColor, setHighlightColor] = React.useState('#FACC15');
+  const [outlineWidth, setOutlineWidth] = React.useState(4);
+  const [animation, setAnimation] = React.useState<CaptionAnimation>('karaoke_pop');
+
+  const subClips = clips.filter(c => c.type === 'subtitle' || c.trackId === 'subs');
+
+  const applyPresetToAll = (presetId: string) => {
+    setSelectedPreset(presetId);
+    const p = CAPTION_PRESETS[presetId];
+    if (!p || !onUpdateClips) return;
+
+    setHighlightColor(p.highlightColour);
+    setOutlineWidth(p.outlineWidth ?? 3);
+    setAnimation(p.animation);
+
+    onPushHistory?.(clips);
+    const updated = clips.map(c => {
+      if (c.type === 'subtitle' || c.trackId === 'subs') {
+        return {
+          ...c,
+          textStyle: {
+            ...c.textStyle,
+            font: p.font,
+            size: p.size,
+            colour: p.colour,
+            highlightColour: p.highlightColour,
+            outlineColour: p.outlineColour,
+            outlineWidth: p.outlineWidth,
+            background: p.background,
+            boxColour: p.boxColour,
+            bold: p.bold,
+            uppercase: p.uppercase,
+            animation: p.animation,
+            preset: p.id,
+          },
+        };
+      }
+      return c;
+    });
+
+    onUpdateClips(updated);
+  };
+
+  const updateCustomStyle = (patch: Partial<import('@/lib/ai/operations').TextStyle>) => {
+    if (!onUpdateClips) return;
+    onPushHistory?.(clips);
+    const updated = clips.map(c => {
+      if (c.type === 'subtitle' || c.trackId === 'subs') {
+        return {
+          ...c,
+          textStyle: {
+            ...c.textStyle,
+            ...patch,
+          },
+        };
+      }
+      return c;
+    });
+    onUpdateClips(updated);
+  };
+
+  return (
+    <div style={{ flex:1, overflowY:'auto', padding:'12px' }}>
+      <SectionLabel>Viral Caption Presets</SectionLabel>
+      <div style={{ display:'flex', flexDirection:'column', gap:4, marginBottom:12 }}>
+        {Object.values(CAPTION_PRESETS).map(pr => {
+          const isSel = selectedPreset === pr.id;
+          return (
+            <button
+              key={pr.id}
+              onClick={() => applyPresetToAll(pr.id)}
+              style={{
+                padding:'8px 10px', borderRadius:7,
+                border:`1px solid ${isSel ? '#38BDF8' : C.b2}`,
+                background: isSel ? 'rgba(56,189,248,0.12)' : C.s3,
+                cursor:'pointer', textAlign:'left', transition:'all 120ms',
+              }}
+            >
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span style={{ ...ty.propVal, fontSize:12, fontWeight: isSel ? 600 : 500, color: isSel ? '#38BDF8' : C.text }}>
+                  {pr.name}
+                </span>
+                <span style={{ width:12, height:12, borderRadius:'50%', background:pr.highlightColour, display:'inline-block' }} />
+              </div>
+              <span style={{ ...ty.meta, fontSize:10, color:C.muted, display:'block', marginTop:2 }}>
+                {pr.description}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <Divider />
+      <SectionLabel>Kinetic Animation</SectionLabel>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:4, marginBottom:12 }}>
+        {[
+          { id:'karaoke_pop' as const, label:'Bounce Pop' },
+          { id:'karaoke_glow' as const, label:'Neon Glow' },
+          { id:'karaoke_box' as const, label:'Pill Box' },
+          { id:'typewriter' as const, label:'Typewriter' },
+          { id:'none' as const, label:'Static' },
+        ].map(a => {
+          const isSel = animation === a.id;
+          return (
+            <button
+              key={a.id}
+              onClick={() => {
+                setAnimation(a.id);
+                updateCustomStyle({ animation: a.id });
+              }}
+              style={{
+                padding:'6px 8px', borderRadius:6,
+                border:`1px solid ${isSel ? '#38BDF8' : C.b2}`,
+                background: isSel ? 'rgba(56,189,248,0.14)' : C.s3,
+                color: isSel ? '#38BDF8' : C.sec, fontSize:11, cursor:'pointer', textAlign:'left',
+              }}
+            >
+              {a.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <Divider />
+      <SectionLabel>Highlight Accent Colour</SectionLabel>
+      <div style={{ display:'flex', gap:6, marginBottom:12 }}>
+        {['#FACC15', '#22C55E', '#38BDF8', '#F43F5E', '#A855F7', '#FFFFFF'].map(hex => (
+          <div
+            key={hex}
+            role="button"
+            tabIndex={0}
+            onClick={() => {
+              setHighlightColor(hex);
+              updateCustomStyle({ highlightColour: hex });
+            }}
+            style={{
+              width:22, height:22, borderRadius:'50%', background:hex,
+              border:`2px solid ${highlightColor===hex ? '#38BDF8' : C.b3}`, cursor:'pointer',
+            }}
+          />
+        ))}
+      </div>
+
+      <Divider />
+      <div style={{ marginBottom:12 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
+          <span style={{ ...ty.propLabel }}>Outline Thickness</span>
+          <span style={{ ...ty.niVal }}>{outlineWidth}px</span>
+        </div>
+        <input
+          type="range" min="0" max="8" step="1" value={outlineWidth}
+          onChange={e => {
+            const val = Number(e.target.value);
+            setOutlineWidth(val);
+            updateCustomStyle({ outlineWidth: val, outlineColour: val > 0 ? '#000000' : undefined });
+          }}
+          style={{ width:'100%', accentColor: '#38BDF8', cursor:'pointer' }}
+        />
+      </div>
+
+      <div style={{ padding:'8px 10px', background:C.s2, borderRadius:7, border:`1px solid ${C.b2}` }}>
+        <span style={{ ...ty.meta, fontSize:10.5, color:C.muted, display:'block', lineHeight:1.4 }}>
+          Active on <strong style={{ color:C.text }}>{subClips.length} subtitle segments</strong>. Highlight color dynamically follows spoken words during playback.
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function UploadsPanel({
   mediaEntry,
   projectName,
@@ -1815,8 +2001,9 @@ function PropertiesPanelBase({
     if (tab === 'Overlays')    return <OverlaysPanel clips={clips} onUpdateClips={onUpdateClips} playheadS={playheadS} totalS={totalS} onPushHistory={onPushHistory} onSetTab={onSetTab} />;
     if (tab === 'Colour')      return <ColourPanel clips={clips} styleLayer={styleLayer} onUpdateStyleLayer={onUpdateStyleLayer} />;
     if (tab === 'Audio')       return <AudioPanel audioMix={audioMix} onUpdateAudioMix={onUpdateAudioMix} playheadS={playheadS} transcriptSegments={transcriptSegments} rawTranscriptSegments={rawTranscriptSegments} />;
+    if (tab === 'Subtitles')   return <SubtitlesPanel clips={clips} onUpdateClips={onUpdateClips} onPushHistory={onPushHistory} playheadS={playheadS} />;
     if (tab === 'Uploads')     return <UploadsPanel mediaEntry={mediaEntry} projectName={projectName} totalS={totalS} />;
-    // Text / Subtitles
+    // Text
     return <TextInspectorPanel clips={clips} onUpdateClips={onUpdateClips} playheadS={playheadS} totalS={totalS} onPushHistory={onPushHistory} />;
   };
 

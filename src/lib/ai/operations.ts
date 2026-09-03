@@ -24,14 +24,21 @@ export interface Placement { position: TextPosition; align: TextAlign }
  *  every font here is one the browser already has, so nothing has to be
  *  downloaded and captions can never render in a fallback face. */
 export interface TextStyle {
-  font?:       'sans' | 'serif' | 'mono' | 'display' | 'handwritten';
-  size?:       'small' | 'medium' | 'large';
+  font?:            'sans' | 'serif' | 'mono' | 'display' | 'handwritten';
+  size?:            'small' | 'medium' | 'large';
   /** #rgb or #rrggbb, or one of a few plain colour names. */
-  colour?:     string;
-  background?: 'box' | 'shadow' | 'none';
-  bold?:       boolean;
-  italic?:     boolean;
-  uppercase?:  boolean;
+  colour?:          string;
+  highlightColour?: string;
+  outlineColour?:   string;
+  outlineWidth?:    number;
+  background?:      'box' | 'shadow' | 'none';
+  boxColour?:       string;
+  bold?:            boolean;
+  italic?:          boolean;
+  uppercase?:       boolean;
+  animation?:       'none' | 'karaoke_pop' | 'karaoke_glow' | 'karaoke_box' | 'typewriter';
+  preset?:          string;
+  words?:           Array<{ word: string; startS: number; endS: number }>;
 }
 
 export interface TimelineClip {
@@ -212,6 +219,24 @@ export function parseStyle(raw: unknown): TextStyle | undefined {
   if (typeof o.bold === 'boolean')      out.bold = o.bold;
   if (typeof o.italic === 'boolean')    out.italic = o.italic;
   if (typeof o.uppercase === 'boolean') out.uppercase = o.uppercase;
+
+  const highlight = parseColour(o.highlightColour ?? o.highlightColor);
+  if (highlight) out.highlightColour = highlight;
+
+  const outline = parseColour(o.outlineColour ?? o.outlineColor);
+  if (outline) out.outlineColour = outline;
+
+  if (typeof o.outlineWidth === 'number') out.outlineWidth = o.outlineWidth;
+
+  const anim = String(o.animation ?? '').trim().toLowerCase();
+  if (/pop|bounce/.test(anim))         out.animation = 'karaoke_pop';
+  else if (/glow|neon/.test(anim))     out.animation = 'karaoke_glow';
+  else if (/box|badge|pill/.test(anim)) out.animation = 'karaoke_box';
+  else if (/typewriter/.test(anim))    out.animation = 'typewriter';
+  else if (/none|off/.test(anim))      out.animation = 'none';
+
+  if (typeof o.preset === 'string') out.preset = o.preset;
+  if (Array.isArray(o.words))       out.words = o.words as Array<{ word: string; startS: number; endS: number }>;
 
   return Object.keys(out).length ? out : undefined;
 }
