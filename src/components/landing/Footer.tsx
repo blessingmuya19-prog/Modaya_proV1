@@ -61,7 +61,7 @@ function FooterLogo() {
         <path d="M11.5 18 L20.5 18" stroke="#D4D4D8" strokeWidth="2" strokeLinecap="round" />
       </svg>
       {/* Wordmark */}
-      <span style={{ fontFamily: "'Inter Tight', sans-serif", fontSize: 17, fontWeight: 700, color: '#FAFAFA', letterSpacing: '-0.04em' }}>
+      <span style={{ fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontSize: 17, fontWeight: 700, color: '#FAFAFA', letterSpacing: '-0.04em' }}>
         Modaya
       </span>
     </div>

@@ -77,7 +77,7 @@ export function PricingSection() {
             <span style={{ width:5, height:5, borderRadius:'50%', background:'#D4D4D8', display:'inline-block' }} />
             <span style={{ fontSize:11, color:'#D4D4D8', fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase' }}>Pricing</span>
           </div>
-          <h2 style={{ fontFamily:"'Inter Tight',sans-serif", fontWeight:700, fontSize:'clamp(30px,5vw,52px)', letterSpacing:'-0.025em', lineHeight:1.05, color:'#FAFAFA', margin:'0 0 18px' }}>
+          <h2 style={{ fontFamily:"'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontWeight:700, fontSize:'clamp(30px,5vw,52px)', letterSpacing:'-0.025em', lineHeight:1.05, color:'#FAFAFA', margin:'0 0 18px' }}>
             Simple pricing.<br />
             <span style={{ color:'rgba(15,27,51,0.30)' }}>No surprises.</span>
           </h2>
@@ -123,7 +123,7 @@ export function PricingSection() {
 
                 {/* Price */}
                 <div style={{ display:'flex', alignItems:'flex-end', gap:4, marginBottom:6 }}>
-                  <span style={{ fontFamily:"'Inter Tight',sans-serif", fontWeight:800, fontSize:48, letterSpacing:'-0.05em', color:'#FAFAFA', lineHeight:1 }}>
+                  <span style={{ fontFamily:"'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontWeight:800, fontSize:48, letterSpacing:'-0.05em', color:'#FAFAFA', lineHeight:1 }}>
                     ${annual ? plan.annual : plan.monthly}
                   </span>
                   {plan.monthly > 0 && <span style={{ fontSize:13, color:'#A1A1AA', marginBottom:8 }}>/mo</span>}

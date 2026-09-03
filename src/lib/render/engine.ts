@@ -34,7 +34,7 @@ const SEEK_EPSILON = 0.04;   // ~1 frame at 25fps
    render in a substitute face while a webfont loads — or fail to change at
    all because the requested font was never available. */
 const FONT_STACKS: Record<string, string> = {
-  sans:        "'Inter Tight', Inter, system-ui, -apple-system, sans-serif",
+  sans:        "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif",
   serif:       "Georgia, 'Times New Roman', Times, serif",
   mono:        "ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
   display:     "Impact, Haettenschweiler, 'Arial Black', sans-serif",

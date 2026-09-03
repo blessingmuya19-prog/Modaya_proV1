@@ -19,7 +19,7 @@ export function FAQSection() {
       <div className="faq-grid">
         <div style={{ marginBottom: 48 }}>
           <p style={{ fontSize: 11, color: '#A1A1AA', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 16 }}>FAQ</p>
-          <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(24px,4vw,40px)', letterSpacing: '-0.04em', lineHeight: 1.1, color: '#FAFAFA', margin: 0 }}>
+          <h2 style={{ fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontWeight: 700, fontSize: 'clamp(24px,4vw,40px)', letterSpacing: '-0.04em', lineHeight: 1.1, color: '#FAFAFA', margin: 0 }}>
             Common questions.
           </h2>
         </div>

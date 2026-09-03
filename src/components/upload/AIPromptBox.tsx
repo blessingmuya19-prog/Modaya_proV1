@@ -31,7 +31,7 @@ export function AIPromptBox({ onEdit }: { onEdit: (prompt: string, opts: Record<
         style={{
           width: '100%', background: 'transparent', border: 'none', outline: 'none',
           padding: '20px 20px 12px', fontSize: 14, color: '#FFFFFF',
-          fontFamily: "'Inter', sans-serif", resize: 'none', lineHeight: 1.6,
+          fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", resize: 'none', lineHeight: 1.6,
         }}
       />
 

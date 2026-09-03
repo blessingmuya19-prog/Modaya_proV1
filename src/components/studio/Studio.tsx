@@ -36,7 +36,7 @@ import { parseTimeRange } from '@/lib/referenceLink';
 import { GlowButton, GLOW_GRADIENT } from '../ui/theme';
 import type { EditorClip } from '../editor/EditorShell';
 
-const F = "'Inter Tight', Inter, system-ui, sans-serif";
+const F = "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif";
 /**
  * Dark, premium SaaS theme. `surface`/`s2`/`s3` are the charcoal raised
  * panels and wells; `media` is the near-black video canvas (darkest of all).

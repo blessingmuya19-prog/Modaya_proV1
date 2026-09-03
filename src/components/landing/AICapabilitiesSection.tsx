@@ -39,7 +39,7 @@ export function AICapabilitiesSection() {
             <span style={{ width:5, height:5, borderRadius:'50%', background:'#D4D4D8', display:'inline-block' }} />
             <span style={{ fontSize:11, color:'#D4D4D8', fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase' }}>AI capabilities</span>
           </div>
-          <h2 style={{ fontFamily:"'Inter Tight',sans-serif", fontWeight:700, fontSize:'clamp(30px,5vw,52px)', letterSpacing:'-0.025em', lineHeight:1.05, color:'#FAFAFA', margin:'0 0 18px' }}>
+          <h2 style={{ fontFamily:"'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontWeight:700, fontSize:'clamp(30px,5vw,52px)', letterSpacing:'-0.025em', lineHeight:1.05, color:'#FAFAFA', margin:'0 0 18px' }}>
             Everything an editor does.<br />
             <span style={{ color:'rgba(15,27,51,0.30)' }}>Done by AI.</span>
           </h2>
@@ -64,7 +64,7 @@ export function AICapabilitiesSection() {
                     </div>
                     <span style={{ fontSize:9, fontWeight:700, color:'#D4D4D8', letterSpacing:'0.1em', background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.18)', padding:'3px 10px', borderRadius:9999 }}>{cap.tag}</span>
                   </div>
-                  <h3 style={{ fontFamily:"'Inter Tight',sans-serif", fontSize:19, fontWeight:700, color:'#FAFAFA', letterSpacing:'-0.03em', margin:0 }}>{cap.title}</h3>
+                  <h3 style={{ fontFamily:"'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontSize:19, fontWeight:700, color:'#FAFAFA', letterSpacing:'-0.03em', margin:0 }}>{cap.title}</h3>
                   <p style={{ fontSize:14, color:'#D4D4D8', lineHeight:1.7, margin:0 }}>{cap.body}</p>
                 </div>
               </div>

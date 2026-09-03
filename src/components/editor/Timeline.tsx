@@ -163,11 +163,11 @@ export function Timeline() {
         <div style={{ width:1, height:18, background:'#141414', margin:'0 4px' }} />
 
         {/* Timecode */}
-        <span style={{ fontFamily:"'Inter Tight',sans-serif", fontSize:12, color:'#666', letterSpacing:'0.06em', minWidth:44 }}>
+        <span style={{ fontFamily:"'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontSize:12, color:'#666', letterSpacing:'0.06em', minWidth:44 }}>
           {fmt(playheadS)}
         </span>
         <span style={{ fontSize:11, color:'#222' }}>/</span>
-        <span style={{ fontFamily:"'Inter Tight',sans-serif", fontSize:11, color:'#2a2a2a', minWidth:36 }}>
+        <span style={{ fontFamily:"'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontSize:11, color:'#2a2a2a', minWidth:36 }}>
           {fmt(TOTAL_S)}
         </span>
 
@@ -248,7 +248,7 @@ export function Timeline() {
                 <div key={i} style={{ position:'absolute', left:t.s * zoom, top:0, bottom:0, display:'flex', flexDirection:'column', alignItems:'center' }}>
                   <div style={{ width:1, height: t.major ? 10 : 5, background: t.major ? '#2a2a2a' : '#1a1a1a', marginTop:'auto' }} />
                   {t.major && (
-                    <span style={{ position:'absolute', bottom:2, left:3, fontSize:9, color:'#333', whiteSpace:'nowrap', fontFamily:"'Inter Tight',sans-serif" }}>
+                    <span style={{ position:'absolute', bottom:2, left:3, fontSize:9, color:'#333', whiteSpace:'nowrap', fontFamily:"'Uni Neue','Manrope',system-ui,-apple-system,sans-serif" }}>
                       {fmt(t.s)}
                     </span>
                   )}

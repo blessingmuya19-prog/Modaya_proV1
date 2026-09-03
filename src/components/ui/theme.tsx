@@ -11,7 +11,7 @@
  */
 import React from 'react';
 
-export const FONT = "'Inter Tight', Inter, system-ui, sans-serif";
+export const FONT = "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif";
 
 /** Neutral light gradient used for small icon tiles / accents. */
 export const GLOW_GRADIENT = 'linear-gradient(135deg, #FFFFFF 0%, #A1A1AA 100%)';

@@ -87,7 +87,7 @@ function Panel({ title, label, clips, totalSec, maxSec, labelColor, badge, badge
         <div style={{ padding: '14px 18px', borderTop: '1px solid #1C1C21' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 7 }}>
             <span style={{ fontSize: 11, color: '#71717A' }}>{label}</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: labelColor, fontFamily: "'Inter Tight',sans-serif", letterSpacing: '-0.03em' }}>{timeStr}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: labelColor, fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", letterSpacing: '-0.03em' }}>{timeStr}</span>
           </div>
           <ProgressBar pct={pct} color={labelColor} />
         </div>
@@ -110,7 +110,7 @@ export function BeforeAfterSection() {
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 9999, marginBottom: 20 }}>
           <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#D4D4D8' }}>Before & After</span>
         </div>
-        <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(28px,4vw,48px)', letterSpacing: '-0.04em', color: '#FAFAFA', margin: '0 0 14px', lineHeight: 1.1 }}>
+        <h2 style={{ fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontWeight: 700, fontSize: 'clamp(28px,4vw,48px)', letterSpacing: '-0.04em', color: '#FAFAFA', margin: '0 0 14px', lineHeight: 1.1 }}>
           Every edit, automated
         </h2>
         <p style={{ fontSize: 16, color: '#A1A1AA', maxWidth: 480, margin: '0 auto', lineHeight: 1.7 }}>
@@ -161,7 +161,7 @@ export function BeforeAfterSection() {
       {/* Reduction stat */}
       <div style={{ marginTop: 40, textAlign: 'center' }}>
         <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, padding: '10px 20px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12 }}>
-          <span style={{ fontSize: 22, fontWeight: 800, color: '#D4D4D8', fontFamily: "'Inter Tight',sans-serif", letterSpacing: '-0.04em' }}>67%</span>
+          <span style={{ fontSize: 22, fontWeight: 800, color: '#D4D4D8', fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", letterSpacing: '-0.04em' }}>67%</span>
           <span style={{ fontSize: 13, color: '#A1A1AA' }}>shorter video — zero manual editing</span>
         </div>
       </div>

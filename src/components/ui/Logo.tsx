@@ -20,7 +20,7 @@ export function Logo({ size = 32, showWordmark = true, style }: LogoProps) {
       <LogoMark size={size} />
       {showWordmark && (
         <span style={{
-          fontFamily: "'Inter Tight', sans-serif",
+          fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif",
           fontWeight: 700,
           fontSize: size * 0.62,
           letterSpacing: '-0.04em',

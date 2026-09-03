@@ -145,7 +145,7 @@ export function TestimonialsSection() {
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#D4D4D8', display: 'inline-block' }} />
             <span style={{ fontSize: 11, color: '#71717A', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>What creators say</span>
           </div>
-          <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(30px,5vw,52px)', letterSpacing: '-0.025em', lineHeight: 1.05, color: '#E4E4E7', margin: '0 0 16px' }}>
+          <h2 style={{ fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontWeight: 700, fontSize: 'clamp(30px,5vw,52px)', letterSpacing: '-0.025em', lineHeight: 1.05, color: '#E4E4E7', margin: '0 0 16px' }}>
             Real creators.<br />
             <span style={{ color: 'rgba(15,27,51,0.30)' }}>Real results.</span>
           </h2>
@@ -169,7 +169,7 @@ export function TestimonialsSection() {
             { value: '2M+',  label: 'Videos edited' },
           ].map((s, i) => (
             <div key={i} style={{ textAlign: 'center' }}>
-              <p style={{ fontFamily: "'Inter Tight',sans-serif", fontSize: 28, fontWeight: 800, color: '#D4D4D8', letterSpacing: '-0.04em', margin: '0 0 4px' }}>{s.value}</p>
+              <p style={{ fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontSize: 28, fontWeight: 800, color: '#D4D4D8', letterSpacing: '-0.04em', margin: '0 0 4px' }}>{s.value}</p>
               <p style={{ fontSize: 12, color: '#A1A1AA', margin: 0 }}>{s.label}</p>
             </div>
           ))}

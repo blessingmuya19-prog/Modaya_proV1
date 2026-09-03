@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/useAuth';
 import { useToast } from '@/components/ui/Toast';
 import { Check, ChevronRight, Eye, EyeOff, HardDrive, Zap, Shield, Sparkles, X } from 'lucide-react';
 
-const F = "'Inter Tight', Inter, system-ui, sans-serif";
+const F = "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif";
 const C = {
   bg: '#050505', surface: '#070707', s2: '#0a0a0a', s3: '#0e0e0e',
   b: '#111', b2: '#141414', b3: '#1a1a1a',

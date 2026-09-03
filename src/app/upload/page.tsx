@@ -170,7 +170,7 @@ export default function UploadPage() {
           {/* ── STAGE: UPLOAD ── */}
           {stage === 'upload' && (
             <div style={{ animation: 'slide-up 0.5s cubic-bezier(0.22,1,0.36,1) both' }}>
-              <h1 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(24px,4vw,36px)', letterSpacing: '-0.04em', color: '#FFFFFF', margin: '0 0 8px', textAlign: 'center' }}>
+              <h1 style={{ fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontWeight: 700, fontSize: 'clamp(24px,4vw,36px)', letterSpacing: '-0.04em', color: '#FFFFFF', margin: '0 0 8px', textAlign: 'center' }}>
                 Drop your footage
               </h1>
               <p style={{ fontSize: 15, fontWeight: 400, letterSpacing: '-0.01em', color: '#A5ADBA', textAlign: 'center', margin: '0 0 36px', lineHeight: 1.6 }}>
@@ -214,7 +214,7 @@ export default function UploadPage() {
           {/* ── STAGE: PROMPT ── */}
           {stage === 'prompt' && file && (
             <div style={{ animation: 'slide-up 0.45s cubic-bezier(0.22,1,0.36,1) both' }}>
-              <h1 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(22px,3.5vw,32px)', letterSpacing: '-0.04em', color: '#FFFFFF', margin: '0 0 8px', textAlign: 'center' }}>
+              <h1 style={{ fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontWeight: 700, fontSize: 'clamp(22px,3.5vw,32px)', letterSpacing: '-0.04em', color: '#FFFFFF', margin: '0 0 8px', textAlign: 'center' }}>
                 What should we do with it?
               </h1>
               <p style={{ fontSize: 15, fontWeight: 400, letterSpacing: '-0.01em', color: '#A5ADBA', textAlign: 'center', margin: '0 0 28px' }}>
@@ -227,8 +227,8 @@ export default function UploadPage() {
                   <Play size={12} color="#FAFAFA" fill="#FAFAFA" style={{ marginLeft: 1 }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 13, fontWeight: 500, letterSpacing: '-0.01em', fontFamily: "'Inter Tight', Inter, system-ui, sans-serif", color: '#A5ADBA', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
-                  <p style={{ fontSize: 11, fontWeight: 400, letterSpacing: '-0.01em', fontFamily: "'Inter Tight', Inter, system-ui, sans-serif", color: '#737D8D', margin: 0 }}>{formatBytes(file.size)}</p>
+                  <p style={{ fontSize: 13, fontWeight: 500, letterSpacing: '-0.01em', fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", color: '#A5ADBA', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
+                  <p style={{ fontSize: 11, fontWeight: 400, letterSpacing: '-0.01em', fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", color: '#737D8D', margin: 0 }}>{formatBytes(file.size)}</p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5,
                   background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)',
@@ -250,7 +250,7 @@ export default function UploadPage() {
                   onChange={e => setPrompt(e.target.value)}
                   placeholder="Describe your edit... e.g. Make this faster, remove pauses, add captions and keep the strongest moments."
                   rows={4}
-                  style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', padding: '16px 18px 12px', fontSize: 14, color: '#FFFFFF', fontFamily: "'Inter Tight', Inter, system-ui, sans-serif", resize: 'none', lineHeight: 1.5, letterSpacing: '-0.01em', boxSizing: 'border-box' }}
+                  style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', padding: '16px 18px 12px', fontSize: 14, color: '#FFFFFF', fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", resize: 'none', lineHeight: 1.5, letterSpacing: '-0.01em', boxSizing: 'border-box' }}
                 />
                 {/* Controls bar */}
                 <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '10px 14px', borderTop: '1px solid #141414', background: '#050505' }} className="prompt-controls">
@@ -261,19 +261,19 @@ export default function UploadPage() {
                       border: '1px solid #1e1e1e' }}>
                       <span style={{ fontSize: 10, fontWeight: 600, color: '#FAFAFA',
                         letterSpacing: '0.04em', textTransform: 'uppercase',
-                        fontFamily: "'Inter Tight', sans-serif" }}>
+                        fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif" }}>
                         Auto-detected
                       </span>
                       <span style={{ width: 1, height: 10, background: '#2a2a2a' }} />
                       <span style={{ fontSize: 11, fontWeight: 500, color: '#A5ADBA',
-                        fontFamily: "'Inter Tight', sans-serif" }}>
+                        fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif" }}>
                         {detectedMeta.aspectRatio}
                       </span>
                       {detectedMeta.width > 0 && (
                         <>
                           <span style={{ width: 1, height: 10, background: '#2a2a2a' }} />
                           <span style={{ fontSize: 11, color: '#737D8D',
-                            fontFamily: "'Inter Tight', sans-serif" }}>
+                            fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif" }}>
                             {detectedMeta.width}×{detectedMeta.height}
                           </span>
                         </>
@@ -282,7 +282,7 @@ export default function UploadPage() {
                         <>
                           <span style={{ width: 1, height: 10, background: '#2a2a2a' }} />
                           <span style={{ fontSize: 11, color: '#737D8D',
-                            fontFamily: "'Inter Tight', sans-serif" }}>
+                            fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif" }}>
                             {Math.floor(detectedMeta.durationS / 60)}:{String(Math.floor(detectedMeta.durationS % 60)).padStart(2,'0')}
                           </span>
                         </>
@@ -318,11 +318,11 @@ export default function UploadPage() {
                 }}>
                   <AlertCircle size={16} style={{ color: '#f87171', flexShrink: 0, marginTop: 1 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontFamily: "'Inter Tight', sans-serif", fontSize: 13, fontWeight: 600,
+                    <p style={{ fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontSize: 13, fontWeight: 600,
                       color: '#f87171', margin: '0 0 2px', letterSpacing: '-0.01em' }}>
                       Upload failed
                     </p>
-                    <p style={{ fontFamily: "'Inter Tight', sans-serif", fontSize: 12, fontWeight: 400,
+                    <p style={{ fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontSize: 12, fontWeight: 400,
                       color: '#fca5a5', margin: 0, lineHeight: 1.5 }}>
                       {uploadError}
                     </p>

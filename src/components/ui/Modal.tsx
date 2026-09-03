@@ -55,7 +55,7 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
       }}>
         {title && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-            <h3 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 20, letterSpacing: '-0.025em', color: '#F5F7FA', margin: 0 }}>
+            <h3 style={{ fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontWeight: 700, fontSize: 20, letterSpacing: '-0.025em', color: '#F5F7FA', margin: 0 }}>
               {title}
             </h3>
             <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#666', padding: 4, borderRadius: 6, display: 'flex' }}

@@ -1,5 +1,41 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap');
 @import "tailwindcss";
+
+/* ─────────────────────────────────────────────
+   BRAND FONT — Uni Neue (Fontfabric, commercial)
+   The app renders in Uni Neue when the licensed
+   font files are present in /public/fonts. If
+   they are absent, Manrope (a free geometric
+   sans) is the near-identical fallback. Drop the
+   WOFF2 files at the paths below to activate.
+───────────────────────────────────────────── */
+@font-face {
+  font-family: 'Uni Neue';
+  src: local('Uni Neue Regular'),
+       url('/fonts/UniNeue-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Uni Neue';
+  src: local('Uni Neue Bold'),
+       url('/fonts/UniNeue-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Uni Neue';
+  src: local('Uni Neue Heavy'),
+       url('/fonts/UniNeue-Heavy.woff2') format('woff2');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Brand font stack — Uni Neue first, Manrope fallback. */
+
 
 @theme {
   --color-bg-primary:       #050505;
@@ -14,8 +50,8 @@
   --color-accent:           #FAFAFA;
   --color-accent-hover:     #FFFFFF;
   --color-accent-dark:      #A1A1AA;
-  --font-tight: 'Inter Tight', Inter, system-ui, sans-serif;
-  --font-sans:  'Inter', sans-serif;
+  --font-tight: 'Uni Neue', 'Manrope', system-ui, -apple-system, sans-serif;
+  --font-sans:  'Uni Neue', 'Manrope', system-ui, -apple-system, sans-serif;
   --radius-card:  16px;
   --radius-video: 16px;
   --radius-btn:   10px;
@@ -488,13 +524,13 @@ body {
 
 /* ─────────────────────────────────────────────
    TYPOGRAPHY SYSTEM — Modaya AI-native
-   Primary: Inter Tight (all UI)
-   Secondary: Inter (long-form body only)
+   Primary: Uni Neue (all UI) — falls back to Manrope
+   Fallback: Manrope
 ───────────────────────────────────────────── */
 :root {
   /* Fonts */
-  --font-tight: 'Inter Tight', Inter, system-ui, sans-serif;
-  --font-body:  'Inter', sans-serif;
+  --font-tight: 'Uni Neue', 'Manrope', system-ui, -apple-system, sans-serif;
+  --font-body:  'Uni Neue', 'Manrope', system-ui, -apple-system, sans-serif;
 
   /* Text colours */
   --text-primary:     #F5F7FA;
@@ -520,14 +556,14 @@ body {
   --lh-timeline: 1.1;
 }
 
-/* Base reset — Inter Tight for ALL elements */
+/* Base reset — Uni Neue for ALL elements */
 *, *::before, *::after {
   font-family: var(--font-tight);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Only long-form body copy uses Inter */
+/* Uni Neue renders everywhere; Manrope is the fallback */
 p.body-copy, .body-copy, textarea.body-input {
   font-family: var(--font-body);
 }

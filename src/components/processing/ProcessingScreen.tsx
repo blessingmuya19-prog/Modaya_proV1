@@ -57,7 +57,7 @@ export function ProcessingScreen({ filename, onComplete }: { filename?: string; 
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#FAFAFA', animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
             <span style={{ fontSize: 10, color: '#FAFAFA', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>AI is working</span>
           </div>
-          <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 28, letterSpacing: '-0.04em', lineHeight: 1.1, color: '#FFFFFF', margin: '0 0 6px' }}>
+          <h2 style={{ fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontWeight: 700, fontSize: 28, letterSpacing: '-0.04em', lineHeight: 1.1, color: '#FFFFFF', margin: '0 0 6px' }}>
             Understanding your video
           </h2>
           {filename && <p style={{ fontSize: 13, color: '#666', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{filename}</p>}

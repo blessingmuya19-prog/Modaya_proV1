@@ -109,7 +109,7 @@ function CreatorCard({ c, i, inView }: { c: typeof CASES[0]; i: number; inView: 
 
       {/* Text body */}
       <div style={{ padding: '24px 24px 28px', flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <h3 style={{ fontFamily: "'Inter Tight',sans-serif", fontSize: 20, fontWeight: 700, color: '#FAFAFA', letterSpacing: '-0.03em', margin: 0 }}>{c.title}</h3>
+        <h3 style={{ fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontSize: 20, fontWeight: 700, color: '#FAFAFA', letterSpacing: '-0.03em', margin: 0 }}>{c.title}</h3>
         <p style={{ fontSize: 14, color: '#D4D4D8', lineHeight: 1.5, letterSpacing: '-0.01em', margin: 0 }}>{c.body}</p>
 
         {/* AI label */}
@@ -138,7 +138,7 @@ export function UseCasesSection() {
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#D4D4D8', display: 'inline-block' }} />
             <span style={{ fontSize: 11, color: '#D4D4D8', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Use cases</span>
           </div>
-          <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(30px,5vw,52px)', letterSpacing: '-0.025em', lineHeight: 1.05, color: '#FAFAFA', margin: '0 0 18px' }}>
+          <h2 style={{ fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontWeight: 700, fontSize: 'clamp(30px,5vw,52px)', letterSpacing: '-0.025em', lineHeight: 1.05, color: '#FAFAFA', margin: '0 0 18px' }}>
             Built for every creator<br />
             <span style={{ color: 'rgba(15,27,51,0.30)' }}>with footage to edit.</span>
           </h2>
@@ -173,7 +173,7 @@ export function UseCasesSection() {
           ].map((s, i, arr) => (
             <React.Fragment key={i}>
               <div style={{ padding: '0 40px', textAlign: 'center' }}>
-                <p style={{ fontFamily: "'Inter Tight',sans-serif", fontSize: 'clamp(24px,3vw,36px)', fontWeight: 800, color: '#FAFAFA', letterSpacing: '-0.04em', margin: '0 0 4px' }}>{s.value}</p>
+                <p style={{ fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontSize: 'clamp(24px,3vw,36px)', fontWeight: 800, color: '#FAFAFA', letterSpacing: '-0.04em', margin: '0 0 4px' }}>{s.value}</p>
                 <p style={{ fontSize: 12, color: '#A1A1AA', margin: 0 }}>{s.label}</p>
               </div>
               {i < arr.length - 1 && <div style={{ width: 1, height: 40, background: '#3F3F46', flexShrink: 0 }} />}

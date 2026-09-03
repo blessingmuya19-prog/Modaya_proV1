@@ -1,6 +1,6 @@
 /**
  * Modaya Typography System
- * Primary: Inter Tight — used for ALL UI text
+ * Primary: Uni Neue — used for ALL UI text (falls back to Manrope)
  * Secondary: Inter — only for long-form body copy / dense descriptions
  *
  * Design intent: modern, compact, premium, AI-native.
@@ -8,8 +8,8 @@
  */
 
 export const FONT = {
-  tight:  "'Inter Tight', sans-serif",
-  body:   "'Inter', sans-serif",
+  tight:  "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif",
+  body:   "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif",
 } as const;
 
 export const SIZE = {
