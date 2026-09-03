@@ -83,6 +83,49 @@ describe('refineProfile', () => {
     expect(p.shotMeanS).toBeGreaterThanOrEqual(1);
   });
 
+  it('handles "don\'t cut anything / sont cut anything / keep whole video"', () => {
+    const r1 = refineProfile(profile(), 'sont cut anything');
+    expect(r1.changed).toBe(true);
+    expect(r1.profile.uncut).toBe(true);
+    expect(r1.reply).toMatch(/100%|no cuts|footage/i);
+
+    const r2 = refineProfile(profile(), 'i did not ask for the cut');
+    expect(r2.changed).toBe(true);
+    expect(r2.profile.uncut).toBe(true);
+
+    const r3 = refineProfile(profile(), 'keep all the footage without trimming');
+    expect(r3.changed).toBe(true);
+    expect(r3.profile.uncut).toBe(true);
+  });
+
+  it('handles aspect ratio requests', () => {
+    const wide = refineProfile(profile(), 'make it 16:9 widescreen');
+    expect(wide.changed).toBe(true);
+    expect(wide.profile.targetRatio).toBe('16:9');
+
+    const vert = refineProfile(profile(), 'change to vertical 9:16 for tiktok');
+    expect(vert.changed).toBe(true);
+    expect(vert.profile.targetRatio).toBe('9:16');
+
+    const orig = refineProfile(profile(), 'keep original format');
+    expect(orig.changed).toBe(true);
+    expect(orig.profile.targetRatio).toBe('original');
+  });
+
+  it('removes punch-ins on request', () => {
+    const r = refineProfile(profile({ punchInRate: 0.5, punchInMax: 1.2 }), 'no punch-ins please, flat camera');
+    expect(r.changed).toBe(true);
+    expect(r.profile.punchInRate).toBe(0);
+    expect(r.profile.punchInMax).toBe(1);
+  });
+
+  it('resets colour grade on request', () => {
+    const r = refineProfile(profile({ grade: { brightness: 0.2, contrast: 0.1, saturation: 0.3, warmth: 0.2 } }), 'reset colour to natural');
+    expect(r.changed).toBe(true);
+    expect(r.profile.grade.warmth).toBe(0);
+    expect(r.profile.grade.saturation).toBe(0);
+  });
+
   it('reports no change with guidance for something it cannot do', () => {
     const r = refineProfile(profile(), 'add b-roll from my holiday footage');
     expect(r.changed).toBe(false);

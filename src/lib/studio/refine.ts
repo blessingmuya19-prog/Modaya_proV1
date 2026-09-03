@@ -64,6 +64,40 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
     }
   }
 
+  // "Don't cut anything" / "Keep the whole video" / "Uncut" / "No cuts"
+  const wantsUncut = /\b(sont|dont|don.?t|do not|did not|never|stop|no)\s+(cut|trim|slice|remove|drop|edit)\b/i.test(text)
+    || /\b(did not ask for (a |the )?cut|didn.?t ask for (a |the )?cut)\b/i.test(text)
+    || /\b(keep|leave|preserve|use)\s+(all|the whole|every|everything|entire|full|original)\s*(video|footage|thing|clip)?\b/i.test(text)
+    || /\b(uncut|full length|full video|raw footage|raw video|whole video|entire footage|no cuts?|all footage|keep all)\b/i.test(text);
+
+  if (wantsUncut) {
+    p.uncut = true;
+    p.energy = 0;
+    p.cutsPerMin = 0;
+    changed = true;
+    did.push('restored 100% of your footage with no cuts or trims');
+  }
+
+  // Aspect ratio / Video format
+  const wantsLandscape = /\b(16:9|16\/9|widescreen|wide|horizontal|landscape|youtube format)\b/i.test(text);
+  const wantsVertical  = /\b(9:16|9\/16|vertical|portrait|tiktok|reels|shorts)\b/i.test(text);
+  const wantsSquare    = /\b(1:1|1\/1|square|instagram square)\b/i.test(text);
+  const wantsOriginalRatio = /\b(original format|original ratio|original aspect|native ratio|keep format|same format)\b/i.test(text);
+
+  if (wantsLandscape) {
+    p.targetRatio = '16:9';
+    changed = true; did.push('set format to 16:9 widescreen');
+  } else if (wantsVertical) {
+    p.targetRatio = '9:16';
+    changed = true; did.push('set format to 9:16 vertical');
+  } else if (wantsSquare) {
+    p.targetRatio = '1:1';
+    changed = true; did.push('set format to 1:1 square');
+  } else if (wantsOriginalRatio) {
+    p.targetRatio = 'original';
+    changed = true; did.push('restored original video format');
+  }
+
   const wantsFast = /\b(faster|snappier|more energetic|more energy|energetic|more dynamic|punchier|more punchy|tighter|speed up|too slow|drags?)\b/.test(text)
     || (/\bslow\b/.test(text.replace(/not?\s+slow|less?\s+slow/g, '')) && /too|make|more|faster/.test(text));
   const wantsSlow = /\b(slower|calm|calmer|more relaxed|less energetic|slow down|too fast|rushed|breathing room)\b/.test(text);
@@ -86,31 +120,38 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
   // Punch-ins / zooms
   const moreZoom = /\b(more|lots? of|extra|add|use more|bigger)\b.*\b(punch-?ins?|zoom|push-?ins?|close-?ups?)\b/.test(text)
     || /\bpunch-?ins?\b.*\bmore\b/.test(text);
-  const lessZoom = /\b(less|fewer|no|remove|stop)\b.*\b(punch-?ins?|zoom|push-?ins?|close-?ups?)\b/.test(text);
+  const lessZoom = /\b(less|fewer|no|remove|stop|without|disable|don.?t)\b.*\b(punch-?ins?|zoom|push-?ins?|close-?ups?)\b/.test(text)
+    || /\b(no zoom|stop zooming|flat camera|no punch-?ins?)\b/.test(text);
   if (moreZoom) {
     p.punchInRate = clamp(p.punchInRate + 0.25, 0, 0.95);
     p.punchInMax  = clamp(p.punchInMax + 0.03, 1.06, 1.4);
     changed = true; did.push('added more punch-ins like the reference');
   } else if (lessZoom) {
-    p.punchInRate = clamp(p.punchInRate - 0.25, 0, 1);
-    changed = true; did.push('dialled back the punch-ins');
+    p.punchInRate = 0;
+    p.punchInMax  = 1;
+    changed = true; did.push('removed all punch-ins and zooms');
   }
 
   // Captions
-  const moreCaps = /\b(more|bigger|louder|emphasi[sz]e|use .{0,12}captions?|captions? more)\b.*\b(captions?|subtitles?|text)\b/.test(text)
-    || (/\bcaptions?\b/.test(text) && /\bmore|reference|like\b/.test(text));
-  const lessCaps = /\b(no|remove|less|fewer|get rid of|drop|turn off)\b.*\b(captions?|subtitles?)\b/.test(text)
+  const moreCaps = /\b(more|bigger|louder|emphasi[sz]e|use .{0,12}captions?|captions? more|add captions?|show captions?|turn on (captions?|subtitles?))\b.*\b(captions?|subtitles?|text)?\b/.test(text)
+    || (/\bcaptions?\b/.test(text) && /\bmore|reference|like|add|on\b/.test(text));
+  const lessCaps = /\b(no|remove|less|fewer|get rid of|drop|turn off|disable|without)\b.*\b(captions?|subtitles?)\b/.test(text)
     || /\b(captions?|subtitles?)\b.*\b(off|gone|away)\b/.test(text);
   if (moreCaps) {
     p.captions = { present: true, position: p.captions?.position ?? 'lower', emphasis: clamp((p.captions?.emphasis ?? 0.4) + 0.25, 0, 1) };
     if (setPacing(p, 1.05)) { /* denser shots → captions land more often */ }
-    changed = true; did.push('brought the reference-style captions in more');
+    changed = true; did.push('brought the reference-style captions in');
   } else if (lessCaps) {
     p.captions = { ...(p.captions ?? { present: false, position: 'lower' as const, emphasis: 0 }), present: false };
     changed = true; did.push('removed the captions');
   }
 
   // Colour grade
+  const resetGrade = /\b(no grade|no filter|reset colou?r|original colou?r|natural (colou?r|look|grade)|neutral grade)\b/.test(text);
+  if (resetGrade) {
+    p.grade = { brightness: 0, contrast: 0, saturation: 0, warmth: 0 };
+    changed = true; did.push('reset colour grade to natural');
+  }
   if (/\b(more|warmer|warm up)\b.*\b(colou?r|grade|warm|tone)\b/.test(text) || /\bwarmer\b/.test(text)) {
     p.grade = { ...p.grade, warmth: clamp(p.grade.warmth + 0.12, -1, 1), saturation: clamp(p.grade.saturation + 0.05, -1, 1) };
     changed = true; did.push('warmed the grade');
@@ -152,7 +193,7 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
     return {
       profile: base,
       changed: false,
-      reply: "I can adjust pacing, punch-ins/zooms, captions, the grade, or make the cut shorter or longer. For example: “make it more energetic”, “more punch-ins”, or “use captions like the reference”.",
+      reply: "I can adjust your edit. Try saying: “don't cut anything / keep full video”, “make it 16:9 widescreen”, “no punch-ins”, “remove captions”, “faster pacing”, or “warmer grade”.",
     };
   }
 

@@ -120,6 +120,27 @@ describe('composeStudioPlan — full re-cut', () => {
     // a re-cut removes material but keeps a substantial programme
     expect(plan.durationS).toBeGreaterThan(120);
   });
+
+  it('keeps 100% of footage when uncut is requested', () => {
+    const uncutProfile = profile({ uncut: true });
+    const plan = composeStudioPlan({
+      profile: uncutProfile, sourceDurationS: 180, sourceRatio: '16:9',
+    });
+    expect(plan.durationS).toBe(180);
+    expect(plan.removedS).toBe(0);
+    expect(plan.clips.filter(c => c.type === 'video').length).toBe(1);
+    expect(plan.frame.ratio).toBe('16:9');
+    expect(plan.summary).toMatch(/uncut|100%/i);
+  });
+
+  it('preserves source aspect ratio when provided', () => {
+    const plan = composeStudioPlan({
+      profile: profile(), sourceDurationS: 60, sourceRatio: '16:9',
+    });
+    expect(plan.frame.ratio).toBe('16:9');
+    expect(plan.frame.width).toBe(1920);
+    expect(plan.frame.height).toBe(1080);
+  });
 });
 
 describe('B-roll cutaways', () => {

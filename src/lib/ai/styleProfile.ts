@@ -54,6 +54,10 @@ export interface StyleProfile {
   beatSynced:   boolean;
   bpm:          number | null;
   energy:       number;      // 0..1 overall intensity
+  /** When true, keeps 100% of footage sequentially with no sections removed. */
+  uncut?:       boolean;
+  /** User-requested or preserved frame aspect ratio ('16:9' | '9:16' | '1:1' | 'original'). */
+  targetRatio?: '16:9' | '9:16' | '1:1' | 'original';
 }
 
 /* ─────────────── cut detection ─────────────── */

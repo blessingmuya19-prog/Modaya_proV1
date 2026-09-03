@@ -359,6 +359,11 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
   const applyPlan = useCallback((profile: StyleProfile, seed: number): { plan: StudioPlan; match: number } | null => {
     const ctx = ctxRef.current;
     if (!ctx) return null;
+    const curMedia = projectId ? getMedia(projectId) : null;
+    const sourceRatio: '16:9' | '9:16' | '1:1' = curMedia && curMedia.width && curMedia.height
+      ? (curMedia.width >= curMedia.height * 1.25 ? '16:9' : curMedia.height >= curMedia.width * 1.25 ? '9:16' : '1:1')
+      : '16:9';
+
     const plan = composeStudioPlan({
       profile, sourceDurationS: ctx.durationS,
       interest: ctx.interest, onsets: ctx.onsets,
@@ -367,6 +372,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
       // B-roll windows from these clips instead of the main footage.
       brollLibrary: brollRef.current.map((it, i) => ({ id: brollSourceId(i), durationS: it.durationS })),
       seed,
+      sourceRatio,
     });
     setPlan(plan);
     setFrame({ width: plan.frame.width, height: plan.frame.height });
@@ -401,7 +407,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     });
     setMatch(m);
     return { plan, match: m };
-  }, []);
+  }, [projectId]);
 
   /** Persist a newly composed plan as the next version (never overwrites). */
   const saveVersion = useCallback(async (
@@ -796,9 +802,11 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     const t = Math.max(0, frac) * Math.max(1, totalS);
     setPlayhead(t);
     const ref = refVideoRef.current;
-    if (ref && Number.isFinite(ref.duration)) {
+    if (ref && Number.isFinite(ref.duration) && ref.duration > 0) {
       const rt = frac * ref.duration;
-      try { ref.currentTime = rt; } catch { /* seeking before metadata */ }
+      if (Math.abs(ref.currentTime - rt) > 0.25 || !play) {
+        try { ref.currentTime = rt; } catch { /* seeking before metadata */ }
+      }
       if (play) { void ref.play().catch(() => {}); } else { ref.pause(); }
     }
     setPlaying(play);
@@ -890,8 +898,8 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start', width: '100%' }}>
             {/* Reference */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-              <CompareBox title="REFERENCE">
-                <video ref={refVideoRef} src={refUrl} preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
+              <CompareBox title="REFERENCE" ratio={plan?.frame.ratio}>
+                <video ref={refVideoRef} src={refUrl} preload="auto" style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }} muted playsInline />
               </CompareBox>
               <span style={{ fontSize: 12, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{refName ?? 'Reference'}</span>
             </div>
@@ -940,15 +948,15 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
                  selected edit's reference moment. */
               <div style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                  <SideBox highlight={!!refMoment} label="REFERENCE">
-                    <video ref={refVideoRef} src={refUrl} preload="metadata" controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
+                  <SideBox highlight={!!refMoment} label="REFERENCE" ratio={plan?.frame.ratio}>
+                    <video ref={refVideoRef} src={refUrl} preload="auto" controls playsInline style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }} muted />
                   </SideBox>
                   <span style={{ fontSize: 11, color: refMoment ? C.accent : C.dim, fontWeight: refMoment ? 700 : 400 }}>
                     {refMoment ? `Reference ${fmtTime(refMoment.t)}` : (refName ?? 'Reference')}
                   </span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                  <SideBox highlight={!!selectedMarker} label="YOUR EDIT">
+                  <SideBox highlight={!!selectedMarker} label="YOUR EDIT" ratio={plan?.frame.ratio}>
                     {sequence && sourceUrl ? (
                       <PreviewCanvas
                         sequence={sequence} sourceUrl={sourceUrl} sourceId={projectId || 'main'} extraSources={brollSources}
@@ -965,8 +973,8 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
               </div>
             ) : iterView === 'ref' && refUrl ? (
               <div style={{ display: 'flex', justifyContent: 'center' }}>
-                <div style={{ ...previewBox(plan?.frame.ratio), background: C.media, borderRadius: 14, overflow: 'hidden', border: `1px solid ${C.b3}` }}>
-                  <video ref={refVideoRef} src={refUrl} preload="metadata" controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <div style={{ ...previewBox(plan?.frame.ratio), background: '#000', borderRadius: 14, overflow: 'hidden', border: `1px solid ${C.b3}` }}>
+                  <video ref={refVideoRef} src={refUrl} preload="auto" controls playsInline style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }} />
                 </div>
               </div>
             ) : (
@@ -1086,23 +1094,35 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
 }
 
 /* ─────────── comparison box ─────────── */
-function CompareBox({ title, children }: { title: string; children: React.ReactNode }) {
+function CompareBox({ title, ratio, children }: { title: string; ratio?: string; children: React.ReactNode }) {
+  const isWide = ratio === '16:9';
+  const isSquare = ratio === '1:1';
   return (
-    <div style={{ width: 'min(42vw, 300px)', aspectRatio: '9 / 16', background: C.media, borderRadius: 14, overflow: 'hidden', position: 'relative', border: `1px solid ${C.b3}`, boxShadow: '0 18px 50px rgba(0,0,0,0.45)' }}>
-      <span style={{ position: 'absolute', top: 8, left: 8, zIndex: 2, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: '#fff', background: 'rgba(15,27,51,0.55)', padding: '3px 8px', borderRadius: 6 }}>{title}</span>
+    <div style={{
+      width: isWide ? 'min(46vw, 360px)' : isSquare ? 'min(40vw, 260px)' : 'min(38vw, 220px)',
+      aspectRatio: isWide ? '16 / 9' : isSquare ? '1 / 1' : '9 / 16',
+      background: '#000', borderRadius: 14, overflow: 'hidden', position: 'relative', border: `1px solid ${C.b3}`, boxShadow: '0 18px 50px rgba(0,0,0,0.45)'
+    }}>
+      <span style={{ position: 'absolute', top: 8, left: 8, zIndex: 2, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: '#fff', background: 'rgba(15,27,51,0.65)', padding: '3px 8px', borderRadius: 6, backdropFilter: 'blur(4px)' }}>{title}</span>
       {children}
     </div>
   );
 }
 
 /* ─────────── side-by-side box (iterate view) ─────────── */
-function SideBox({ label, highlight, children }: { label: string; highlight: boolean; children: React.ReactNode }) {
+function SideBox({ label, highlight, ratio, children }: { label: string; highlight: boolean; ratio?: string; children: React.ReactNode }) {
+  const isWide = ratio === '16:9';
+  const isSquare = ratio === '1:1';
   return (
-    <div style={{ width: 'min(38vw, 240px)', aspectRatio: '9 / 16', background: C.media, borderRadius: 12, overflow: 'hidden',
+    <div style={{
+      width: isWide ? 'min(46vw, 360px)' : isSquare ? 'min(40vw, 260px)' : 'min(38vw, 210px)',
+      aspectRatio: isWide ? '16 / 9' : isSquare ? '1 / 1' : '9 / 16',
+      background: '#000', borderRadius: 12, overflow: 'hidden',
       position: 'relative', border: `2px solid ${highlight ? C.accent : C.b3}`,
-      boxShadow: highlight ? `0 0 0 3px ${C.accent}33` : 'none', transition: 'border 160ms' }}>
+      boxShadow: highlight ? `0 0 0 3px ${C.accent}33` : 'none', transition: 'border 160ms'
+    }}>
       <span style={{ position: 'absolute', top: 7, left: 7, zIndex: 3, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
-        color: '#fff', background: 'rgba(15,27,51,0.55)', padding: '3px 7px', borderRadius: 6 }}>{label}</span>
+        color: '#fff', background: 'rgba(15,27,51,0.65)', padding: '3px 7px', borderRadius: 6, backdropFilter: 'blur(4px)' }}>{label}</span>
       {children}
     </div>
   );

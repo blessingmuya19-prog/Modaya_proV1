@@ -129,14 +129,20 @@ export class PreviewEngine {
     this.renderFrame();
   }
 
+  private lastEmitMs = 0;
+
   private ensurePool() {
     if (this.pool.length) return;
     const onReady = () => { if (!this._playing && !this.destroyed) this.renderFrame(); };
     this.pool = [0, 1].map(() => {
       const v = document.createElement('video');
       v.playsInline  = true;
-      v.preload      = 'metadata';
+      v.preload      = 'auto';
       v.crossOrigin  = 'anonymous';
+      v.setAttribute('playsinline', 'true');
+      v.setAttribute('webkit-playsinline', 'true');
+      v.setAttribute('disablepictureinpicture', 'true');
+      v.setAttribute('disableremoteplayback', 'true');
       v.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px';
       v.addEventListener('loadeddata', onReady);
       v.addEventListener('seeked', onReady);
@@ -145,9 +151,13 @@ export class PreviewEngine {
     if (!this.overlayEl) {
       const ov = document.createElement('video');
       ov.playsInline = true;
-      ov.preload     = 'metadata';
+      ov.preload     = 'auto';
       ov.crossOrigin = 'anonymous';
       ov.muted       = true;      // a cutaway never carries audio
+      ov.setAttribute('playsinline', 'true');
+      ov.setAttribute('webkit-playsinline', 'true');
+      ov.setAttribute('disablepictureinpicture', 'true');
+      ov.setAttribute('disableremoteplayback', 'true');
       ov.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px';
       ov.addEventListener('loadeddata', onReady);
       ov.addEventListener('seeked', onReady);
@@ -176,13 +186,20 @@ export class PreviewEngine {
    */
   onEnd(fn: () => void) { this.endListeners.add(fn); return () => this.endListeners.delete(fn); }
 
-  private emitTime() { this.timeListeners.forEach(fn => { try { fn(this._time); } catch {} }); }
+  private emitTime(force = false) {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (!force && this._playing && now - this.lastEmitMs < 50) {
+      return;
+    }
+    this.lastEmitMs = now;
+    this.timeListeners.forEach(fn => { try { fn(this._time); } catch {} });
+  }
 
   /** Stop at the very end of the programme and say so. */
   private finish() {
     if (!this.seq) return;
     this._time = this.seq.durationS;
-    this.emitTime();
+    this.emitTime(true);
     this.pause();
     this.endListeners.forEach(fn => { try { fn(); } catch {} });
   }
@@ -209,13 +226,14 @@ export class PreviewEngine {
     this._playing = false;
     this.pool.forEach(v => { try { v.pause(); } catch {} });
     cancelAnimationFrame(this.raf);
+    this.emitTime(true);
     this.stateListeners.forEach(fn => fn(false));
     this.renderFrame();
   }
 
   /** Move the playhead. Repaints one composited frame even while paused. */
   seek(t: number) {
-    if (!this.seq) { this._time = Math.max(0, t); return; }
+    if (!this.seq) { this._time = Math.max(0, t); this.emitTime(true); return; }
     const clamped = Math.max(0, Math.min(this.seq.durationS, t));
     this._time = clamped;
     this.syncSource(false);
@@ -228,6 +246,7 @@ export class PreviewEngine {
         try { v.currentTime = want; } catch {}
       }
     }
+    this.emitTime(true);
     this.renderFrame();
   }
 

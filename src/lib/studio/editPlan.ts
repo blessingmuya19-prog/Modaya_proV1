@@ -77,8 +77,10 @@ export interface ComposeOpts {
   interest?: number[];
   onsets?: number[];
   transcript?: TranscriptLine[];
-  /** "short" | "full"; auto-decided from the reference when omitted. */
-  mode?: 'short' | 'full';
+  /** "short" | "full" | "uncut"; auto-decided from the reference when omitted. */
+  mode?: 'short' | 'full' | 'uncut';
+  /** Native aspect ratio / format of the source media. */
+  sourceRatio?: FrameRatio;
   /** Output length target for short mode. */
   targetSeconds?: number;
   /** Uploaded B-roll library; when present, cutaways come from these clips
@@ -311,14 +313,33 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
   const seed = opts.seed ?? hashString(profile.sourceName);
   const rand = rng(seed + 7);
 
-  // Mode + format: a short reference (or none) ⇒ a vertical short; a long
-  // reference ⇒ re-cut the whole thing in its shape.
-  const refShort = profile.durationS > 0 && profile.durationS <= 120;
-  const mode: 'short' | 'full' = opts.mode ?? (refShort || profile.sourceName === 'modaya-default' ? 'short' : 'full');
-  const ratio: FrameRatio = mode === 'short' ? '9:16' : (profile.durationS > 0 && profile.durationS < 1 ? '1:1' : '16:9');
+  const isUncut = profile.uncut || opts.mode === 'uncut';
+
+  // Aspect ratio resolution:
+  // 1. Explicit targetRatio in profile ('16:9' | '9:16' | '1:1')
+  // 2. Explicit targetRatio 'original' -> opts.sourceRatio
+  // 3. opts.sourceRatio (from uploaded footage or reference)
+  // 4. Default: short mode -> '9:16', long -> '16:9'
+  let ratio: FrameRatio;
+  if (profile.targetRatio && profile.targetRatio !== 'original') {
+    ratio = profile.targetRatio;
+  } else if (opts.sourceRatio) {
+    ratio = opts.sourceRatio;
+  } else {
+    const refShort = profile.durationS > 0 && profile.durationS <= 120;
+    const autoMode = opts.mode ?? (refShort || profile.sourceName === 'modaya-default' ? 'short' : 'full');
+    ratio = autoMode === 'short' ? '9:16' : (profile.durationS > 0 && profile.durationS < 1 ? '1:1' : '16:9');
+  }
+
   const frame = ratio === '9:16' ? { width: 1080, height: 1920, ratio }
     : ratio === '1:1' ? { width: 1080, height: 1080, ratio }
     : { width: 1920, height: 1080, ratio };
+
+  // Mode: a short reference (or none) ⇒ a vertical short; a long reference ⇒ re-cut the whole thing; uncut ⇒ keep 100%
+  const refShort = profile.durationS > 0 && profile.durationS <= 120;
+  const mode: 'short' | 'full' | 'uncut' = isUncut
+    ? 'uncut'
+    : (opts.mode ?? (refShort || profile.sourceName === 'modaya-default' ? 'short' : 'full'));
 
   const grade = profile.grade;
   const effects: Effects = {
@@ -334,7 +355,20 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
   let kept = 0;
   let brollCount = 0;
 
-  if (mode === 'short') {
+  if (mode === 'uncut') {
+    // Keep 100% of footage sequentially with no segments cut out
+    const punchIn = profile.punchInRate > 0.4 && rand() < profile.punchInRate;
+    const scale = punchIn ? 1 + (profile.punchInMax - 1) * 0.5 : 1;
+    video.push({
+      id: 'shot-0', trackId: 'video', label: 'Full Video (Uncut)',
+      startS: 0, endS: Number(durationS.toFixed(3)),
+      type: 'video', sourceIn: 0,
+      transform: { ...DEFAULT_TRANSFORM, fit: 'contain', scale },
+      effects,
+    });
+    cursor = durationS;
+    kept = 1;
+  } else if (mode === 'short') {
     const targetS = clamp(opts.targetSeconds ?? (refShort ? profile.durationS : 45), 20, 90);
     const moments = chooseMoments({ durationS, targetS, interest, onsets, hookFirst: true });
     moments.forEach((m, idx) => {
@@ -345,8 +379,8 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
         id: `shot-${idx}`, trackId: 'video', label: `Moment ${idx + 1}`,
         startS: Number(cursor.toFixed(3)), endS: Number((cursor + len).toFixed(3)),
         type: 'video', sourceIn: Number(m.s.toFixed(3)),
-        // Vertical frame: cover-crop the source so it fills 9:16.
-        transform: { ...DEFAULT_TRANSFORM, fit: 'cover', scale, offsetX: punchIn ? (idx % 2 ? 0.02 : -0.02) : 0 },
+        // Cover-crop only if forced 9:16 without matching sourceRatio, otherwise contain
+        transform: { ...DEFAULT_TRANSFORM, fit: ratio === '9:16' && !opts.sourceRatio ? 'cover' : 'contain', scale, offsetX: punchIn ? (idx % 2 ? 0.02 : -0.02) : 0 },
         effects,
       });
       cursor += len; kept++;
@@ -373,7 +407,7 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
         id: `shot-${idx}`, trackId: 'video', label: `Shot ${idx + 1}`,
         startS: Number(cursor.toFixed(3)), endS: Number((cursor + len).toFixed(3)),
         type: 'video', sourceIn: Number(g.s.toFixed(3)),
-        transform: { ...DEFAULT_TRANSFORM, fit: ratio === '9:16' ? 'cover' : 'contain', scale },
+        transform: { ...DEFAULT_TRANSFORM, fit: ratio === '9:16' && !opts.sourceRatio ? 'cover' : 'contain', scale },
         effects,
       });
       cursor += len; kept++;
@@ -387,7 +421,7 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
   // the main footage that the edit doesn't already use.
   const library = (opts.brollLibrary ?? []).filter(b => b.durationS >= 0.6);
   const usedRanges = video.map(v => ({ s: v.sourceIn, e: v.sourceIn + (v.endS - v.startS) }));
-  const targetCutaways = Math.max(0, Math.round(cursor / 9));   // roughly one per 9s
+  const targetCutaways = isUncut ? 0 : Math.max(0, Math.round(cursor / 9));   // roughly one per 9s
   const libPicks = library.length
     ? chooseLibraryBroll({ library, count: targetCutaways, cutLenS: 1.7, rand })
     : [];
@@ -430,14 +464,21 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
 
   const clips = [...video, ...broll, ...caps];
   const newDuration = cursor;
-  const summary = [
-    mode === 'short' ? `${kept} moments` : `${kept} shots`,
-    `${fmt(durationS - newDuration)} cut`,
-    caps.length ? `${caps.length} captions` : null,
-    ratio === '9:16' ? 'vertical 9:16' : null,
-    profile.punchInRate > 0.25 ? 'punch-ins' : null,
-    brollCount ? `${brollCount} b-roll${brollFromLibrary ? ' (your library)' : ''}` : null,
-  ].filter(Boolean).join(' · ');
+  const summary = isUncut
+    ? [
+        'Full uncut video (100% kept)',
+        caps.length ? `${caps.length} captions` : null,
+        ratio === '16:9' ? '16:9 widescreen' : ratio === '9:16' ? 'vertical 9:16' : '1:1 square',
+        brollCount ? `${brollCount} b-roll` : null,
+      ].filter(Boolean).join(' · ')
+    : [
+        mode === 'short' ? `${kept} moments` : `${kept} shots`,
+        `${fmt(durationS - newDuration)} cut`,
+        caps.length ? `${caps.length} captions` : null,
+        ratio === '9:16' ? 'vertical 9:16' : ratio === '16:9' ? '16:9 widescreen' : '1:1 square',
+        profile.punchInRate > 0.25 ? 'punch-ins' : null,
+        brollCount ? `${brollCount} b-roll${brollFromLibrary ? ' (your library)' : ''}` : null,
+      ].filter(Boolean).join(' · ');
 
   return {
     clips,
