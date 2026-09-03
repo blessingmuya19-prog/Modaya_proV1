@@ -791,6 +791,19 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     setChatBusy(false);
   };
 
+  /** Synced playback for side-by-side: scrub/play both by progress fraction. */
+  const syncProgress = useCallback((frac: number, play: boolean) => {
+    const t = Math.max(0, frac) * Math.max(1, totalS);
+    setPlayhead(t);
+    const ref = refVideoRef.current;
+    if (ref && Number.isFinite(ref.duration)) {
+      const rt = frac * ref.duration;
+      try { ref.currentTime = rt; } catch { /* seeking before metadata */ }
+      if (play) { void ref.play().catch(() => {}); } else { ref.pause(); }
+    }
+    setPlaying(play);
+  }, [totalS]);
+
   /* ─────────── drop phase ─────────── */
   if (phase === 'drop') {
     return (
@@ -819,19 +832,6 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
   const mm = String(Math.floor(safeTotal / 60));
   const ss = String(Math.floor(safeTotal % 60)).padStart(2, '0');
   const currentVersion = versions.length ? versions[versions.length - 1] : null;
-
-  /** Synced playback for side-by-side: scrub/play both by progress fraction. */
-  const syncProgress = useCallback((frac: number, play: boolean) => {
-    const t = Math.max(0, frac) * Math.max(1, totalS);
-    setPlayhead(t);
-    const ref = refVideoRef.current;
-    if (ref && Number.isFinite(ref.duration)) {
-      const rt = frac * ref.duration;
-      try { ref.currentTime = rt; } catch { /* seeking before metadata */ }
-      if (play) { void ref.play().catch(() => {}); } else { ref.pause(); }
-    }
-    setPlaying(play);
-  }, [totalS]);
 
   const resultVideo = (
     <div style={{ ...previewBox(plan?.frame.ratio), background: C.media, borderRadius: 14, overflow: 'hidden', position: 'relative', border: `1px solid ${C.b3}`, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
