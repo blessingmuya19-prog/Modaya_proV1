@@ -97,10 +97,6 @@ export default function NewProjectPage() {
           </div>
 
           {error && <p style={{ color: TC.danger, textAlign: 'center', fontSize: 13.5, marginTop: 20 }}>{error}</p>}
-
-          <p style={{ textAlign: 'center', color: TC.dim, fontSize: 12.5, margin: '26px 0 0', lineHeight: 1.6 }}>
-            Both land in the same editor — your video in the middle, Modaya on the right, the edit map at the bottom.
-          </p>
         </div>
       </div>
 
