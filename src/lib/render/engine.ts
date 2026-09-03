@@ -419,11 +419,12 @@ export class PreviewEngine {
     const scale = style.size === 'small' ? 0.034 : style.size === 'large' ? 0.075 : 0.048;
     const size  = Math.round(H * scale);
     const weight = style.bold === false ? 400 : 700;
+    const fontStyle = style.italic ? 'italic ' : '';
 
     /* Which side of the frame. Centred unless a corner was asked for. */
     const side = clip.textAlign ?? 'centre';
 
-    ctx.font         = `${weight} ${size}px ${FONT_STACKS[style.font ?? 'sans']}`;
+    ctx.font         = `${fontStyle}${weight} ${size}px ${FONT_STACKS[style.font ?? 'sans']}`;
     ctx.textAlign    = side === 'left' ? 'left' : side === 'right' ? 'right' : 'center';
     ctx.textBaseline = 'alphabetic';
     ctx.globalAlpha  = clip.effects.opacity;

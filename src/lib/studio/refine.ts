@@ -40,10 +40,10 @@ function setPacing(p: StyleProfile, factor: number): boolean {
   return true;
 }
 
-/** A request Modaya understands but the deterministic plan cannot do yet. */
+/** A request Modaya understands but requires footage not in the project. */
 const NOT_YET: { match: RegExp; note: string }[] = [
-  { match: /b-?roll|b roll|cutaway|extra footage|screenshot/i,
-    note: 'Adding B-roll cutaways is on the way — Modaya keeps the strongest moments for now.' },
+  { match: /b-?roll from|insert stock footage|generate b-?roll|find b-?roll/i,
+    note: 'Drop clips into the B-roll library on the drop screen — Modaya will weave them into your edit as silent cutaways.' },
 ];
 
 /**

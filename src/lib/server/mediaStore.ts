@@ -29,10 +29,20 @@
 
 // ── Interface ────────────────────────────────────────────────────────────────
 
+import { mimeFromExt } from '../mediaKeys';
+
 export interface StoredObject {
   bytes:     Buffer;
   contentType: string;
   size:      number;
+}
+
+export interface OpenReadResult {
+  stream: NodeJS.ReadableStream;
+  size: number;            // total object size
+  contentType: string;
+  contentRange?: { start: number; end: number; size: number };
+  unsatisfiable?: boolean;
 }
 
 export interface MediaStorage {
@@ -42,12 +52,7 @@ export interface MediaStorage {
   put(key: string, bytes: Buffer, contentType: string): Promise<void>;
   get(key: string): Promise<StoredObject | null>;
   /** Streaming read, optionally a byte range for seeking; null when absent. */
-  openRead(key: string, range?: { start: number; end: number }): Promise<{
-    stream: NodeJS.ReadableStream;
-    size: number;            // total object size
-    contentType: string;
-    contentRange?: { start: number; end: number; size: number };
-  } | null>;
+  openRead(key: string, range?: { start: number; end?: number }): Promise<OpenReadResult | null>;
   has(key: string): Promise<boolean>;
   delete(key: string): Promise<void>;
 }
@@ -60,26 +65,38 @@ export class MemoryStorage implements MediaStorage {
   private map = new Map<string, StoredObject>();
 
   async put(key: string, bytes: Buffer, contentType: string) {
-    this.map.set(key, { bytes, contentType, size: bytes.length });
+    const ext = key.split('.').pop() ?? '';
+    const ct = contentType && contentType !== 'application/octet-stream' ? contentType : mimeFromExt(ext);
+    this.map.set(key, { bytes, contentType: ct, size: bytes.length });
   }
   async get(key: string) {
     return this.map.get(key) ?? null;
   }
-  async openRead(key: string, range?: { start: number; end: number }) {
+  async openRead(key: string, range?: { start: number; end?: number }): Promise<OpenReadResult | null> {
     const o = this.map.get(key);
     if (!o) return null;
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { Readable } = require('stream') as typeof import('stream');
+    const ext = key.split('.').pop() ?? '';
+    const contentType = o.contentType && o.contentType !== 'application/octet-stream' ? o.contentType : mimeFromExt(ext);
     if (range) {
+      if (range.start >= o.size || range.start < 0 || (range.end !== undefined && range.end < range.start)) {
+        return {
+          stream: Readable.from([]),
+          size: o.size,
+          contentType,
+          unsatisfiable: true,
+        };
+      }
       const start = Math.max(0, range.start);
-      const end   = Math.min(o.size - 1, range.end);
+      const end   = Math.min(o.size - 1, range.end ?? (o.size - 1));
       return {
         stream: Readable.from(o.bytes.subarray(start, end + 1)),
-        size: o.size, contentType: o.contentType,
+        size: o.size, contentType,
         contentRange: { start, end, size: o.size },
       };
     }
-    return { stream: Readable.from(o.bytes), size: o.size, contentType: o.contentType };
+    return { stream: Readable.from(o.bytes), size: o.size, contentType };
   }
   async has(key: string) { return this.map.has(key); }
   async delete(key: string) { this.map.delete(key); }
@@ -126,7 +143,9 @@ export class FsStorage implements MediaStorage {
     const fp = resolveSafe(this.root, key);
     await fs.mkdir(path.dirname(fp), { recursive: true });
     await fs.writeFile(fp, bytes);
-    await fs.writeFile(fp + '.type', contentType, 'utf-8').catch(() => {});
+    const ext = key.split('.').pop() ?? '';
+    const ct = contentType && contentType !== 'application/octet-stream' ? contentType : mimeFromExt(ext);
+    await fs.writeFile(fp + '.type', ct, 'utf-8').catch(() => {});
   }
 
   async get(key: string): Promise<StoredObject | null> {
@@ -137,19 +156,33 @@ export class FsStorage implements MediaStorage {
     return { bytes: Buffer.concat(chunks), contentType: r.contentType, size: r.size };
   }
 
-  async openRead(key: string, range?: { start: number; end: number }) {
+  async openRead(key: string, range?: { start: number; end?: number }): Promise<OpenReadResult | null> {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fs   = require('fs') as typeof import('fs');
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fsp  = require('fs/promises') as typeof import('fs/promises');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { Readable } = require('stream') as typeof import('stream');
       const fp   = resolveSafe(this.root, key);
       const stat = await fsp.stat(fp);
       if (!stat.isFile()) return null;
-      const contentType = await fsp.readFile(fp + '.type', 'utf-8').catch(() => 'application/octet-stream');
+      let contentType = await fsp.readFile(fp + '.type', 'utf-8').catch(() => '');
+      if (!contentType || contentType === 'application/octet-stream') {
+        const ext = key.split('.').pop() ?? '';
+        contentType = mimeFromExt(ext);
+      }
       if (range) {
+        if (range.start >= stat.size || range.start < 0 || (range.end !== undefined && range.end < range.start)) {
+          return {
+            stream: Readable.from([]),
+            size: stat.size,
+            contentType,
+            unsatisfiable: true,
+          };
+        }
         const start = Math.max(0, range.start);
-        const end   = Math.min(stat.size - 1, range.end);
+        const end   = Math.min(stat.size - 1, range.end ?? (stat.size - 1));
         return {
           stream: fs.createReadStream(fp, { start, end }),
           size: stat.size, contentType,
@@ -289,17 +322,27 @@ class S3Storage implements MediaStorage {
     return { bytes: Buffer.from(ab), contentType: res.headers.get('content-type') ?? 'application/octet-stream', size: ab.byteLength };
   }
 
-  async openRead(key: string, range?: { start: number; end: number }) {
-    const rangeHeader = range ? `bytes=${range.start}-${range.end}` : undefined;
+  async openRead(key: string, range?: { start: number; end?: number }): Promise<OpenReadResult | null> {
+    const rangeHeader = range ? (range.end !== undefined ? `bytes=${range.start}-${range.end}` : `bytes=${range.start}-`) : undefined;
     const res = await s3Fetch(this.cfg, 'GET', key, { range: rangeHeader, unsignedPayload: true });
     if (res.status === 404) return null;
+    if (res.status === 416) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { Readable } = require('stream') as typeof import('stream');
+      const cr = res.headers.get('content-range');
+      const m = /bytes\s+\*\/(\d+)/.exec(cr ?? '');
+      const total = m ? Number(m[1]) : 0;
+      return { stream: Readable.from([]), size: total, contentType: 'application/octet-stream', unsatisfiable: true };
+    }
     if (res.status !== 200 && res.status !== 206 || !res.body) {
       throw new Error(`S3 open ${key} failed: ${res.status}`);
     }
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { Readable } = require('stream') as typeof import('stream');
     const webStream = res.body as unknown as import('stream/web').ReadableStream<Uint8Array>;
-    const contentType = res.headers.get('content-type') ?? 'application/octet-stream';
+    const ext = key.split('.').pop() ?? '';
+    const headerCt = res.headers.get('content-type');
+    const contentType = headerCt && headerCt !== 'application/octet-stream' ? headerCt : mimeFromExt(ext);
 
     const cr = res.headers.get('content-range');          // e.g. "bytes 0-99/12345"
     const cl = Number(res.headers.get('content-length') ?? 0);
@@ -314,9 +357,10 @@ class S3Storage implements MediaStorage {
       }
     }
     if (range && cl > 0) {
+      const end = range.end !== undefined ? range.end : cl - 1;
       return {
         stream: Readable.fromWeb(webStream), size: cl, contentType,
-        contentRange: { start: range.start, end: range.end, size: Math.max(cl, range.end + 1) },
+        contentRange: { start: range.start, end, size: Math.max(cl, end + 1) },
       };
     }
     return { stream: Readable.fromWeb(webStream), size: cl, contentType };
