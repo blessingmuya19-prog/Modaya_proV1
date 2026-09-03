@@ -868,19 +868,21 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         </div>
       </header>
 
-      {/* Compare ⇄ Iterate toggle */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 6, padding: '12px 0 0' }}>
-        {([['compare', 'Reference vs result'], ['iterate', 'Edit & refine']] as const).map(([v, label]) => (
-          <button key={v} onClick={() => setResultView(v)}
-            style={{ padding: '8px 16px', borderRadius: 999, border: `1px solid ${resultView === v ? C.accent : C.b3}`,
-              background: resultView === v ? `${C.accent}1c` : C.s2, color: resultView === v ? C.accent : C.muted,
-              fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: F }}>
-            {label}
-          </button>
-        ))}
-      </div>
+      {/* Compare ⇄ Iterate toggle (only if reference exists) */}
+      {refUrl && (
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 6, padding: '12px 0 0' }}>
+          {([['compare', 'Reference vs result'], ['iterate', 'Edit & refine']] as const).map(([v, label]) => (
+            <button key={v} onClick={() => setResultView(v)}
+              style={{ padding: '8px 16px', borderRadius: 999, border: `1px solid ${resultView === v ? C.accent : C.b3}`,
+                background: resultView === v ? `${C.accent}1c` : C.s2, color: resultView === v ? C.accent : C.muted,
+                fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: F }}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {resultView === 'compare' ? (
+      {resultView === 'compare' && refUrl ? (
         /* ─────────── comparison screen ─────────── */
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 16px', gap: 14, overflowY: 'auto' }}>
           <p style={{ margin: 0, color: C.muted, fontSize: 14 }}>{headline}</p>
@@ -888,9 +890,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
             {/* Reference */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
               <CompareBox title="REFERENCE">
-                {refUrl
-                  ? <video ref={refVideoRef} src={refUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
-                  : <div style={{ color: C.dim, fontSize: 12, padding: 16, textAlign: 'center' }}>No reference added.<br/>Your edit uses Modaya&apos;s default punchy style.</div>}
+                <video ref={refVideoRef} src={refUrl} preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
               </CompareBox>
               <span style={{ fontSize: 12, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{refName ?? 'Reference'}</span>
             </div>
@@ -903,12 +903,10 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
             </div>
           </div>
 
-          {refUrl && (
-            <button onClick={() => { const frac = playing ? (playhead / Math.max(1, totalS)) : 0; syncProgress(frac, !playing); }}
-              style={{ ...primaryBtn, marginTop: 4 }}>
-              {playing ? '❚❚ Pause both' : '▶ Play together (synced)'}
-            </button>
-          )}
+          <button onClick={() => { const frac = playing ? (playhead / Math.max(1, totalS)) : 0; syncProgress(frac, !playing); }}
+            style={{ ...primaryBtn, marginTop: 4 }}>
+            {playing ? '❚❚ Pause both' : '▶ Play together (synced)'}
+          </button>
 
           {plan?.summary && <p style={{ margin: 0, color: C.dim, fontSize: 12, textAlign: 'center', maxWidth: 560 }}>{plan.summary}</p>}
 
@@ -942,7 +940,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
               <div style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                   <SideBox highlight={!!refMoment} label="REFERENCE">
-                    <video ref={refVideoRef} src={refUrl} controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
+                    <video ref={refVideoRef} src={refUrl} preload="metadata" controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
                   </SideBox>
                   <span style={{ fontSize: 11, color: refMoment ? C.accent : C.dim, fontWeight: refMoment ? 700 : 400 }}>
                     {refMoment ? `Reference ${fmtTime(refMoment.t)}` : (refName ?? 'Reference')}
@@ -967,7 +965,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
             ) : iterView === 'ref' && refUrl ? (
               <div style={{ display: 'flex', justifyContent: 'center' }}>
                 <div style={{ ...previewBox(plan?.frame.ratio), background: C.media, borderRadius: 14, overflow: 'hidden', border: `1px solid ${C.b3}` }}>
-                  <video ref={refVideoRef} src={refUrl} controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <video ref={refVideoRef} src={refUrl} preload="metadata" controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </div>
               </div>
             ) : (

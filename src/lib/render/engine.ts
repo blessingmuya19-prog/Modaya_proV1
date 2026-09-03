@@ -134,7 +134,7 @@ export class PreviewEngine {
     this.pool = [0, 1].map(() => {
       const v = document.createElement('video');
       v.playsInline  = true;
-      v.preload      = 'auto';
+      v.preload      = 'metadata';
       v.crossOrigin  = 'anonymous';
       v.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px';
       return v;
@@ -142,7 +142,7 @@ export class PreviewEngine {
     if (!this.overlayEl) {
       const ov = document.createElement('video');
       ov.playsInline = true;
-      ov.preload     = 'auto';
+      ov.preload     = 'metadata';
       ov.crossOrigin = 'anonymous';
       ov.muted       = true;      // a cutaway never carries audio
       ov.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px';
