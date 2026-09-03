@@ -2,17 +2,21 @@
  * POST /api/upload
  *
  * Accepts JSON metadata about a video file (no actual bytes — the video
- * stays in the browser as a blob URL). Creates a project record and kicks
- * off simulated processing.
+ * stays in the browser as a blob URL). Creates a project record in the
+ * 'processing' state. The REAL analysis runs client-side in Studio (audio
+ * loudness/silence measurement, optional speech-to-text, moment detection);
+ * Studio flips the project to 'ready' via PATCH when that pipeline actually
+ * finishes. Nothing here claims the work is done before it is.
  *
  * Why no file bytes?
  * Vercel serverless functions have a 4.5 MB body limit and a read-only
  * filesystem — we cannot store video files server-side. The blob URL
- * approach keeps the video in-browser for the duration of the tab session.
+ * approach keeps the video in-browser for the duration of the tab session,
+ * with an IndexedDB copy (and a best-effort durable object store) for reloads.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
-import { createProject, simulateProcessing } from '@/lib/projects';
+import { createProject, markProjectProcessing } from '@/lib/projects';
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
@@ -63,7 +67,9 @@ export async function POST(req: NextRequest) {
       thumbnail:   thumb,
     });
 
-    simulateProcessing(project.id, String(filename), Number(durationS), ar);
+    // Honest status: footage is received, real analysis now runs in Studio.
+    // No timer-based flip to 'ready' — Studio reports 'ready' on completion.
+    markProjectProcessing(project.id);
 
     return NextResponse.json({
       projectId:   project.id,

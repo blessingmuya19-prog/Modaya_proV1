@@ -430,6 +430,12 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         durationS: built?.plan.durationS ?? durationS,
       }));
       setPhase('result');
+      // The real pipeline produced an edit — only now is the project 'ready'.
+      void fetch(`/api/projects/${projectId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'ready' }),
+      }).catch(() => {});
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong building the edit.');
       setPhase('drop');
@@ -544,7 +550,9 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     // Durable server copy (no-op when the host has no durable storage).
     void uploadProjectMedia(projectId, 'main', f, f.name).catch(() => {});
     // Keep the (possibly draft) server record in sync so the project lists its
-    // real footage/title/status on the dashboard.
+    // real footage/title on the dashboard. Status is 'processing' now — the real
+    // analysis auto-runs on footage load; the pipeline PATCHes 'ready' only once
+    // it has actually produced an edit.
     void fetch(`/api/projects/${projectId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -554,7 +562,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         durationS: meta?.durationS ?? 0,
         width: meta?.width ?? 0, height: meta?.height ?? 0,
         aspectRatio: meta?.aspectRatio ?? '16:9',
-        status: 'ready',
+        status: 'processing',
       }),
     }).catch(() => {});
   }, [projectId, setMediaEntry]);

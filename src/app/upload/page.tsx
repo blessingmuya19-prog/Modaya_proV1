@@ -1,6 +1,5 @@
 'use client';
 import React, { useState, useRef, useCallback } from 'react';
-import { ProcessingScreen } from '@/components/processing/ProcessingScreen';
 import { Logo } from '@/components/ui/Logo';
 import { ArrowLeft, ArrowRight, Upload, X, Zap, Scissors, Flame, Captions, Sparkles, Smartphone, Check, Play, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
@@ -65,13 +64,16 @@ export default function UploadPage() {
       try { data = await res.json(); } catch { /* non-JSON response */ }
 
       if (res.ok && data.projectId) {
-        // Success — store blob URL and move to processing screen
+        // Success — store blob URL and bytes, then hand off to Studio where the
+        // REAL analysis runs (audio/energy measurement, speech-to-text, moment
+        // detection) with honest, per-stage progress. There is no fake
+        // processing interstitial — we never pretend work finished before it did.
         const objUrl = previewUrl ?? URL.createObjectURL(file);
         setMedia(data.projectId, { ...meta, objectUrl: objUrl });
         if (thumbnail) savePoster(data.projectId, thumbnail);
         // Keep the actual bytes so the project still plays after a refresh or
         // when it's reopened from the dashboard in a new session.
-        void saveMediaFile(data.projectId, file, {
+        await saveMediaFile(data.projectId, file, {
           mimeType:    meta.mimeType,
           mediaType:   meta.mediaType,
           aspectRatio: meta.aspectRatio,
@@ -79,12 +81,13 @@ export default function UploadPage() {
           height:      meta.height,
           durationS:   meta.durationS,
           filename:    meta.filename,
-        });
+        }).catch(() => {});
         // Durable server copy so the project reopens on any device (no-op on
         // read-only serverless hosts, where IndexedDB remains the store).
         backupFootageToCloud(data.projectId, file, { filename: meta.filename });
         setProjectId(data.projectId);
         setStage('processing');
+        router.replace(`/studio/${data.projectId}`);
       } else if (res.status === 401) {
         setUploadError('You\'re not signed in. Please sign in and try again.');
         setUploading(false);
@@ -123,7 +126,15 @@ export default function UploadPage() {
   const formatBytes = (b: number) => b < 1024*1024 ? `${(b/1024).toFixed(0)} KB` : `${(b/(1024*1024)).toFixed(1)} MB`;
 
   if (stage === 'processing') {
-    return <ProcessingScreen filename={file?.name} onComplete={() => router.push(`/studio/${projectId ?? 'proj-1'}`)} />;
+    // No fake "processing" interstitial here: the real analysis runs in Studio
+    // (real audio/energy measurement, speech-to-text, moment detection) with its
+    // own honest progress steps. Hand off immediately and let it do the work.
+    if (projectId) router.replace(`/studio/${projectId}`);
+    return (
+      <div style={{ minHeight: '100vh', background: '#050505', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#FAFAFA', animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
+      </div>
+    );
   }
 
   return (

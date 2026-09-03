@@ -1,8 +1,11 @@
 /**
- * The analysis pass must not undo an edit made while it was still running.
+ * Project status must reflect real work: it is 'processing' when footage is
+ * received and only becomes 'ready' when the analysis pipeline actually
+ * finishes (Studio calls markProjectReady). Nothing is faked on a timer.
+ * Finishing must also never undo an edit the user already made.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { simulateProcessing } from '@/lib/projects';
+import { describe, it, expect } from 'vitest';
+import { markProjectProcessing, markProjectReady } from '@/lib/projects';
 import { db } from '@/lib/db';
 
 const make = (clips: unknown[]) => {
@@ -17,30 +20,43 @@ const make = (clips: unknown[]) => {
   return id;
 };
 
-beforeEach(() => vi.useFakeTimers());
-afterEach(() => vi.useRealTimers());
+describe('honest project status', () => {
+  it('stays processing until the real pipeline marks it ready', () => {
+    const id = make([]);
+    markProjectProcessing(id);
+    expect(db.projects.findById(id)?.status).toBe('processing');
 
-describe('analysis finishing after an edit', () => {
-  it('leaves an edited timeline alone', () => {
-    const id = make([{ id: 'txt-0', trackId: 'text', label: 'Blessing Muya',
-                       startS: 0, endS: 20, type: 'text', textPosition: 'top' }]);
-    simulateProcessing(id, 'a.mp4', 20, '16:9');
-    vi.advanceTimersByTime(5000);
-
+    markProjectReady(id, { filename: 'a.mp4', durationS: 20, aspectRatio: '16:9' });
     const p = db.projects.findById(id);
     expect(p?.status).toBe('ready');
-    expect(p?.clips.find(c => c.id === 'txt-0'),
-      'the analysis wiped out the text that had just been added').toBeTruthy();
   });
 
-  it('still lays down the analysed clips when nothing was edited', () => {
+  it('lays down the honest source clip when nothing was edited yet', () => {
     const id = make([]);
-    simulateProcessing(id, 'a.mp4', 20, '16:9');
-    vi.advanceTimersByTime(5000);
+    markProjectReady(id, { filename: 'a.mp4', durationS: 20, aspectRatio: '16:9' });
 
     const p = db.projects.findById(id);
     expect(p?.status).toBe('ready');
     expect(p?.clips.some(c => c.type === 'video')).toBe(true);
-    expect(p?.clips.find(c => c.id === 'txt-0')).toBeFalsy();
+    // The source clip spans the whole uploaded footage — no invented cuts.
+    const src = p?.clips.find(c => c.type === 'video');
+    expect(src?.startS).toBe(0);
+    expect(src?.endS).toBe(20);
+  });
+
+  it('leaves an already-edited timeline untouched when it completes', () => {
+    const id = make([{ id: 'txt-0', trackId: 'text', label: 'Blessing Muya',
+                       startS: 0, endS: 20, type: 'text', textPosition: 'top' }]);
+    markProjectReady(id, { filename: 'a.mp4', durationS: 20, aspectRatio: '16:9' });
+
+    const p = db.projects.findById(id);
+    expect(p?.status).toBe('ready');
+    expect(p?.clips.find(c => c.id === 'txt-0'),
+      'completing the analysis wiped out the text that had just been added').toBeTruthy();
+  });
+
+  it('is a no-op (and never throws) for an unknown project', () => {
+    expect(() => markProjectReady('does-not-exist')).not.toThrow();
+    expect(() => markProjectProcessing('does-not-exist')).not.toThrow();
   });
 });

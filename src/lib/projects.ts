@@ -63,8 +63,11 @@ export function createProject(opts: {
     clips:       [],
     aiHistory:   [{
       role: 'ai',
+      // Honest: we've received the footage and read its metadata; the actual
+      // analysis (loudness/silence measurement, speech-to-text, moments) runs
+      // now in Studio. We never claim to have analysed it before we have.
       text: dur > 0
-        ? `I've analysed "${opts.filename}" — ${formatDuration(dur)}. What would you like me to do?`
+        ? `Received "${opts.filename}" — ${formatDuration(dur)}. I'm analysing the footage now.`
         : `Uploaded "${opts.filename}". What would you like me to do?`,
       ts:   now,
     }],
@@ -76,21 +79,36 @@ export function createProject(opts: {
   return db.projects.create(project);
 }
 
-export function simulateProcessing(projectId: string, filename: string, durationS: number, aspectRatio: string) {
+/**
+ * Mark a project as processing. Called when footage is received; the real
+ * analysis runs client-side in Studio, which calls {@link markProjectReady}
+ * once the pipeline has actually produced an edit. There is deliberately no
+ * timer that pretends work finished — 'ready' only ever reflects a real result.
+ */
+export function markProjectProcessing(projectId: string) {
   db.projects.update(projectId, { status: 'processing' });
+}
 
-  setTimeout(() => {
-    /* Only lay down the analysed clips if nothing has been edited yet.
-       Anyone quick enough to ask for a caption or a title in these first few
-       seconds used to watch it disappear when this fired. */
-    const current = db.projects.findById(projectId);
-    const touched = (current?.clips?.length ?? 0) > 0;
-
-    db.projects.update(projectId, {
-      status: 'ready',
-      ...(touched ? {} : { clips: makeClipsFromFile({ filename, durationS, aspectRatio }) }),
-    });
-  }, 4000);
+/**
+ * Called by Studio when the real edit pipeline has finished building a result.
+ * Lays down the single honest source clip (the uploaded footage) if no clips
+ * have been touched yet, and flips status to 'ready' so the dashboard reflects
+ * reality.
+ */
+export function markProjectReady(projectId: string, source?: {
+  filename?: string; durationS?: number; aspectRatio?: string;
+}) {
+  const current = db.projects.findById(projectId);
+  if (!current) return;
+  const touched = (current.clips?.length ?? 0) > 0;
+  const baseClips = (!touched && source?.filename)
+    ? { clips: makeClipsFromFile({
+        filename:    source.filename,
+        durationS:   source.durationS ?? current.durationS,
+        aspectRatio: source.aspectRatio ?? current.aspectRatio,
+      }) }
+    : {};
+  db.projects.update(projectId, { status: 'ready', updatedAt: new Date().toISOString(), ...baseClips });
 }
 
 export function formatDuration(s: number): string {

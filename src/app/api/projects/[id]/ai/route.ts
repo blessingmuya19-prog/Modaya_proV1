@@ -1,8 +1,11 @@
 /**
  * POST /api/projects/:id/ai
  * Accepts a user message, runs intent detection, returns a structured
- * AI response with: reply text, edit summary, affected clip ids, and
- * a simulated new timeline (clips with cuts applied).
+ * AI response with: reply text, edit summary, affected clip ids, and the
+ * resulting timeline. Edits are computed from the REAL transcript and
+ * audio/visual measurements — every operation is grounded in transcript
+ * brackets, validated, clamped to the media duration and snapped to silence
+ * boundaries, so no timestamp is ever invented (clips.ts / operations.ts).
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
@@ -121,7 +124,7 @@ interface EditResult {
   summary:      string;           // one-line edit summary shown as chip
   savedS:       number;           // seconds removed
   affectedIds:  string[];         // clip ids visually highlighted
-  newClips:     Clip[];           // updated clips after edit (simulated)
+  newClips:     Clip[];           // clips after the grounded edit is applied
   intent:       Intent;
   /** Clipping result: standalone short clips the user can cut to, without
       touching the timeline until one is chosen. */
