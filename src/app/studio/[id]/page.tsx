@@ -7,11 +7,11 @@
  * `?mode=edit|reference` (set by the /new picker) only focuses the drop
  * screen — the editor itself is identical either way.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import Studio from '@/components/studio/Studio';
 
-export default function StudioPage() {
+function StudioInner() {
   const params = useParams<{ id: string }>();
   const search = useSearchParams();
   const id = params?.id ?? '';
@@ -27,4 +27,12 @@ export default function StudioPage() {
   }, [id]);
 
   return <Studio projectId={id} projectName={title} mode={mode} />;
+}
+
+export default function StudioPage() {
+  return (
+    <Suspense fallback={null}>
+      <StudioInner />
+    </Suspense>
+  );
 }

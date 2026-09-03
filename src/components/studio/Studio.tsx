@@ -225,7 +225,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
 
   // ── result surface: compare / edit-map / versions / reference ──
   /** 'compare' (reference vs result) or 'iterate' (video + chat + edit map). */
-  const [resultView, setResultView] = useState<'compare' | 'iterate'>('compare');
+  const [resultView, setResultView] = useState<'compare' | 'iterate'>('iterate');
   /** In the iterate view: playback mode — just the edit, just the reference,
    *  or both side by side. */
   const [iterView, setIterView] = useState<'mine' | 'ref' | 'side'>('mine');
@@ -500,7 +500,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     setStages(stagesForRun(withRef));
     setPhase('working');
     setChats([]);
-    setResultView('compare');
+    setResultView(withRef ? 'compare' : 'iterate');
 
     const tick = async (id: StageId, work: () => Promise<void> | void) => {
       if (cancelRef.current) return;

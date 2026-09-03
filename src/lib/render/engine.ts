@@ -131,12 +131,15 @@ export class PreviewEngine {
 
   private ensurePool() {
     if (this.pool.length) return;
+    const onReady = () => { if (!this._playing && !this.destroyed) this.renderFrame(); };
     this.pool = [0, 1].map(() => {
       const v = document.createElement('video');
       v.playsInline  = true;
       v.preload      = 'metadata';
       v.crossOrigin  = 'anonymous';
       v.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px';
+      v.addEventListener('loadeddata', onReady);
+      v.addEventListener('seeked', onReady);
       return v;
     });
     if (!this.overlayEl) {
@@ -146,6 +149,8 @@ export class PreviewEngine {
       ov.crossOrigin = 'anonymous';
       ov.muted       = true;      // a cutaway never carries audio
       ov.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px';
+      ov.addEventListener('loadeddata', onReady);
+      ov.addEventListener('seeked', onReady);
       this.overlayEl = ov;
     }
   }

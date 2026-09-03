@@ -152,24 +152,26 @@ export async function analyseAudio(file: Blob): Promise<AudioEnvelope | null> {
     ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
   if (!Offline && !Ctor) return null;
 
-  /**
-   * Decode at 8 kHz instead of the file's own rate. A loudness envelope needs
-   * nothing finer, and a full-rate decode of a long recording is enormous:
-   * 13 minutes at 48 kHz stereo is ~310 MB of float samples, which is slow at
-   * best and fails outright on phones. At 8 kHz the same file is ~26 MB.
-   * decodeAudioData resamples to the context's rate, so this is free.
-   */
-  const TARGET_RATE = 8000;
-  const ctx: BaseAudioContext = Offline
-    ? new Offline(1, TARGET_RATE, TARGET_RATE)
-    : new Ctor!();
+  let ctx: BaseAudioContext | null = null;
 
   try {
-    // If file is very large (> 40MB), slice to avoid huge arrayBuffer memory allocation
-    const safeBlob = file.size > 40 * 1024 * 1024 ? file.slice(0, 40 * 1024 * 1024) : file;
-    const buf = await safeBlob.arrayBuffer();
+    const TARGET_RATE = 22050; // Spec-compliant sample rate supported across Safari, Chrome, and Firefox
+    if (Offline) {
+      try {
+        ctx = new Offline(1, TARGET_RATE, TARGET_RATE);
+      } catch {
+        // Fallback to standard AudioContext if sample rate isn't supported by the Offline context
+        if (Ctor) ctx = new Ctor();
+      }
+    } else if (Ctor) {
+      ctx = new Ctor();
+    }
 
-    // Decode with timeout guard so large audio files don't hang the worker
+    if (!ctx) return null;
+
+    const buf = await file.arrayBuffer();
+
+    // Decode with timeout guard so large or corrupted audio files don't hang the thread
     const audioPromise = ctx.decodeAudioData(buf);
     const timeoutPromise = new Promise<null>((_, reject) =>
       setTimeout(() => reject(new Error('decodeAudioData timeout')), 8000)
@@ -198,7 +200,9 @@ export async function analyseAudio(file: Blob): Promise<AudioEnvelope | null> {
   } catch {
     return null;      // no audio track, or an undecodable codec
   } finally {
-    try { await (ctx as AudioContext).close?.(); } catch { /* offline contexts have no close */ }
+    if (ctx) {
+      try { await (ctx as AudioContext).close?.(); } catch { /* offline contexts have no close */ }
+    }
   }
 }
 
