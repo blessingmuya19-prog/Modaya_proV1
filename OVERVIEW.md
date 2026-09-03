@@ -374,3 +374,6 @@ when storage is absent.
    3D color matrix & tone mapping transforms (`src/lib/render/colorGrading.ts`),
    cinematic LUT catalog (Teal & Orange, Kodak Portra 35mm, Fujifilm Velvia, Noir, Cyber Neon, Bleach Bypass, Golden Hour),
    temperature, tint, skin-tone preserving vibrance, and interactive Color panel in `EditorShell.tsx`.
+15. ~~AI Edit Timeline History, Version Branching & Visual Diff Snapshot Engine~~ — done:
+   structural timeline clip diffing with addition/removal/trimming diagnostics (`src/lib/studio/editHistory.ts`),
+   deterministic recipe fingerprinting, version delta comparison, and pacing/caption change tracking across edit versions.
