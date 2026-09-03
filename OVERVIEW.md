@@ -398,3 +398,9 @@ when storage is absent.
 22. ~~Video Speed Ramping & Variable Time-Remapping Engine~~ — done:
    smooth non-linear bezier speed curves, bidirectional source-to-output timestamp mapping,
    and montage whip / action hit / hyperlapse presets (`src/lib/render/speedRamp.ts`).
+23. ~~Multi-Track Timeline Magnetism, Snapping & Collision Physics Engine~~ — done:
+   magnetic snap target collection (clip edges, playhead, beat ticks, markers),
+   ripple collision avoidance, and automated gap closure (`src/lib/studio/timelineSnapping.ts`).
+24. ~~AI Video Storyboard, Chaptering & Visual Cue Generator~~ — done:
+   semantic transcript clustering into timestamped video chapters, viral hook discovery,
+   and visual storyboard cutaway suggestions (`src/lib/ai/storyboardGen.ts`).
