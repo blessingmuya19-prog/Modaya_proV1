@@ -24,6 +24,9 @@ import { scanVideo, compactScan, type VisualScan, type Keyframe } from '@/lib/ai
 import { analyseFile } from '@/lib/videoStore';
 import { getProjectMedia } from '@/lib/mediaCloud';
 import { getProjectFrames } from '@/lib/thumbnailStore';
+import {
+  getProjectWaveform, setProjectWaveform, loadCachedWaveform, extractWaveform, resampleWaveform,
+} from '@/lib/waveformStore';
 
 /* ──────────────── STAGGER FADE-UP ──────────────── */
 // Each zone fades in + rises 14px, staggered 120ms apart
@@ -1879,6 +1882,27 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
     analysing?: boolean; onUndo?: () => void; onRedo?: () => void; onSplit?: () => void; onReset?: () => void }) {
 
   const [frames, setFrames] = useState<string[]>([]);
+  const [waveform, setWaveform] = useState<number[] | null>(() => projectId ? getProjectWaveform(projectId) : null);
+
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    const poll = setInterval(() => {
+      const w = getProjectWaveform(projectId);
+      if (w && w.length) {
+        if (!cancelled) setWaveform(w);
+        clearInterval(poll);
+      }
+    }, 400);
+    void loadCachedWaveform(projectId).then(w => {
+      if (w && w.length && !cancelled) {
+        setWaveform(w);
+        clearInterval(poll);
+      }
+    });
+    return () => { cancelled = true; clearInterval(poll); };
+  }, [projectId]);
+
   useEffect(() => {
     if (!projectId) return;
     // Poll while frames stream in from the parallel extractor, then stop
@@ -2128,10 +2152,10 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
                   )}
 
                   {merged === 1 && (tr as any).wave && (
-                    <div style={{ position:'absolute',inset:'3px 0',display:'flex',alignItems:'center',overflow:'hidden' }}>
-                      {WAVE.slice(0,Math.min(BAR_CAP, Math.floor(w/1.5))).map((h,i)=>(
-                        <div key={i} style={{ flex:1,minWidth:1,height:`${h*85}%`,
-                          background:'#34D399',borderRadius:1,opacity:0.65 }} />
+                    <div style={{ position:'absolute',inset:'3px 0',display:'flex',alignItems:'center',overflow:'hidden',gap:1 }}>
+                      {resampleWaveform(waveform, clip.s, clip.e, totalS, Math.min(BAR_CAP, Math.floor(w/2))).map((h,i)=>(
+                        <div key={i} style={{ flex:1,minWidth:1,height:`${Math.round(h*88)}%`,
+                          background:'#34D399',borderRadius:1,opacity:0.72 }} />
                       ))}
                     </div>
                   )}
@@ -2360,6 +2384,21 @@ export function EditorShell({
   }, [projectId]);
   const videoUrl    = mediaEntry?.objectUrl ?? null;
   const videoAspect = mediaEntry?.aspectRatio ?? '16:9';
+
+  useEffect(() => {
+    if (!projectId || !mediaEntry?.objectUrl) return;
+    if (getProjectWaveform(projectId)) return;
+    void loadCachedWaveform(projectId).then(cached => {
+      if (cached && cached.length) return;
+      fetch(mediaEntry.objectUrl)
+        .then(r => r.blob())
+        .then(blob => extractWaveform(blob))
+        .then(w => {
+          if (w && w.length) setProjectWaveform(projectId, w);
+        })
+        .catch(() => {});
+    });
+  }, [projectId, mediaEntry?.objectUrl]);
 
   const [liveClips,    setLiveClips   ] = useState<EditorClip[]>(clips);
   const [highlightIds, setHighlightIds] = useState<string[]>([]);

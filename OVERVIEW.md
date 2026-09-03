@@ -337,5 +337,6 @@ when storage is absent.
 4. ~~Faster-than-real-time export (WebCodecs)~~ — done: offline hardware-accelerated
    `VideoEncoder` + zero-dependency WebM & MP4 muxers (`src/lib/render/muxer.ts`) with
    seamless fallback to `MediaRecorder`.
-5. Persistent database backends (SQLite / Postgres / Neon) for serverless deployments.
-6. Audio waveform rendering on timeline tracks.
+5. ~~Audio waveform rendering on timeline tracks~~ — done: real RMS envelope extraction,
+   dynamic resampling per clip range, and local caching (`src/lib/waveformStore.ts`).
+6. Persistent database backends (SQLite / Postgres / Neon) for serverless deployments.
