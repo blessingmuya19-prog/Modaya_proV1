@@ -27,9 +27,9 @@ export function FAQSection() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {faqs.map((faq, i) => (
             <div key={i} style={{
-              border: `1px solid ${open === i ? '#26262E' : '#1E1E26'}`,
+              border: `1px solid ${open === i ? '#27272A' : '#1C1C21'}`,
               borderRadius: 16,
-              background: open === i ? '#16161C' : '#101014',
+              background: open === i ? '#131316' : '#0A0A0B',
               overflow: 'hidden',
               transition: 'all 150ms ease',
             }}>

@@ -54,8 +54,8 @@ export function ProcessingScreen({ filename, onComplete }: { filename?: string; 
         {/* Header */}
         <div style={{ marginBottom: 40 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#8B5CF6', animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
-            <span style={{ fontSize: 10, color: '#8B5CF6', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>AI is working</span>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#FAFAFA', animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
+            <span style={{ fontSize: 10, color: '#FAFAFA', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>AI is working</span>
           </div>
           <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 28, letterSpacing: '-0.04em', lineHeight: 1.1, color: '#FFFFFF', margin: '0 0 6px' }}>
             Understanding your video
@@ -78,14 +78,14 @@ export function ProcessingScreen({ filename, onComplete }: { filename?: string; 
                 <div style={{
                   width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: isDone ? '#8B5CF6' : 'transparent',
-                  border: isDone ? 'none' : isActive ? '2px solid #8B5CF6' : '1px solid #242424',
+                  background: isDone ? '#FAFAFA' : 'transparent',
+                  border: isDone ? 'none' : isActive ? '2px solid #FAFAFA' : '1px solid #242424',
                   transition: 'all 300ms ease',
                 }}>
                   {isDone
                     ? <Check size={12} strokeWidth={3} style={{ color: '#050505', animation: 'scale-in 0.3s ease' }} />
                     : isActive
-                      ? <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#8B5CF6', animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
+                      ? <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#FAFAFA', animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
                       : <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#242424' }} />
                   }
                 </div>
@@ -100,8 +100,8 @@ export function ProcessingScreen({ filename, onComplete }: { filename?: string; 
 
                 {isActive && (
                   <span style={{
-                    marginLeft: 'auto', fontSize: 10, color: '#8B5CF6', fontWeight: 600,
-                    background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)',
+                    marginLeft: 'auto', fontSize: 10, color: '#FAFAFA', fontWeight: 600,
+                    background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
                     padding: '2px 8px', borderRadius: 9999,
                   }}>
                     In progress

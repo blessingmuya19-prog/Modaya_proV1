@@ -56,7 +56,7 @@ export function DashboardHeader() {
 
         <div style={{
           width: 32, height: 32, borderRadius: '50%', cursor: 'pointer',
-          background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)',
+          background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <span style={{ fontSize: 11, color: TC.accent, fontWeight: 700 }}>{initials}</span>

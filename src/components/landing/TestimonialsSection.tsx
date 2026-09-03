@@ -7,7 +7,7 @@ const TESTIMONIALS = [
     name: 'Marcus T.',
     role: 'Podcast host · 180K subscribers',
     avatar: 'MT',
-    color: '#A78BFA',
+    color: '#FAFAFA',
     stat: '24× faster',
   },
   {
@@ -15,7 +15,7 @@ const TESTIMONIALS = [
     name: 'Priya S.',
     role: 'Streamer & content creator',
     avatar: 'PS',
-    color: '#A78BFA',
+    color: '#D4D4D8',
     stat: '+340% views',
   },
   {
@@ -23,7 +23,7 @@ const TESTIMONIALS = [
     name: 'Jordan L.',
     role: 'YouTube educator · 92K subs',
     avatar: 'JL',
-    color: '#34D399',
+    color: '#A1A1AA',
     stat: '$200/mo saved',
   },
   {
@@ -31,7 +31,7 @@ const TESTIMONIALS = [
     name: 'Aisha M.',
     role: 'Video production studio',
     avatar: 'AM',
-    color: '#F59E0B',
+    color: '#F4F4F5',
     stat: '50% less time',
   },
   {
@@ -39,7 +39,7 @@ const TESTIMONIALS = [
     name: 'Tom R.',
     role: 'Documentary filmmaker',
     avatar: 'TR',
-    color: '#EC4899',
+    color: '#71717A',
     stat: '60 hrs/month saved',
   },
   {
@@ -47,7 +47,7 @@ const TESTIMONIALS = [
     name: 'Camille D.',
     role: 'Daily news podcast · 410K plays/mo',
     avatar: 'CD',
-    color: '#A78BFA',
+    color: '#E4E4E7',
     stat: '7× upload freq.',
   },
 ];
@@ -56,7 +56,7 @@ function Stars() {
   return (
     <div style={{ display: 'flex', gap: 3, marginBottom: 16 }}>
       {[0,1,2,3,4].map(i => (
-        <svg key={i} width="13" height="13" viewBox="0 0 24 24" fill="#F59E0B" xmlns="http://www.w3.org/2000/svg">
+        <svg key={i} width="13" height="13" viewBox="0 0 24 24" fill="#FAFAFA" xmlns="http://www.w3.org/2000/svg">
           <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
         </svg>
       ))}
@@ -69,8 +69,8 @@ function Card({ t, delay }: { t: typeof TESTIMONIALS[0]; delay: number }) {
     <div
       style={{
         padding: 'clamp(18px,2vw,28px) clamp(16px,1.8vw,26px)',
-        background: '#101014',
-        border: '1px solid #26262E',
+        background: '#0A0A0B',
+        border: '1px solid #27272A',
         borderRadius: 18,
         display: 'flex',
         flexDirection: 'column',
@@ -80,18 +80,18 @@ function Card({ t, delay }: { t: typeof TESTIMONIALS[0]; delay: number }) {
         animation: `testimonial-in 0.55s cubic-bezier(0.22,1,0.36,1) ${delay}ms both`,
       }}
       onMouseEnter={e => {
-        e.currentTarget.style.borderColor = 'rgba(139,92,246,0.2)';
-        e.currentTarget.style.background = '#16161C';
+        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
+        e.currentTarget.style.background = '#131316';
         e.currentTarget.style.transform = 'translateY(-3px)';
       }}
       onMouseLeave={e => {
-        e.currentTarget.style.borderColor = '#26262E';
-        e.currentTarget.style.background = '#101014';
+        e.currentTarget.style.borderColor = '#27272A';
+        e.currentTarget.style.background = '#0A0A0B';
         e.currentTarget.style.transform = '';
       }}
     >
       <Stars />
-      <p style={{ fontSize: 14, color: '#D4D4D8', lineHeight: 1.65, margin: '0 0 24px', flex: 1 }}>
+      <p style={{ fontSize: 14, color: '#FAFAFA', lineHeight: 1.65, margin: '0 0 24px', flex: 1 }}>
         &ldquo;{t.quote}&rdquo;
       </p>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -106,14 +106,14 @@ function Card({ t, delay }: { t: typeof TESTIMONIALS[0]; delay: number }) {
             {t.avatar}
           </div>
           <div>
-            <p style={{ fontSize: 13, fontWeight: 600, color: '#FAFAFA', margin: '0 0 2px' }}>{t.name}</p>
+            <p style={{ fontSize: 13, fontWeight: 600, color: '#D4D4D8', margin: '0 0 2px' }}>{t.name}</p>
             <p style={{ fontSize: 11, color: '#A1A1AA', margin: 0 }}>{t.role}</p>
           </div>
         </div>
         <span style={{
-          fontSize: 11, fontWeight: 700, color: '#A78BFA',
-          background: 'rgba(139,92,246,0.08)',
-          border: '1px solid rgba(139,92,246,0.16)',
+          fontSize: 11, fontWeight: 700, color: '#F4F4F5',
+          background: 'rgba(255,255,255,0.08)',
+          border: '1px solid rgba(255,255,255,0.16)',
           padding: '3px 10px', borderRadius: 9999, whiteSpace: 'nowrap', flexShrink: 0,
         }}>
           {t.stat}
@@ -125,7 +125,7 @@ function Card({ t, delay }: { t: typeof TESTIMONIALS[0]; delay: number }) {
 
 export function TestimonialsSection() {
   return (
-    <section id="testimonials" className="section-pad" style={{ position: 'relative', zIndex: 0, background: '#09090B' }}>
+    <section id="testimonials" className="section-pad" style={{ position: 'relative', zIndex: 0, background: '#000000' }}>
 
       <style>{`
         @keyframes testimonial-in {
@@ -135,21 +135,21 @@ export function TestimonialsSection() {
       `}</style>
 
       {/* Subtle glow */}
-      <div style={{ position: 'absolute', top: '40%', left: '50%', transform: 'translateX(-50%)', width: 800, height: 400, pointerEvents: 'none', background: 'radial-gradient(ellipse at center, rgba(139,92,246,0.04) 0%, transparent 70%)', filter: 'blur(60px)', zIndex: 0 }} />
+      <div style={{ position: 'absolute', top: '40%', left: '50%', transform: 'translateX(-50%)', width: 800, height: 400, pointerEvents: 'none', background: 'radial-gradient(ellipse at center, rgba(255,255,255,0.04) 0%, transparent 70%)', filter: 'blur(60px)', zIndex: 0 }} />
 
       <div className="section-inner" style={{ position: 'relative', zIndex: 1 }}>
 
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 64 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px', borderRadius: 9999, background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.18)', marginBottom: 20 }}>
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#A78BFA', display: 'inline-block' }} />
-            <span style={{ fontSize: 11, color: '#A78BFA', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>What creators say</span>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px', borderRadius: 9999, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', marginBottom: 20 }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#D4D4D8', display: 'inline-block' }} />
+            <span style={{ fontSize: 11, color: '#71717A', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>What creators say</span>
           </div>
-          <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(30px,5vw,52px)', letterSpacing: '-0.025em', lineHeight: 1.05, color: '#FAFAFA', margin: '0 0 16px' }}>
+          <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(30px,5vw,52px)', letterSpacing: '-0.025em', lineHeight: 1.05, color: '#E4E4E7', margin: '0 0 16px' }}>
             Real creators.<br />
             <span style={{ color: 'rgba(15,27,51,0.30)' }}>Real results.</span>
           </h2>
-          <p style={{ fontSize: 'clamp(14px,1.1vw,16px)', color: '#D4D4D8', maxWidth: 440, margin: '0 auto', lineHeight: 1.65 }}>
+          <p style={{ fontSize: 'clamp(14px,1.1vw,16px)', color: '#FAFAFA', maxWidth: 440, margin: '0 auto', lineHeight: 1.65 }}>
             From solo podcasters to production teams — here's what Modaya does for their workflow.
           </p>
         </div>
@@ -169,7 +169,7 @@ export function TestimonialsSection() {
             { value: '2M+',  label: 'Videos edited' },
           ].map((s, i) => (
             <div key={i} style={{ textAlign: 'center' }}>
-              <p style={{ fontFamily: "'Inter Tight',sans-serif", fontSize: 28, fontWeight: 800, color: '#FAFAFA', letterSpacing: '-0.04em', margin: '0 0 4px' }}>{s.value}</p>
+              <p style={{ fontFamily: "'Inter Tight',sans-serif", fontSize: 28, fontWeight: 800, color: '#D4D4D8', letterSpacing: '-0.04em', margin: '0 0 4px' }}>{s.value}</p>
               <p style={{ fontSize: 12, color: '#A1A1AA', margin: 0 }}>{s.label}</p>
             </div>
           ))}

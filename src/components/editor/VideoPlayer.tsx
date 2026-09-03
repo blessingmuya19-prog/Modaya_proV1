@@ -66,8 +66,8 @@ export function VideoPlayer() {
 
         {/* AI badge */}
         <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 20, display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', padding: '4px 10px', borderRadius: 9999, border: '1px solid #242424' }}>
-          <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#8B5CF6' }} />
-          <span style={{ fontSize: 10, color: '#8B5CF6', fontWeight: 600 }}>AI Edit · v3</span>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#FAFAFA' }} />
+          <span style={{ fontSize: 10, color: '#FAFAFA', fontWeight: 600 }}>AI Edit · v3</span>
         </div>
       </div>
 
@@ -81,8 +81,8 @@ export function VideoPlayer() {
             setProgress(((e.clientX - rect.left) / rect.width) * 100);
           }}
         >
-          <div style={{ position: 'absolute', inset: 0, width: `${progress}%`, background: '#8B5CF6', borderRadius: 9999, transition: 'width 150ms' }} />
-          <div style={{ position: 'absolute', top: '50%', left: `${progress}%`, transform: 'translate(-50%,-50%)', width: 12, height: 12, borderRadius: '50%', background: '#8B5CF6', boxShadow: '0 0 6px rgba(139,92,246,0.5)' }} />
+          <div style={{ position: 'absolute', inset: 0, width: `${progress}%`, background: '#FAFAFA', borderRadius: 9999, transition: 'width 150ms' }} />
+          <div style={{ position: 'absolute', top: '50%', left: `${progress}%`, transform: 'translate(-50%,-50%)', width: 12, height: 12, borderRadius: '50%', background: '#FAFAFA', boxShadow: '0 0 6px rgba(255,255,255,0.5)' }} />
         </div>
 
         {/* Row */}

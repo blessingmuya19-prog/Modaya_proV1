@@ -42,13 +42,13 @@ const F = "'Inter Tight', Inter, system-ui, sans-serif";
  * panels and wells; `media` is the near-black video canvas (darkest of all).
  */
 const C = {
-  bg: '#09090B', surface: '#101014', s2: '#16161C', s3: '#1E1E26',
-  b: '#26262E', b2: '#33333D', b3: '#3F3F46',
-  accent: '#8B5CF6', accentH: '#C084FC',
+  bg: '#000000', surface: '#0A0A0B', s2: '#131316', s3: '#1C1C21',
+  b: '#27272A', b2: '#3F3F46', b3: '#3F3F46',
+  accent: '#FAFAFA', accentH: '#D4D4D8',
   text: '#FAFAFA', sec: '#D4D4D8', muted: '#A1A1AA', dim: '#71717A',
-  green: '#34D399', gold: '#F5B53F',
-  danger: '#F87171', warn: '#F0A24A', broll: '#F0775B',
-  media: '#000000', mediaBorder: '#26262E', mediaShade: 'rgba(0,0,0,0.55)',
+  green: '#34D399', gold: '#F4F4F5',
+  danger: '#F87171', warn: '#A1A1AA', broll: '#71717A',
+  media: '#000000', mediaBorder: '#27272A', mediaShade: 'rgba(0,0,0,0.55)',
 };
 
 type Phase = 'drop' | 'working' | 'result';
@@ -941,7 +941,7 @@ function EditMap({ markers, durationS, playheadS, selectedId, onSeek, onSelect }
 }) {
   const dur = Math.max(1, durationS);
   const laneColors: Record<string, string> = {
-    hook: '#F5C451', cut: C.accent, zoom: '#B07CFF', caption: C.green, broll: '#FF8A5B',
+    hook: '#FFFFFF', cut: '#E4E4E7', zoom: '#A1A1AA', caption: '#D4D4D8', broll: '#71717A',
   };
   return (
     <div style={{ background: C.s2, border: `1px solid ${C.b3}`, borderRadius: 12, padding: '14px 16px 12px' }}>
@@ -964,7 +964,7 @@ function EditMap({ markers, durationS, playheadS, selectedId, onSeek, onSelect }
               title={`${m.label} at ${fmtTime(m.t)}`}
               style={{ position: 'absolute', left: `${left}%`, top: 6, transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
               <span style={{ width: active ? 30 : 26, height: active ? 30 : 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: m.type === 'cut' ? 13 : m.type === 'caption' ? 11 : 13, fontWeight: 800, color: '#09090B',
+                fontSize: m.type === 'cut' ? 13 : m.type === 'caption' ? 11 : 13, fontWeight: 800, color: '#000000',
                 background: color, boxShadow: active ? `0 0 0 3px ${color}44` : 'none', border: active ? '2px solid #FFFFFF' : 'none', lineHeight: 1 }}>
                 {markerIcon(m.type)}
               </span>
@@ -1294,7 +1294,7 @@ function ModePill({ active, hero, icon, title, hint, onClick }: {
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em' }}>
           {title}
           {hero && <span style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase',
-            color: '#1a1405', background: C.gold ?? '#F5C451', borderRadius: 999, padding: '2px 6px' }}>Hero</span>}
+            color: '#09090B', background: C.gold ?? '#F4F4F5', borderRadius: 999, padding: '2px 6px' }}>Hero</span>}
         </span>
         <span style={{ display: 'block', fontSize: 11.5, color: active ? C.sec : C.dim, marginTop: 1 }}>{hint}</span>
       </span>
@@ -1388,8 +1388,8 @@ function defaultPunchyProfile(durationS: number): StyleProfile {
 
 const primaryBtn: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8, padding: '11px 20px', borderRadius: 12,
-  background: 'linear-gradient(180deg,#8B5CF6,#7C3AED)', color: '#fff', border: 'none', fontFamily: F, fontSize: 14, fontWeight: 600,
-  cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(124,58,237,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
+  background: 'linear-gradient(180deg,#FFFFFF,#E4E4E7)', color: '#09090B', border: '1px solid rgba(255,255,255,0.12)', fontFamily: F, fontSize: 14, fontWeight: 600,
+  cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(255,255,255,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
   transition: 'all 150ms ease',
 };
 const ghostBtn: React.CSSProperties = {

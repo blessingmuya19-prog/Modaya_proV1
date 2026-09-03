@@ -54,7 +54,7 @@ import {
 const C = {
   bg:      '#050505', surface: '#070707', s2: '#0a0a0a', s3: '#0e0e0e',
   b:       '#111111', b2:      '#141414', b3: '#1a1a1a',
-  accent:  '#8B5CF6', accentH: '#A78BFA',
+  accent:  '#FAFAFA', accentH: '#D4D4D8',
   /* Text colour scale — spec §17 */
   text:    '#F5F7FA',   // primary
   sec:     '#A5ADBA',   // secondary
@@ -164,7 +164,7 @@ const fmt = (s: number) =>
 
 /* ── track config — keyed by trackId ── */
 const TRACK_META: Record<string,{label:string;icon:string;color:string;bg:string;h:number;thumb?:boolean;wave?:boolean}> = {
-  text:  { label:'Text',  icon:'T', color:'#7C3AED', bg:'#2d1b69', h:44 },
+  text:  { label:'Text',  icon:'T', color:'#E4E4E7', bg:'#2d1b69', h:44 },
   video: { label:'Video', icon:'▣', color:'#2563EB', bg:'#0d1a2e', h:80, thumb:true },
   aud1:  { label:'Audio', icon:'♫', color:'#059669', bg:'#022c22', h:52, wave:true },
   aud2:  { label:'Audio', icon:'♫', color:'#059669', bg:'#022c22', h:52, wave:true },
@@ -201,7 +201,7 @@ function buildTracks(clips: EditorClip[], totalS: number) {
   const ids = [...TRACK_ORDER.filter(id => byTrack[id]), ...Object.keys(byTrack).filter(id => !TRACK_ORDER.includes(id))];
 
   return ids.map(id => {
-    const meta = TRACK_META[id] ?? { label: id, icon: '▣', color: '#8B5CF6', bg: '#0d1520', h: 46 };
+    const meta = TRACK_META[id] ?? { label: id, icon: '▣', color: '#FAFAFA', bg: '#0d1520', h: 46 };
     return {
       id,
       ...meta,
@@ -1589,7 +1589,7 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
         return (
           <div key={tr.id} style={{ height:tr.h+3, position:'relative',
             borderBottom:`1px solid ${C.b}`,
-            background: tr.id==='text' ?'rgba(124,58,237,0.04)'
+            background: tr.id==='text' ?'rgba(255,255,255,0.04)'
                       : tr.id==='video'?'rgba(55,65,81,0.08)'
                       : tr.id.startsWith('aud')?'rgba(5,150,105,0.04)'
                       : 'rgba(8,145,178,0.04)' }}>

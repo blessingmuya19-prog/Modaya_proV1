@@ -25,7 +25,7 @@ const TOTAL_AFTER_S  = 1 * 60 + 53;  // 1:53
 
 /* colour palette */
 const C = {
-  keep:  { bg: 'rgba(139,92,246,0.12)', border: 'rgba(139,92,246,0.28)', text: '#A78BFA' },
+  keep:  { bg: 'rgba(255,255,255,0.12)', border: 'rgba(255,255,255,0.28)', text: '#D4D4D8' },
   waste: { bg: 'rgba(248,113,113,0.07)',  border: 'rgba(248,113,113,0.22)',  text: '#F87171' },
 };
 
@@ -70,10 +70,10 @@ function Panel({ title, label, clips, totalSec, maxSec, labelColor, badge, badge
 
   return (
     <div ref={ref} style={{ flex: '1 1 280px', minWidth: 0, opacity: visible ? 1 : 0, transform: visible ? 'none' : 'translateY(24px)', transition: `opacity 600ms ${delay}ms ease, transform 600ms ${delay}ms cubic-bezier(0.22,1,0.36,1)` }}>
-      <div style={{ background: '#101014', border: '1px solid #26262E', borderRadius: 16, overflow: 'hidden', boxShadow: '0 8px 30px rgba(0,0,0,0.3)' }}>
+      <div style={{ background: '#0A0A0B', border: '1px solid #27272A', borderRadius: 16, overflow: 'hidden', boxShadow: '0 8px 30px rgba(0,0,0,0.3)' }}>
 
         {/* Panel header */}
-        <div style={{ padding: '14px 18px', borderBottom: '1px solid #1E1E26', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid #1C1C21', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 12, fontWeight: 600, color: '#A1A1AA', letterSpacing: '0.04em', textTransform: 'uppercase' }}>{title}</span>
           <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', background: badgeBg, border: `1px solid ${labelColor}22`, borderRadius: 9999, color: labelColor, letterSpacing: '0.04em' }}>{badge}</span>
         </div>
@@ -84,7 +84,7 @@ function Panel({ title, label, clips, totalSec, maxSec, labelColor, badge, badge
         </div>
 
         {/* Duration bar */}
-        <div style={{ padding: '14px 18px', borderTop: '1px solid #1E1E26' }}>
+        <div style={{ padding: '14px 18px', borderTop: '1px solid #1C1C21' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 7 }}>
             <span style={{ fontSize: 11, color: '#71717A' }}>{label}</span>
             <span style={{ fontSize: 13, fontWeight: 700, color: labelColor, fontFamily: "'Inter Tight',sans-serif", letterSpacing: '-0.03em' }}>{timeStr}</span>
@@ -107,8 +107,8 @@ export function BeforeAfterSection() {
 
       {/* Heading */}
       <div ref={headRef} style={{ textAlign: 'center', marginBottom: 'clamp(32px,4vw,56px)', opacity: headVisible ? 1 : 0, transform: headVisible ? 'none' : 'translateY(20px)', transition: 'opacity 600ms ease, transform 600ms cubic-bezier(0.22,1,0.36,1)' }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px', background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.15)', borderRadius: 9999, marginBottom: 20 }}>
-          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#A78BFA' }}>Before & After</span>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 9999, marginBottom: 20 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#D4D4D8' }}>Before & After</span>
         </div>
         <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(28px,4vw,48px)', letterSpacing: '-0.04em', color: '#FAFAFA', margin: '0 0 14px', lineHeight: 1.1 }}>
           Every edit, automated
@@ -140,8 +140,8 @@ export function BeforeAfterSection() {
           opacity: arrowVisible ? 1 : 0, transform: arrowVisible ? 'none' : 'scale(0.7)',
           transition: 'opacity 500ms 300ms ease, transform 500ms 300ms cubic-bezier(0.34,1.56,0.64,1)',
         }} className="before-after-arrow">
-          <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <ArrowRight size={16} color="#A78BFA" strokeWidth={2} />
+          <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <ArrowRight size={16} color="#D4D4D8" strokeWidth={2} />
           </div>
         </div>
 
@@ -151,17 +151,17 @@ export function BeforeAfterSection() {
           clips={AFTER_CLIPS}
           totalSec={TOTAL_AFTER_S}
           maxSec={TOTAL_BEFORE_S}
-          labelColor="#A78BFA"
+          labelColor="#D4D4D8"
           badge="1 min 53 sec"
-          badgeBg="rgba(139,92,246,0.07)"
+          badgeBg="rgba(255,255,255,0.07)"
           delay={150}
         />
       </div>
 
       {/* Reduction stat */}
       <div style={{ marginTop: 40, textAlign: 'center' }}>
-        <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, padding: '10px 20px', background: 'rgba(139,92,246,0.05)', border: '1px solid rgba(139,92,246,0.12)', borderRadius: 12 }}>
-          <span style={{ fontSize: 22, fontWeight: 800, color: '#A78BFA', fontFamily: "'Inter Tight',sans-serif", letterSpacing: '-0.04em' }}>67%</span>
+        <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, padding: '10px 20px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12 }}>
+          <span style={{ fontSize: 22, fontWeight: 800, color: '#D4D4D8', fontFamily: "'Inter Tight',sans-serif", letterSpacing: '-0.04em' }}>67%</span>
           <span style={{ fontSize: 13, color: '#A1A1AA' }}>shorter video — zero manual editing</span>
         </div>
       </div>

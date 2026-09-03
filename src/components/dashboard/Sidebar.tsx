@@ -47,8 +47,8 @@ export function Sidebar() {
           <button style={{
             width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
             padding: '11px', fontSize: 13.5, fontWeight: 600, letterSpacing: '-0.01em', fontFamily: FONT,
-            background: 'linear-gradient(180deg,#8B5CF6,#7C3AED)', color: '#fff', border: 'none', borderRadius: 12, cursor: 'pointer',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(124,58,237,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
+            background: 'linear-gradient(180deg,#FFFFFF,#E4E4E7)', color: '#09090B', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, cursor: 'pointer',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(255,255,255,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
             transition: 'all 150ms ease',
           }}
             onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.filter = 'brightness(1.05)'; }}
@@ -96,7 +96,7 @@ export function Sidebar() {
             <span style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '-0.01em', fontFamily: FONT, color: TC.muted }}>{STORAGE_USED}% used</span>
           </div>
           <div style={{ height: 5, background: TC.surface3, borderRadius: 9999 }}>
-            <div style={{ height: '100%', width: `${STORAGE_USED}%`, background: 'linear-gradient(90deg,#7C3AED,#A855F7)', borderRadius: 9999 }} />
+            <div style={{ height: '100%', width: `${STORAGE_USED}%`, background: 'linear-gradient(90deg,#FFFFFF,#A1A1AA)', borderRadius: 9999 }} />
           </div>
         </div>
 
@@ -119,7 +119,7 @@ export function Sidebar() {
           padding: '10px', borderRadius: 12, background: TC.surface2, border: `1px solid ${TC.border}` }}>
           {/* Avatar */}
           <div style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
-            background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)',
+            background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)',
             display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ fontSize: 11, color: TC.accent, fontWeight: 700,
               fontFamily: FONT }}>{initials}</span>

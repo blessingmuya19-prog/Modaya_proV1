@@ -4,9 +4,9 @@ import React from 'react';
 export function LogoMark({ size = 32 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="2" y="8" width="12" height="16" rx="3" fill="#8B5CF6" opacity="0.9" />
-      <rect x="18" y="8" width="12" height="16" rx="3" fill="#8B5CF6" opacity="0.4" />
-      <line x1="16" y1="5" x2="16" y2="27" stroke="#8B5CF6" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="2 2" />
+      <rect x="2" y="8" width="12" height="16" rx="3" fill="#FAFAFA" opacity="0.9" />
+      <rect x="18" y="8" width="12" height="16" rx="3" fill="#FAFAFA" opacity="0.4" />
+      <line x1="16" y1="5" x2="16" y2="27" stroke="#FAFAFA" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="2 2" />
       <path d="M13.5 16 L18.5 16" stroke="#050505" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );

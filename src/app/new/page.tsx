@@ -50,13 +50,13 @@ export default function NewProjectPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: TC.bg, color: TC.text, fontFamily: FONT, display: 'flex', flexDirection: 'column',
-      backgroundImage: `radial-gradient(circle at 20% 0%, rgba(139,92,246,0.10), transparent 45%), radial-gradient(circle at 85% 15%, rgba(168,85,247,0.10), transparent 45%)` }}>
+      backgroundImage: `radial-gradient(circle at 20% 0%, rgba(255,255,255,0.10), transparent 45%), radial-gradient(circle at 85% 15%, rgba(255,255,255,0.10), transparent 45%)` }}>
       <header style={{ height: 58, display: 'flex', alignItems: 'center', gap: 12, padding: '0 22px', borderBottom: `1px solid ${TC.border}`, background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(8px)' }}>
         <Link href="/dashboard" style={{ color: TC.muted, display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none', fontSize: 13.5, fontWeight: 600 }}>
           <ArrowLeft size={15} /> Projects
         </Link>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: 17, letterSpacing: '-0.02em' }}>
-          <span style={{ width: 26, height: 26, borderRadius: 8, background: GLOW_GRADIENT, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}><Wand2 size={14} /></span>
+          <span style={{ width: 26, height: 26, borderRadius: 8, background: GLOW_GRADIENT, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#09090B' }}><Wand2 size={14} /></span>
           Modaya
         </div>
       </header>
@@ -65,7 +65,7 @@ export default function NewProjectPage() {
         <div style={{ width: 'min(94vw, 900px)' }}>
           <div style={{ textAlign: 'center', marginBottom: 36 }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em',
-              textTransform: 'uppercase', color: TC.accent, background: 'rgba(139,92,246,0.10)', border: `1px solid rgba(139,92,246,0.25)`,
+              textTransform: 'uppercase', color: TC.accent, background: 'rgba(255,255,255,0.10)', border: `1px solid rgba(255,255,255,0.25)`,
               borderRadius: 999, padding: '5px 13px', marginBottom: 16 }}>
               <Sparkles size={12} /> AI video editor
             </span>
@@ -122,18 +122,18 @@ function ModeCard({ hero, icon, title, body, chips, cta, onClick, busy, disabled
       style={{
         position: 'relative', textAlign: 'left', cursor: disabled ? 'default' : 'pointer',
         background: TC.surface,
-        border: hero ? `1.5px solid rgba(139,92,246,0.5)` : `1.5px solid ${TC.border}`,
+        border: hero ? `1.5px solid rgba(255,255,255,0.5)` : `1.5px solid ${TC.border}`,
         borderRadius: 22, padding: '28px 26px 24px', color: TC.text, fontFamily: FONT,
-        boxShadow: hero ? '0 18px 50px rgba(139,92,246,0.28)' : '0 8px 30px rgba(0,0,0,0.4)',
+        boxShadow: hero ? '0 18px 50px rgba(255,255,255,0.28)' : '0 8px 30px rgba(0,0,0,0.4)',
         display: 'flex', flexDirection: 'column', minHeight: 340, overflow: 'hidden',
         transition: 'transform 160ms ease, box-shadow 160ms ease',
       }}
       className={hero ? 'mode-card mode-card-hero' : 'mode-card'}>
       {hero && (
         <>
-          <span style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(139,92,246,0.10), transparent 55%)', pointerEvents: 'none' }} />
+          <span style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(255,255,255,0.10), transparent 55%)', pointerEvents: 'none' }} />
           <span style={{ position: 'absolute', top: 16, right: -34, transform: 'rotate(38deg)',
-            background: TC.gold, color: '#3A2A05', fontSize: 10, fontWeight: 800, letterSpacing: '0.08em',
+            background: '#F4F4F5', color: '#09090B', fontSize: 10, fontWeight: 800, letterSpacing: '0.08em',
             padding: '3px 42px', textTransform: 'uppercase', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}>
             Most popular
           </span>
@@ -143,8 +143,8 @@ function ModeCard({ hero, icon, title, body, chips, cta, onClick, busy, disabled
       <span style={{ width: 54, height: 54, borderRadius: 15, marginBottom: 18, flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: hero ? GLOW_GRADIENT : TC.surface3,
-        color: hero ? '#fff' : TC.muted,
-        boxShadow: hero ? '0 8px 20px rgba(139,92,246,0.5)' : 'none', border: hero ? 'none' : `1px solid ${TC.border2}` }}>
+        color: hero ? '#09090B' : TC.muted,
+        boxShadow: hero ? '0 8px 20px rgba(255,255,255,0.5)' : 'none', border: hero ? 'none' : `1px solid ${TC.border2}` }}>
         {icon}
       </span>
       <span style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.025em', marginBottom: 8, position: 'relative' }}>{title}</span>
@@ -154,8 +154,8 @@ function ModeCard({ hero, icon, title, body, chips, cta, onClick, busy, disabled
         {chips.map((c, i) => (
           <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 999,
             fontSize: 11.5, fontWeight: 600,
-            background: hero ? 'rgba(139,92,246,0.12)' : TC.surface3,
-            border: `1px solid ${hero ? 'rgba(139,92,246,0.30)' : TC.border}`,
+            background: hero ? 'rgba(255,255,255,0.12)' : TC.surface3,
+            border: `1px solid ${hero ? 'rgba(255,255,255,0.30)' : TC.border}`,
             color: hero ? TC.accent : TC.muted }}>
             {c}
           </span>

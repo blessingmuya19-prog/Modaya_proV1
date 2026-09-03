@@ -11,7 +11,7 @@ const C = {
   bg: '#050505', surface: '#070707', s2: '#0a0a0a', s3: '#0e0e0e',
   b: '#111', b2: '#141414', b3: '#1a1a1a',
   text: '#F5F7FA', sec: '#A5ADBA', muted: '#737D8D', dim: '#4D5664',
-  accent: '#8B5CF6', accentH: '#A78BFA', err: '#f87171', green: '#34D399',
+  accent: '#FAFAFA', accentH: '#D4D4D8', err: '#f87171', green: '#34D399',
 };
 
 const PERKS = [

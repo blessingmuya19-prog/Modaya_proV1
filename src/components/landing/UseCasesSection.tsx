@@ -16,42 +16,42 @@ const CASES = [
   {
     image: '/creators/podcaster-woman.jpg',
     tag: 'Podcasters',
-    tagColor: '#A78BFA',
+    tagColor: '#D4D4D8',
     stat: '60 min → 8 min',
     title: 'Turn long episodes into viral clips',
     body: 'Upload your full recording. Modaya finds the strongest moments, removes the filler, and builds clips ready for every platform.',
-    accent: 'rgba(139,92,246,0.15)',
-    border: 'rgba(139,92,246,0.25)',
+    accent: 'rgba(255,255,255,0.15)',
+    border: 'rgba(255,255,255,0.25)',
   },
   {
     image: '/creators/podcast-group.jpg',
     tag: 'Interviewers',
-    tagColor: '#A78BFA',
+    tagColor: '#D4D4D8',
     stat: '54% shorter',
     title: 'Keep the insight, lose the filler',
     body: 'Every interview becomes watchable in minutes. AI reads the conversation, keeps the sharpest exchanges, and cuts the rest.',
-    accent: 'rgba(139,92,246,0.1)',
-    border: 'rgba(139,92,246,0.2)',
+    accent: 'rgba(255,255,255,0.1)',
+    border: 'rgba(255,255,255,0.2)',
   },
   {
     image: '/creators/streamer.jpg',
     tag: 'Streamers',
-    tagColor: '#A78BFA',
+    tagColor: '#D4D4D8',
     stat: '0 manual cuts',
     title: 'Hours of stream into highlight reels',
     body: 'Clip the best moments from multi-hour streams automatically. No scrubbing. No timeline. Just drop in the VOD.',
-    accent: 'rgba(139,92,246,0.12)',
-    border: 'rgba(139,92,246,0.22)',
+    accent: 'rgba(255,255,255,0.12)',
+    border: 'rgba(255,255,255,0.22)',
   },
   {
     image: '/creators/studio-setup.jpg',
     tag: 'YouTubers',
-    tagColor: '#A78BFA',
+    tagColor: '#D4D4D8',
     stat: '3× faster',
     title: 'From raw footage to published video',
     body: 'Talking-head, vlog, tutorial — Modaya handles the cut, pacing, and captions so you can focus on what you want to say.',
-    accent: 'rgba(139,92,246,0.1)',
-    border: 'rgba(139,92,246,0.18)',
+    accent: 'rgba(255,255,255,0.1)',
+    border: 'rgba(255,255,255,0.18)',
   },
 ];
 
@@ -65,8 +65,8 @@ function CreatorCard({ c, i, inView }: { c: typeof CASES[0]; i: number; inView: 
       style={{
         borderRadius: 20,
         overflow: 'hidden',
-        border: `1px solid ${hov ? c.border : '#26262E'}`,
-        background: '#101014',
+        border: `1px solid ${hov ? c.border : '#27272A'}`,
+        background: '#0A0A0B',
         display: 'flex',
         flexDirection: 'column',
         opacity: inView ? 1 : 0,
@@ -94,14 +94,14 @@ function CreatorCard({ c, i, inView }: { c: typeof CASES[0]; i: number; inView: 
 
         {/* Tag pill */}
         <div style={{ position: 'absolute', top: 14, left: 14 }}>
-          <span style={{ padding: '4px 12px', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', background: 'rgba(139,92,246,0.85)', backdropFilter: 'blur(8px)', color: '#fff', borderRadius: 9999 }}>
+          <span style={{ padding: '4px 12px', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(8px)', color: '#fff', borderRadius: 9999 }}>
             {c.tag}
           </span>
         </div>
 
         {/* Stat pill */}
         <div style={{ position: 'absolute', top: 14, right: 14 }}>
-          <span style={{ padding: '4px 12px', fontSize: 11, fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', border: '1px solid rgba(139,92,246,0.18)', borderRadius: 9999 }}>
+          <span style={{ padding: '4px 12px', fontSize: 11, fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 9999 }}>
             {c.stat}
           </span>
         </div>
@@ -114,7 +114,7 @@ function CreatorCard({ c, i, inView }: { c: typeof CASES[0]; i: number; inView: 
 
         {/* AI label */}
         <div style={{ marginTop: 6 }}>
-          <span style={{ fontSize: 10, fontWeight: 600, color: '#A78BFA', letterSpacing: '0.08em', background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.18)', padding: '3px 10px', borderRadius: 9999 }}>✦ AI Edit</span>
+          <span style={{ fontSize: 10, fontWeight: 600, color: '#D4D4D8', letterSpacing: '0.08em', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', padding: '3px 10px', borderRadius: 9999 }}>✦ AI Edit</span>
         </div>
       </div>
     </div>
@@ -125,18 +125,18 @@ export function UseCasesSection() {
   const { ref, inView } = useInView(0.08);
 
   return (
-    <section id="use-cases" className="section-pad" style={{ position: 'relative', zIndex: 0, background: '#09090B', overflow: 'hidden' }}>
+    <section id="use-cases" className="section-pad" style={{ position: 'relative', zIndex: 0, background: '#000000', overflow: 'hidden' }}>
 
       {/* Subtle glow */}
-      <div style={{ position: 'absolute', top: '40%', right: '-10%', width: 600, height: 600, pointerEvents: 'none', background: 'radial-gradient(ellipse at center, rgba(139,92,246,0.04) 0%, transparent 70%)', filter: 'blur(60px)' }} />
+      <div style={{ position: 'absolute', top: '40%', right: '-10%', width: 600, height: 600, pointerEvents: 'none', background: 'radial-gradient(ellipse at center, rgba(255,255,255,0.04) 0%, transparent 70%)', filter: 'blur(60px)' }} />
 
       <div className="section-inner" style={{ position: 'relative', zIndex: 1 }}>
 
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 'clamp(36px,5vw,72px)' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px', borderRadius: 9999, background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.18)', marginBottom: 20 }}>
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#A78BFA', display: 'inline-block' }} />
-            <span style={{ fontSize: 11, color: '#A78BFA', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Use cases</span>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px', borderRadius: 9999, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', marginBottom: 20 }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#D4D4D8', display: 'inline-block' }} />
+            <span style={{ fontSize: 11, color: '#D4D4D8', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Use cases</span>
           </div>
           <h2 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(30px,5vw,52px)', letterSpacing: '-0.025em', lineHeight: 1.05, color: '#FAFAFA', margin: '0 0 18px' }}>
             Built for every creator<br />
@@ -159,7 +159,7 @@ export function UseCasesSection() {
           marginTop: 56,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           gap: 0,
-          background: '#101014', border: '1px solid #26262E', boxShadow: '0 8px 30px rgba(0,0,0,0.25)',
+          background: '#0A0A0B', border: '1px solid #27272A', boxShadow: '0 8px 30px rgba(0,0,0,0.25)',
           borderRadius: 16, padding: '28px 0',
           opacity: inView ? 1 : 0,
           transform: inView ? 'none' : 'translateY(20px)',
@@ -176,7 +176,7 @@ export function UseCasesSection() {
                 <p style={{ fontFamily: "'Inter Tight',sans-serif", fontSize: 'clamp(24px,3vw,36px)', fontWeight: 800, color: '#FAFAFA', letterSpacing: '-0.04em', margin: '0 0 4px' }}>{s.value}</p>
                 <p style={{ fontSize: 12, color: '#A1A1AA', margin: 0 }}>{s.label}</p>
               </div>
-              {i < arr.length - 1 && <div style={{ width: 1, height: 40, background: '#33333D', flexShrink: 0 }} />}
+              {i < arr.length - 1 && <div style={{ width: 1, height: 40, background: '#3F3F46', flexShrink: 0 }} />}
             </React.Fragment>
           ))}
         </div>

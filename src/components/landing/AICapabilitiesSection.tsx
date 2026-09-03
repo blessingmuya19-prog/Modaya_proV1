@@ -26,18 +26,18 @@ export function AICapabilitiesSection() {
   const { ref, inView } = useInView(0.08);
 
   return (
-    <section id="ai" className="section-pad" style={{ position:'relative', zIndex:0, background:'linear-gradient(180deg,#09090B 0%,#101014 50%,#09090B 100%)', overflow:'hidden' }}>
+    <section id="ai" className="section-pad" style={{ position:'relative', zIndex:0, background:'linear-gradient(180deg,#000000 0%,#0A0A0B 50%,#000000 100%)', overflow:'hidden' }}>
 
       {/* Glow */}
-      <div style={{ position:'absolute', top:'40%', left:'50%', transform:'translateX(-50%)', width:900, height:500, pointerEvents:'none', background:'radial-gradient(ellipse at center, rgba(139,92,246,0.06) 0%, transparent 70%)', filter:'blur(60px)' }} />
+      <div style={{ position:'absolute', top:'40%', left:'50%', transform:'translateX(-50%)', width:900, height:500, pointerEvents:'none', background:'radial-gradient(ellipse at center, rgba(255,255,255,0.06) 0%, transparent 70%)', filter:'blur(60px)' }} />
 
       <div className="section-inner" style={{ position:'relative', zIndex:1 }}>
 
         {/* Header */}
         <div style={{ textAlign:'center', marginBottom:'clamp(40px,6vw,80px)' }}>
-          <div style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 14px', borderRadius:9999, background:'rgba(139,92,246,0.08)', border:'1px solid rgba(139,92,246,0.18)', marginBottom:20 }}>
-            <span style={{ width:5, height:5, borderRadius:'50%', background:'#A78BFA', display:'inline-block' }} />
-            <span style={{ fontSize:11, color:'#A78BFA', fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase' }}>AI capabilities</span>
+          <div style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 14px', borderRadius:9999, background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.18)', marginBottom:20 }}>
+            <span style={{ width:5, height:5, borderRadius:'50%', background:'#D4D4D8', display:'inline-block' }} />
+            <span style={{ fontSize:11, color:'#D4D4D8', fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase' }}>AI capabilities</span>
           </div>
           <h2 style={{ fontFamily:"'Inter Tight',sans-serif", fontWeight:700, fontSize:'clamp(30px,5vw,52px)', letterSpacing:'-0.025em', lineHeight:1.05, color:'#FAFAFA', margin:'0 0 18px' }}>
             Everything an editor does.<br />
@@ -54,15 +54,15 @@ export function AICapabilitiesSection() {
             const Icon = cap.icon;
             return (
               <div key={i} style={{ opacity: inView ? 1 : 0, transform: inView ? 'none' : 'translateY(28px)', transition:`all 550ms cubic-bezier(0.22,1,0.36,1) ${i * 70}ms` }}>
-                <div style={{ padding:'clamp(18px,2vw,32px) clamp(16px,1.8vw,28px)', background:'#101014', border:'1px solid #26262E', borderRadius:18, height:'100%', display:'flex', flexDirection:'column', gap:14, cursor:'default', transition:'all 300ms ease' }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(139,92,246,0.22)'; e.currentTarget.style.background = '#16161C'; e.currentTarget.style.transform = 'translateY(-3px)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#33333D'; e.currentTarget.style.background = '#101014'; e.currentTarget.style.transform = ''; }}
+                <div style={{ padding:'clamp(18px,2vw,32px) clamp(16px,1.8vw,28px)', background:'#0A0A0B', border:'1px solid #27272A', borderRadius:18, height:'100%', display:'flex', flexDirection:'column', gap:14, cursor:'default', transition:'all 300ms ease' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.22)'; e.currentTarget.style.background = '#131316'; e.currentTarget.style.transform = 'translateY(-3px)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#3F3F46'; e.currentTarget.style.background = '#0A0A0B'; e.currentTarget.style.transform = ''; }}
                 >
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                    <div style={{ width:44, height:44, borderRadius:12, background:'rgba(139,92,246,0.08)', border:'1px solid rgba(139,92,246,0.16)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                      <Icon size={20} color="#A78BFA" strokeWidth={1.6} />
+                    <div style={{ width:44, height:44, borderRadius:12, background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.16)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                      <Icon size={20} color="#D4D4D8" strokeWidth={1.6} />
                     </div>
-                    <span style={{ fontSize:9, fontWeight:700, color:'#A78BFA', letterSpacing:'0.1em', background:'rgba(139,92,246,0.08)', border:'1px solid rgba(139,92,246,0.18)', padding:'3px 10px', borderRadius:9999 }}>{cap.tag}</span>
+                    <span style={{ fontSize:9, fontWeight:700, color:'#D4D4D8', letterSpacing:'0.1em', background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.18)', padding:'3px 10px', borderRadius:9999 }}>{cap.tag}</span>
                   </div>
                   <h3 style={{ fontFamily:"'Inter Tight',sans-serif", fontSize:19, fontWeight:700, color:'#FAFAFA', letterSpacing:'-0.03em', margin:0 }}>{cap.title}</h3>
                   <p style={{ fontSize:14, color:'#D4D4D8', lineHeight:1.7, margin:0 }}>{cap.body}</p>

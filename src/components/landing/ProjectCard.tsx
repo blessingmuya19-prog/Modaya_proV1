@@ -30,11 +30,11 @@ export function ProjectCard({ project }: { project: Project }) {
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{
-          background: '#101014',
-          border: `1px solid ${hovered ? '#8B5CF6' : '#26262E'}`,
+          background: '#0A0A0B',
+          border: `1px solid ${hovered ? '#FAFAFA' : '#27272A'}`,
           borderRadius: 16, overflow: 'hidden',
           transform: hovered ? 'translateY(-2px)' : 'none',
-          boxShadow: hovered ? '0 16px 40px rgba(139,92,246,0.18)' : '0 6px 20px rgba(0,0,0,0.28)',
+          boxShadow: hovered ? '0 16px 40px rgba(255,255,255,0.18)' : '0 6px 20px rgba(0,0,0,0.28)',
           transition: 'all 200ms ease',
           cursor: 'pointer',
         }}
@@ -68,8 +68,8 @@ export function ProjectCard({ project }: { project: Project }) {
           {/* Processing overlay */}
           {project.status === 'processing' && (
             <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-              <Cpu size={14} style={{ color: '#A78BFA', animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
-              <span style={{ fontSize: 12, color: '#A78BFA', fontWeight: 600 }}>AI editing...</span>
+              <Cpu size={14} style={{ color: '#D4D4D8', animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
+              <span style={{ fontSize: 12, color: '#D4D4D8', fontWeight: 600 }}>AI editing...</span>
             </div>
           )}
         </div>
@@ -83,7 +83,7 @@ export function ProjectCard({ project }: { project: Project }) {
             <button
               onClick={e => { e.preventDefault(); e.stopPropagation(); }}
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#737D8D', padding: 2, borderRadius: 4, display: 'flex', flexShrink: 0 }}
-              onMouseEnter={e => { e.currentTarget.style.color = '#FAFAFA'; e.currentTarget.style.background = '#1E1E26'; }}
+              onMouseEnter={e => { e.currentTarget.style.color = '#FAFAFA'; e.currentTarget.style.background = '#1C1C21'; }}
               onMouseLeave={e => { e.currentTarget.style.color = '#737D8D'; e.currentTarget.style.background = 'none'; }}
             >
               <MoreHorizontal size={14} />
@@ -106,7 +106,7 @@ export function ProjectCard({ project }: { project: Project }) {
 export function EmptyProjectState() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px', textAlign: 'center' }}>
-      <div style={{ width: 56, height: 56, borderRadius: 16, background: '#101014', border: '1px solid #242424', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+      <div style={{ width: 56, height: 56, borderRadius: 16, background: '#0A0A0B', border: '1px solid #242424', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
         <Play size={22} style={{ color: '#737D8D' }} />
       </div>
       <h3 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 650, fontSize: 18, letterSpacing: '-0.03em', color: '#FAFAFA', margin: '0 0 8px' }}>
@@ -117,7 +117,7 @@ export function EmptyProjectState() {
         <button style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: '0 20px', height: 42, fontSize: 13, fontWeight: 600,
-          background: 'linear-gradient(180deg,#8B5CF6,#7C3AED)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer',
+          background: 'linear-gradient(180deg,#FFFFFF,#E4E4E7)', color: '#09090B', border: 'none', borderRadius: 10, cursor: 'pointer',
         }}>
           Create video
         </button>

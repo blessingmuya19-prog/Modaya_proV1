@@ -9,7 +9,7 @@ const C = {
   bg: '#050505', surface: '#070707', s2: '#0a0a0a', s3: '#0e0e0e',
   b: '#111', b2: '#141414', b3: '#1a1a1a',
   text: '#F5F7FA', sec: '#A5ADBA', muted: '#737D8D', dim: '#4D5664',
-  accent: '#8B5CF6', accentH: '#A78BFA',
+  accent: '#FAFAFA', accentH: '#D4D4D8',
   success: '#4ade80', danger: '#f87171', dangerBg: 'rgba(248,113,113,0.07)',
 };
 
@@ -488,8 +488,8 @@ export default function SettingsPage() {
       <Section title="Plan" description="Your current plan and usage.">
         {/* Usage */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(139,92,246,0.1)',
-            border: `1px solid rgba(139,92,246,0.2)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,0.1)',
+            border: `1px solid rgba(255,255,255,0.2)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <HardDrive size={16} color={C.accent} />
           </div>
           <div style={{ flex: 1 }}>
@@ -513,7 +513,7 @@ export default function SettingsPage() {
             return (
               <div key={p.id} style={{
                 padding: '14px 14px 16px', borderRadius: 11,
-                background: active ? 'rgba(139,92,246,0.07)' : C.s2,
+                background: active ? 'rgba(255,255,255,0.07)' : C.s2,
                 border: `1px solid ${active ? C.accent + '44' : C.b2}`,
                 position: 'relative', transition: 'all 150ms',
               }}>

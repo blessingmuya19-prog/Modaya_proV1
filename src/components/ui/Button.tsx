@@ -15,23 +15,23 @@ const sizeStyles = {
   lg: { padding: '0 26px', height: '48px', fontSize: '15px' },
 };
 
-const BTN_SHADOW = '0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(124,58,237,0.35), inset 0 1px 0 rgba(255,255,255,0.18)';
-const BTN_SHADOW_HOVER = '0 2px 4px rgba(0,0,0,0.35), 0 10px 26px rgba(124,58,237,0.45), inset 0 1px 0 rgba(255,255,255,0.22)';
-const BTN_BG = 'linear-gradient(180deg,#8B5CF6,#7C3AED)';
-const BTN_BG_HOVER = 'linear-gradient(180deg,#9669F8,#8B4FF0)';
+const BTN_SHADOW = '0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(255,255,255,0.35), inset 0 1px 0 rgba(255,255,255,0.18)';
+const BTN_SHADOW_HOVER = '0 2px 4px rgba(0,0,0,0.35), 0 10px 26px rgba(255,255,255,0.45), inset 0 1px 0 rgba(255,255,255,0.22)';
+const BTN_BG = 'linear-gradient(180deg,#FFFFFF,#E4E4E7)';
+const BTN_BG_HOVER = 'linear-gradient(180deg,#F4F4F5,#D4D4D8)';
 
 const variantStyles = {
   primary: {
     background: BTN_BG,
-    color: '#FFFFFF',
-    border: 'none',
+    color: '#09090B',
+    border: '1px solid rgba(255,255,255,0.12)',
     fontWeight: 600,
     boxShadow: BTN_SHADOW,
   },
   secondary: {
-    background: '#1E1E26',
+    background: '#1C1C21',
     color: '#FFFFFF',
-    border: '1px solid #33333D',
+    border: '1px solid #3F3F46',
     fontWeight: 500,
   },
   ghost: {
@@ -124,7 +124,7 @@ export function IconButton({
         padding: 0,
         ...style,
       }}
-      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = variant === 'ghost' ? '#1E1E26' : ''; }}
+      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = variant === 'ghost' ? '#1C1C21' : ''; }}
       onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = vr.background; }}
       {...props}
     >

@@ -81,7 +81,7 @@ export const TEXT = {
   muted:     '#737D8D',
   dim:       '#4D5664',
   active:    '#FFFFFF',
-  accent:    '#8B5CF6',
+  accent:    '#FAFAFA',
   placeholder: '#737D8D',
 } as const;
 

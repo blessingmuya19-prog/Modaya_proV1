@@ -55,10 +55,10 @@ function FooterLogo() {
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       {/* Mark */}
       <svg width="22" height="22" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect width="32" height="32" rx="8" fill="#A78BFA" fillOpacity="0.12" />
-        <rect x="1" y="1" width="30" height="30" rx="7" stroke="#A78BFA" strokeOpacity="0.3" strokeWidth="1" />
-        <path d="M9 23 L16 9 L23 23" stroke="#A78BFA" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M11.5 18 L20.5 18" stroke="#A78BFA" strokeWidth="2" strokeLinecap="round" />
+        <rect width="32" height="32" rx="8" fill="#D4D4D8" fillOpacity="0.12" />
+        <rect x="1" y="1" width="30" height="30" rx="7" stroke="#D4D4D8" strokeOpacity="0.3" strokeWidth="1" />
+        <path d="M9 23 L16 9 L23 23" stroke="#D4D4D8" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M11.5 18 L20.5 18" stroke="#D4D4D8" strokeWidth="2" strokeLinecap="round" />
       </svg>
       {/* Wordmark */}
       <span style={{ fontFamily: "'Inter Tight', sans-serif", fontSize: 17, fontWeight: 700, color: '#FAFAFA', letterSpacing: '-0.04em' }}>
@@ -72,8 +72,8 @@ export function Footer() {
   return (
     <footer style={{
       position: 'relative', zIndex: 0,
-      background: '#09090B',
-      borderTop: '1px solid #26262E',
+      background: '#000000',
+      borderTop: '1px solid #27272A',
     }}>
       {/* Top section */}
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: 'clamp(40px,6vw,80px) clamp(16px,3vw,48px) clamp(32px,4vw,56px)' }}>
@@ -91,12 +91,12 @@ export function Footer() {
               {SOCIALS.map(s => (
                 <a key={s.label} href={s.href} aria-label={s.label} style={{
                   width: 34, height: 34, borderRadius: 8,
-                  background: '#16161C', border: '1px solid #26262E',
+                  background: '#131316', border: '1px solid #27272A',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   color: '#A1A1AA', textDecoration: 'none', transition: 'all 200ms ease',
                 }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#1E1E26'; e.currentTarget.style.borderColor = '#33333D'; e.currentTarget.style.color = '#FAFAFA'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#16161C'; e.currentTarget.style.borderColor = '#33333D'; e.currentTarget.style.color = '#A1A1AA'; }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#1C1C21'; e.currentTarget.style.borderColor = '#3F3F46'; e.currentTarget.style.color = '#FAFAFA'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#131316'; e.currentTarget.style.borderColor = '#3F3F46'; e.currentTarget.style.color = '#A1A1AA'; }}
                 >
                   <span dangerouslySetInnerHTML={{ __html: s.svg }} />
                 </a>
@@ -107,9 +107,9 @@ export function Footer() {
             <Link href="/new" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '9px 18px', fontSize: 13, fontWeight: 700, color: '#FFFFFF',
-                background: 'linear-gradient(180deg,#8B5CF6,#7C3AED)',
-                borderRadius: 12, boxShadow: '0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(124,58,237,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
+                padding: '9px 18px', fontSize: 13, fontWeight: 700, color: '#09090B',
+                background: 'linear-gradient(180deg,#FFFFFF,#E4E4E7)',
+                borderRadius: 12, boxShadow: '0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(255,255,255,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
               }}>
                 Start editing free <ArrowUpRight size={13} />
               </span>
@@ -134,7 +134,7 @@ export function Footer() {
                   >
                     {link.label}
                     {'badge' in link && link.badge && (
-                      <span style={{ fontSize: 9, fontWeight: 600, color: '#A78BFA', background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)', padding: '1px 6px', borderRadius: 9999, letterSpacing: '0.04em' }}>
+                      <span style={{ fontSize: 9, fontWeight: 600, color: '#D4D4D8', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', padding: '1px 6px', borderRadius: 9999, letterSpacing: '0.04em' }}>
                         {link.badge}
                       </span>
                     )}
@@ -148,7 +148,7 @@ export function Footer() {
 
       {/* Hairline */}
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 clamp(16px,3vw,48px)' }}>
-        <div style={{ height: 1, background: 'linear-gradient(to right, transparent, #1E1E26 20%, #1E1E26 80%, transparent)' }} />
+        <div style={{ height: 1, background: 'linear-gradient(to right, transparent, #1C1C21 20%, #1C1C21 80%, transparent)' }} />
       </div>
 
       {/* Bottom bar */}
