@@ -57,7 +57,7 @@ export async function uploadProjectMedia(
 ): Promise<{ ok: boolean; durable: boolean }> {
   try {
     const cap = await getCloudCapability();
-    if (!cap.available) return { ok: false, durable: false };
+    if (!cap.available || !cap.durable) return { ok: false, durable: false };
     const sizeMb = file.size / (1024 * 1024);
     if (cap.maxUploadMb && sizeMb > cap.maxUploadMb) return { ok: false, durable: cap.durable };
 
@@ -151,7 +151,7 @@ export async function getReferenceBlob(
   index = 0,
 ): Promise<{ blob: Blob; filename: string } | null> {
   const cap = await getCloudCapability();
-  if (!cap.available) return null;
+  if (!cap.available || !cap.durable) return null;
   const meta = await fetchProjectMediaMeta(projectId);
   const ext = meta?.refs?.[index]?.ext;
   if (!ext) return null;
@@ -180,7 +180,7 @@ export async function getProjectMedia(projectId: string): Promise<StoredMedia | 
 
   // Durable server copy?
   const cap = await getCloudCapability();
-  if (!cap.available) return null;
+  if (!cap.available || !cap.durable) return null;
   const meta = await fetchProjectMediaMeta(projectId);
   if (!meta?.main?.ext) return null;
 
@@ -236,7 +236,7 @@ export async function getBrollLibrary(
 
   // Durable server copy?
   const cap = await getCloudCapability();
-  if (!cap.available) return [];
+  if (!cap.available || !cap.durable) return [];
   const meta = await fetchProjectMediaMeta(projectId);
   if (!meta?.brolls?.length) return [];
 

@@ -15,9 +15,9 @@ export const runtime = 'nodejs';
 export async function GET() {
   const store = mediaStore();
   return NextResponse.json({
-    available: true,
+    available: store.durable,
     durable: store.durable,
     driver: store.driver,
-    maxUploadMb: Number(process.env.MEDIA_MAX_UPLOAD_MB ?? 2000),
+    maxUploadMb: store.durable ? Number(process.env.MEDIA_MAX_UPLOAD_MB ?? 2000) : 0,
   });
 }
