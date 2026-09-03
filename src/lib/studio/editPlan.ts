@@ -39,6 +39,13 @@ export interface PlannedShot {
   type: 'video' | 'text';
   /** For video clips: where in the source this shot starts. */
   sourceIn: number;
+  /**
+   * Which media object this clip reads from. Undefined = the main footage.
+   * B-roll cutaways from an uploaded library set this to the library clip's
+   * source id (e.g. 'broll-0'), and `sourceIn` is then a time inside THAT
+   * clip, not the main footage.
+   */
+  sourceId?: string;
   transform: Transform;
   effects: Effects;
 }
@@ -53,8 +60,15 @@ export interface StudioPlan {
   frame: { width: number; height: number; ratio: FrameRatio };
   captions: number;
   broll: number;
+  /** True when cutaways came from an uploaded B-roll library rather than
+   *  unused windows of the main footage. */
+  brollFromLibrary: boolean;
   hookFirst: boolean;
 }
+
+/** One clip in an uploaded B-roll library. `id` is the source id the renderer
+ *  knows it by (e.g. 'broll-0'); `durationS` bounds where cutaways may read. */
+export interface BrollClip { id: string; durationS: number }
 
 export interface ComposeOpts {
   profile: StyleProfile;
@@ -67,6 +81,9 @@ export interface ComposeOpts {
   mode?: 'short' | 'full';
   /** Output length target for short mode. */
   targetSeconds?: number;
+  /** Uploaded B-roll library; when present, cutaways come from these clips
+   *  instead of unused windows of the main footage. */
+  brollLibrary?: BrollClip[];
   seed?: number;
 }
 
@@ -206,6 +223,55 @@ export function chooseBroll(opts: {
   return picked.sort((a, b) => a.s - b.s);
 }
 
+/**
+ * Pick cutaways from an UPLOADED B-roll library instead of the source itself.
+ *
+ * Each returned pick names the library clip (its source id) and a window
+ * inside it, clamped to that clip's duration — the model-free equivalent of
+ * an editor skimming the library and grabbing "a bit from the middle of clip
+ * 2". Deterministic: the same library + seed always picks the same windows.
+ *
+ * Ordering cycles through the library in a seeded shuffle so consecutive
+ * cutaways use different clips; when more cutaways are wanted than the
+ * library holds, clips are reused at different offsets rather than repeated
+ * verbatim. Clips too short to show (< 0.6s) are skipped.
+ */
+export function chooseLibraryBroll(opts: {
+  library: BrollClip[];
+  /** How many cutaways to aim for. */
+  count: number;
+  cutLenS?: number;
+  rand: () => number;
+}): Array<{ sourceId: string; inS: number; lenS: number }> {
+  const { library, rand } = opts;
+  const usable = library.filter(b => b.durationS >= 0.6);
+  if (!usable.length || opts.count <= 0) return [];
+
+  // Seeded shuffle of the library order (Fisher–Yates on a copy).
+  const order = [...usable];
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+
+  const picks: Array<{ sourceId: string; inS: number; lenS: number }> = [];
+  // Spread successive reuses of the same clip across different offsets so a
+  // small library doesn't repeat one identical window over and over.
+  const useOf = new Map<string, number>();
+  for (let n = 0; n < opts.count; n++) {
+    const item = order[n % order.length];
+    const use  = useOf.get(item.id) ?? 0;
+    useOf.set(item.id, use + 1);
+    const len  = clamp(opts.cutLenS ?? 1.6, 0.8, 4);
+    const lenS = Math.min(len, item.durationS);
+    // nth use of a clip reads from a different band: 0.2, 0.55, 0.85, wrap.
+    const frac = [0.2, 0.55, 0.85][use % 3];
+    const inS  = clamp((item.durationS - lenS) * frac, 0, Math.max(0, item.durationS - lenS));
+    picks.push({ sourceId: item.id, inS: Number(inS.toFixed(3)), lenS: Number(lenS.toFixed(3)) });
+  }
+  return picks;
+}
+
 /** Map a transcript onto the condensed programme as lower-third captions. */
 function captionClips(
   shots: Array<{ srcStart: number; outStart: number; outEnd: number }>,
@@ -314,14 +380,22 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
     });
   }
 
-  // B-roll: short, silent cutaways from other visually-strong parts of the
-  // source, dropped over the middle of shots like a real TikTok cutaway. The
-  // base talk track keeps playing beneath them.
+  // B-roll: short, silent cutaways dropped over the middle of shots like a
+  // real TikTok cutaway. The base talk track keeps playing beneath them.
+  // With an uploaded library, cutaways read from those clips (each its own
+  // source object); without one they fall back to visually-strong windows of
+  // the main footage that the edit doesn't already use.
+  const library = (opts.brollLibrary ?? []).filter(b => b.durationS >= 0.6);
   const usedRanges = video.map(v => ({ s: v.sourceIn, e: v.sourceIn + (v.endS - v.startS) }));
   const targetCutaways = Math.max(0, Math.round(cursor / 9));   // roughly one per 9s
-  const cuts = chooseBroll({
-    durationS, interest, used: usedRanges, count: targetCutaways, cutLenS: 1.7,
-  });
+  const libPicks = library.length
+    ? chooseLibraryBroll({ library, count: targetCutaways, cutLenS: 1.7, rand })
+    : [];
+  const cuts = libPicks.length
+    ? libPicks
+    : chooseBroll({
+        durationS, interest, used: usedRanges, count: targetCutaways, cutLenS: 1.7,
+      }).map(w => ({ sourceId: '', inS: w.s, lenS: Math.min(1.7, w.e - w.s) }));
   if (cuts.length && video.length) {
     const main = video.filter(v => v.trackId === 'video');
     let ci = 0;
@@ -331,18 +405,20 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
       const shotLen = shot.endS - shot.startS;
       if (shotLen < 3.5) continue;
       const src = cuts[ci++];
-      const len = Math.min(1.7, shotLen * 0.5);
+      const len = Math.min(src.lenS, shotLen * 0.5);
       const outStart = shot.startS + shotLen * 0.28;
       broll.push({
         id: `broll-${broll.length}`, trackId: 'overlay', label: 'B-roll',
         startS: Number(outStart.toFixed(3)), endS: Number((outStart + len).toFixed(3)),
-        type: 'video', sourceIn: Number(src.s.toFixed(3)),
+        type: 'video', sourceIn: Number(src.inS.toFixed(3)),
+        ...(src.sourceId ? { sourceId: src.sourceId } : {}),
         transform: { ...DEFAULT_TRANSFORM, fit: 'cover', scale: 1.08 },
         effects,
       });
       brollCount++;
     }
   }
+  const brollFromLibrary = libPicks.length > 0;
 
   // Real captions over the surviving shots.
   const caps = profile.captions.present
@@ -360,7 +436,7 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
     caps.length ? `${caps.length} captions` : null,
     ratio === '9:16' ? 'vertical 9:16' : null,
     profile.punchInRate > 0.25 ? 'punch-ins' : null,
-    brollCount ? `${brollCount} b-roll` : null,
+    brollCount ? `${brollCount} b-roll${brollFromLibrary ? ' (your library)' : ''}` : null,
   ].filter(Boolean).join(' · ');
 
   return {
@@ -373,6 +449,7 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
     frame,
     captions: caps.length,
     broll: brollCount,
+    brollFromLibrary,
     hookFirst: mode === 'short',
   };
 }

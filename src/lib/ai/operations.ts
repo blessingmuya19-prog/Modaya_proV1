@@ -30,6 +30,7 @@ export interface TextStyle {
   colour?:     string;
   background?: 'box' | 'shadow' | 'none';
   bold?:       boolean;
+  italic?:     boolean;
   uppercase?:  boolean;
 }
 
@@ -209,6 +210,7 @@ export function parseStyle(raw: unknown): TextStyle | undefined {
   else if (/none|clear|transparent|off/.test(bg)) out.background = 'none';
 
   if (typeof o.bold === 'boolean')      out.bold = o.bold;
+  if (typeof o.italic === 'boolean')    out.italic = o.italic;
   if (typeof o.uppercase === 'boolean') out.uppercase = o.uppercase;
 
   return Object.keys(out).length ? out : undefined;

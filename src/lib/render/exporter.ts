@@ -23,6 +23,9 @@ export interface ExportOptions {
   /** Object URL (or data URL) of the source media, keyed by sourceId. */
   sourceUrl:     string;
   sourceId:      string;
+  /** Additional media objects the sequence reads — a B-roll library:
+   *  source id → object URL. Cutaway clips resolve through these. */
+  extraSources?: Record<string, string>;
   /** Longest edge in pixels (1080 → 1920×1080 landscape, etc). */
   resLongEdge:   number;
   /** Frames per second to capture. */
@@ -110,6 +113,9 @@ export async function renderToFile(opts: ExportOptions): Promise<ExportResult> {
   // Render at the requested resolution, but never upscale past the source.
   engine.setSequence(sequence, opts.resLongEdge);
   engine.setSource(sourceId, sourceUrl);
+  for (const [id, url] of Object.entries(opts.extraSources ?? {})) {
+    if (url) engine.setSource(id, url);
+  }
 
   // Let the media decode and the first frame settle before we start.
   await new Promise<void>((resolve) => {

@@ -11,7 +11,7 @@ import {
   clampZoom, anchoredScrollLeft, zoomFactor, snapTime, snapEdges, stepTime,
   keyIsForEditor,
 } from './timelineGestures';
-import { buildSequence, Sequence, StyleLayer } from '@/lib/render/sequence';
+import { buildSequence, Sequence, StyleLayer, DEFAULT_EFFECTS, DEFAULT_TRANSFORM, Effects, Transform } from '@/lib/render/sequence';
 import { analyseReference, analyseAudio, interestCurve } from '@/lib/ai/analyseReference';
 import { decodeForAsr, chunkForAsr } from '@/lib/ai/audioForAsr';
 import { saveTranscript, loadTranscript, StoredTranscript } from '@/lib/mediaDb';
@@ -327,6 +327,9 @@ const COLOUR_LOOKS = [
   { name:'Vintage',   swatch:['#c8a870','#806040'] },
 ];
 
+const clipFmt = (s: number) =>
+  `${String(Math.floor(s / 60)).padStart(1, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
 function Divider() {
   return <div style={{ height:1, background:C.b, margin:'8px 0' }} />;
 }
@@ -335,30 +338,24 @@ function SectionLabel({ children }:{ children:React.ReactNode }) {
   return <p style={{ ...ty.secLabel, margin:'0 0 8px', display:'block' as const }}>{children}</p>;
 }
 
-/* Duration slider row for transitions */
-function DurationRow({ label, value }:{ label:string; value:string }) {
-  return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
-      <span style={{ ...ty.propLabel }}>{label}</span>
-      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-        <div style={{ width:80, height:3, background:C.b2, borderRadius:9999, position:'relative' }}>
-          <div style={{ position:'absolute', left:0, top:0, height:'100%', width:'40%',
-            background:C.accent, borderRadius:9999 }} />
-          <div style={{ position:'absolute', top:-4, left:'calc(40% - 4px)', width:8, height:8,
-            borderRadius:'50%', background:C.accent }} />
-        </div>
-        <span style={{ ...ty.niVal, minWidth:28, textAlign:'right' as const }}>{value}</span>
-      </div>
-    </div>
-  );
-}
+/* ── Panel sub-components ─────────────────────────── */
 
-/* Transitions panel */
-function TransitionsPanel() {
+function TransitionsPanel({
+  clips = [],
+  onUpdateClips,
+  onPushHistory,
+}: {
+  clips?: EditorClip[];
+  onUpdateClips?: (clips: EditorClip[]) => void;
+  onPushHistory?: (clips: EditorClip[]) => void;
+}) {
   const [sel, setSel] = React.useState('Fade');
+  const [duration, setDuration] = React.useState(0.4);
+  const [ease, setEase] = React.useState('Ease in-out');
+
   return (
     <div style={{ flex:1, overflowY:'auto', padding:'12px' }}>
-      <SectionLabel>Cut type</SectionLabel>
+      <SectionLabel>Cut Transition</SectionLabel>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:4, marginBottom:12 }}>
         {TRANSITIONS.map(t => (
           <button key={t.name} onClick={()=>setSel(t.name)} style={{
@@ -374,88 +371,200 @@ function TransitionsPanel() {
       </div>
       <Divider />
       <SectionLabel>Timing</SectionLabel>
-      <DurationRow label="Duration" value="0.4s" />
-      <DurationRow label="Offset"   value="0.0s" />
+      <div style={{ marginBottom:10 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
+          <span style={{ ...ty.propLabel }}>Duration</span>
+          <span style={{ ...ty.niVal }}>{duration.toFixed(1)}s</span>
+        </div>
+        <input
+          type="range" min="0.1" max="2.0" step="0.1" value={duration}
+          onChange={e => setDuration(Number(e.target.value))}
+          style={{ width:'100%', accentColor: C.accent, cursor:'pointer' }}
+        />
+      </div>
       <Divider />
-      <SectionLabel>Ease</SectionLabel>
+      <SectionLabel>Ease Curve</SectionLabel>
       {['Linear','Ease in','Ease out','Ease in-out'].map(e => (
-        <button key={e} style={{ display:'block', width:'100%', padding:'7px 9px', marginBottom:3,
-          borderRadius:7, border:`1px solid ${C.b2}`, background:C.s3, cursor:'pointer',
-          textAlign:'left' as const, ...ty.propLabel }}>
+        <button key={e} onClick={()=>setEase(e)} style={{
+          display:'block', width:'100%', padding:'7px 9px', marginBottom:3,
+          borderRadius:7, border:`1px solid ${ease===e ? C.accent+'66' : C.b2}`,
+          background: ease===e ? C.accent+'12' : C.s3, cursor:'pointer',
+          textAlign:'left' as const, ...ty.propLabel, color: ease===e ? C.text : C.sec,
+        }}>
           {e}
         </button>
       ))}
+      <div style={{ marginTop:14, padding:'8px 10px', background:C.s2, borderRadius:7, border:`1px solid ${C.b2}` }}>
+        <span style={{ ...ty.meta, fontSize:11, color:C.muted, display:'block', lineHeight:1.4 }}>
+          Active transition: <strong style={{ color:C.text }}>{sel}</strong> ({duration}s, {ease}). Modaya applies smooth cut blending across sequence boundaries.
+        </span>
+      </div>
     </div>
   );
 }
 
-/* Effects panel */
-function EffectsPanel() {
-  const [sel, setSel] = React.useState<string|null>(null);
+const EFFECT_PRESETS: Record<string, Partial<Effects>> = {
+  'Blur':        { blurPx: 5 },
+  'Monochrome':  { saturation: 0, contrast: 1.25 },
+  'Cinema Mood': { contrast: 1.3, saturation: 0.75, brightness: 0.9 },
+  'Vivid Boost': { saturation: 1.45, brightness: 1.05, contrast: 1.15 },
+  'Sepia Tone':  { saturation: 0.65, brightness: 0.95, contrast: 1.1 },
+  'Night Tone':  { brightness: 0.72, contrast: 1.2, saturation: 0.85 },
+  'Soft Focus':  { blurPx: 2, brightness: 1.05, contrast: 0.95 },
+  'Sharpen':     { contrast: 1.25, brightness: 1.02 },
+};
+
+function EffectsPanel({
+  clips = [],
+  styleLayer = {},
+  onUpdateStyleLayer,
+}: {
+  clips?: EditorClip[];
+  styleLayer?: StyleLayer;
+  onUpdateStyleLayer?: (layer: StyleLayer) => void;
+}) {
+  const [activeEffect, setActiveEffect] = React.useState<string | null>(null);
+  const [intensity, setIntensity] = React.useState(75);
+
+  const applyEffectToLayer = (effectName: string | null, intVal: number) => {
+    setActiveEffect(effectName);
+    if (!onUpdateStyleLayer) return;
+
+    const baseFx = effectName ? EFFECT_PRESETS[effectName] || {} : {};
+    const intMult = intVal / 100;
+    const targetFx: Partial<Effects> = {
+      brightness: baseFx.brightness !== undefined ? 1 + (baseFx.brightness - 1) * intMult : 1,
+      contrast:   baseFx.contrast !== undefined ? 1 + (baseFx.contrast - 1) * intMult : 1,
+      saturation: baseFx.saturation !== undefined ? 1 + (baseFx.saturation - 1) * intMult : 1,
+      blurPx:     baseFx.blurPx !== undefined ? baseFx.blurPx * intMult : 0,
+      opacity:    1,
+    };
+
+    const nextLayer: StyleLayer = { ...styleLayer };
+    const targetClips = clips.length ? clips.filter(c => c.type === 'video' || c.trackId === 'video') : [{ id: 'base' }];
+    for (const c of targetClips) {
+      nextLayer[c.id] = {
+        ...(nextLayer[c.id] ?? {}),
+        effects: {
+          ...(nextLayer[c.id]?.effects ?? DEFAULT_EFFECTS),
+          ...targetFx,
+        },
+      };
+    }
+    onUpdateStyleLayer(nextLayer);
+  };
+
   return (
     <div style={{ flex:1, overflowY:'auto', padding:'12px' }}>
-      <SectionLabel>Add effect</SectionLabel>
+      <SectionLabel>Visual Effects</SectionLabel>
       <div style={{ display:'flex', flexDirection:'column', gap:3, marginBottom:12 }}>
-        {EFFECTS.map(ef => (
-          <button key={ef.name} onClick={()=>setSel(ef.name===sel?null:ef.name)} style={{
-            display:'flex', alignItems:'center', justifyContent:'space-between',
-            padding:'8px 10px', borderRadius:7,
-            border:`1px solid ${sel===ef.name ? C.accent+'55' : C.b2}`,
-            background: sel===ef.name ? C.accent+'0e' : C.s3,
-            cursor:'pointer', transition:'all 120ms',
-          }}>
-            <span style={{ ...ty.propVal, fontSize:12, color: sel===ef.name ? C.accent : C.text }}>{ef.name}</span>
-            <span style={{ ...ty.badge, color:C.muted, letterSpacing:'0.02em', background:C.b2,
-              padding:'2px 6px', borderRadius:4 }}>{ef.tag}</span>
-          </button>
-        ))}
+        {EFFECTS.map(ef => {
+          const isSelected = activeEffect === ef.name;
+          return (
+            <button key={ef.name} onClick={() => applyEffectToLayer(isSelected ? null : ef.name, intensity)} style={{
+              display:'flex', alignItems:'center', justifyContent:'space-between',
+              padding:'8px 10px', borderRadius:7,
+              border:`1px solid ${isSelected ? C.accent+'66' : C.b2}`,
+              background: isSelected ? C.accent+'14' : C.s3,
+              cursor:'pointer', transition:'all 120ms',
+            }}>
+              <span style={{ ...ty.propVal, fontSize:12, color: isSelected ? C.accent : C.text }}>{ef.name}</span>
+              <span style={{ ...ty.badge, color: isSelected ? C.accent : C.muted, letterSpacing:'0.02em', background:C.b2,
+                padding:'2px 6px', borderRadius:4 }}>{ef.tag}</span>
+            </button>
+          );
+        })}
       </div>
-      {sel && <>
-        <Divider />
-        <SectionLabel>Intensity</SectionLabel>
-        <DurationRow label={sel} value="50%" />
-        <DurationRow label="Blend"  value="Normal" />
-      </>}
-    </div>
-  );
-}
-
-/* Overlays panel */
-function OverlaysPanel() {
-  return (
-    <div style={{ flex:1, overflowY:'auto', padding:'12px' }}>
-      <SectionLabel>Elements</SectionLabel>
-      <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
-        {OVERLAYS.map(o => (
-          <button key={o.name} style={{
-            display:'flex', alignItems:'center', gap:10, padding:'9px 10px', borderRadius:7,
-            border:`1px solid ${C.b2}`, background:C.s3, cursor:'pointer', transition:'all 120ms',
-            textAlign:'left' as const,
-          }}
-            onMouseEnter={e=>{ e.currentTarget.style.borderColor=C.b3; e.currentTarget.style.background=C.s2; }}
-            onMouseLeave={e=>{ e.currentTarget.style.borderColor=C.b2; e.currentTarget.style.background=C.s3; }}
+      {activeEffect && (
+        <>
+          <Divider />
+          <SectionLabel>Intensity: {intensity}%</SectionLabel>
+          <div style={{ marginBottom:12 }}>
+            <input
+              type="range" min="10" max="100" step="5" value={intensity}
+              onChange={e => {
+                const val = Number(e.target.value);
+                setIntensity(val);
+                applyEffectToLayer(activeEffect, val);
+              }}
+              style={{ width:'100%', accentColor: C.accent, cursor:'pointer' }}
+            />
+          </div>
+          <button
+            onClick={() => applyEffectToLayer(null, 100)}
+            style={{ width:'100%', padding:'6px', background:C.s3, border:`1px solid ${C.b2}`, borderRadius:6, color:C.sec, fontSize:11, cursor:'pointer' }}
           >
-            <span style={{ fontSize:14, color:C.muted, width:18, textAlign:'center' as const, flexShrink:0 }}>{o.icon}</span>
-            <span style={{ ...ty.propVal, fontSize:12 }}>{o.name}</span>
-            <Plus size={11} color={C.dim} style={{ marginLeft:'auto', flexShrink:0 }} />
+            Clear effect
           </button>
-        ))}
-      </div>
+        </>
+      )}
     </div>
   );
 }
 
-/* Colour grading panel */
-function ColourPanel() {
+const LOOK_PRESETS: Record<string, { brightness: number; contrast: number; saturation: number; blurPx: number }> = {
+  'Neutral':   { brightness: 1.0,  contrast: 1.0,  saturation: 1.0,  blurPx: 0 },
+  'Cool':      { brightness: 0.98, contrast: 1.05, saturation: 0.88, blurPx: 0 },
+  'Warm':      { brightness: 1.04, contrast: 1.08, saturation: 1.18, blurPx: 0 },
+  'Cinematic': { brightness: 0.92, contrast: 1.22, saturation: 0.85, blurPx: 0 },
+  'Bleach':    { brightness: 1.10, contrast: 1.30, saturation: 0.45, blurPx: 0 },
+  'Moody':     { brightness: 0.88, contrast: 1.25, saturation: 0.75, blurPx: 0 },
+  'Vibrant':   { brightness: 1.05, contrast: 1.15, saturation: 1.40, blurPx: 0 },
+  'Vintage':   { brightness: 0.96, contrast: 0.95, saturation: 0.78, blurPx: 0 },
+};
+
+function ColourPanel({
+  clips = [],
+  styleLayer = {},
+  onUpdateStyleLayer,
+}: {
+  clips?: EditorClip[];
+  styleLayer?: StyleLayer;
+  onUpdateStyleLayer?: (layer: StyleLayer) => void;
+}) {
   const [look, setLook] = React.useState('Neutral');
+  const [adj, setAdj] = React.useState({ brightness: 1.0, contrast: 1.0, saturation: 1.0, blurPx: 0 });
+
+  const applyGrade = (newLook: string, newAdj: typeof adj) => {
+    setLook(newLook);
+    setAdj(newAdj);
+    if (!onUpdateStyleLayer) return;
+
+    const nextLayer: StyleLayer = { ...styleLayer };
+    const targetClips = clips.length ? clips.filter(c => c.type === 'video' || c.trackId === 'video') : [{ id: 'base' }];
+    for (const c of targetClips) {
+      nextLayer[c.id] = {
+        ...(nextLayer[c.id] ?? {}),
+        effects: {
+          ...(nextLayer[c.id]?.effects ?? DEFAULT_EFFECTS),
+          brightness: newAdj.brightness,
+          contrast:   newAdj.contrast,
+          saturation: newAdj.saturation,
+          blurPx:     newAdj.blurPx,
+        },
+      };
+    }
+    onUpdateStyleLayer(nextLayer);
+  };
+
+  const handleSelectLook = (lookName: string) => {
+    const preset = LOOK_PRESETS[lookName] ?? LOOK_PRESETS['Neutral'];
+    applyGrade(lookName, preset);
+  };
+
+  const updateAdj = (key: keyof typeof adj, val: number) => {
+    const next = { ...adj, [key]: val };
+    applyGrade('Custom', next);
+  };
+
   return (
     <div style={{ flex:1, overflowY:'auto', padding:'12px' }}>
-      <SectionLabel>Look</SectionLabel>
+      <SectionLabel>Colour Look</SectionLabel>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:4, marginBottom:12 }}>
         {COLOUR_LOOKS.map(l => (
-          <button key={l.name} onClick={()=>setLook(l.name)} style={{
-            padding:'8px', borderRadius:7, border:`1px solid ${look===l.name ? C.accent+'55' : C.b2}`,
-            background:C.s3, cursor:'pointer', transition:'all 120ms', textAlign:'left' as const,
+          <button key={l.name} onClick={()=>handleSelectLook(l.name)} style={{
+            padding:'8px', borderRadius:7, border:`1px solid ${look===l.name ? C.accent+'66' : C.b2}`,
+            background: look===l.name ? C.accent+'12' : C.s3, cursor:'pointer', transition:'all 120ms', textAlign:'left' as const,
           }}>
             <div style={{ display:'flex', gap:3, marginBottom:5 }}>
               {l.swatch.map((c,i) => <div key={i} style={{ width:14, height:14, borderRadius:3, background:c }} />)}
@@ -465,146 +574,534 @@ function ColourPanel() {
         ))}
       </div>
       <Divider />
-      <SectionLabel>Adjustments</SectionLabel>
-      {['Exposure','Contrast','Highlights','Shadows','Saturation','Temperature'].map(label => (
-        <DurationRow key={label} label={label} value="0" />
-      ))}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+        <SectionLabel>Adjustments</SectionLabel>
+        <button
+          onClick={() => handleSelectLook('Neutral')}
+          style={{ background:'none', border:'none', color:C.muted, fontSize:10, cursor:'pointer', padding:0 }}
+        >
+          Reset
+        </button>
+      </div>
+
+      <div style={{ marginBottom:8 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
+          <span style={{ ...ty.propLabel }}>Exposure</span>
+          <span style={{ ...ty.niVal }}>{adj.brightness.toFixed(2)}x</span>
+        </div>
+        <input
+          type="range" min="0.5" max="1.5" step="0.02" value={adj.brightness}
+          onChange={e => updateAdj('brightness', Number(e.target.value))}
+          style={{ width:'100%', accentColor: C.accent, cursor:'pointer' }}
+        />
+      </div>
+
+      <div style={{ marginBottom:8 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
+          <span style={{ ...ty.propLabel }}>Contrast</span>
+          <span style={{ ...ty.niVal }}>{adj.contrast.toFixed(2)}x</span>
+        </div>
+        <input
+          type="range" min="0.5" max="1.5" step="0.02" value={adj.contrast}
+          onChange={e => updateAdj('contrast', Number(e.target.value))}
+          style={{ width:'100%', accentColor: C.accent, cursor:'pointer' }}
+        />
+      </div>
+
+      <div style={{ marginBottom:8 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
+          <span style={{ ...ty.propLabel }}>Saturation</span>
+          <span style={{ ...ty.niVal }}>{adj.saturation.toFixed(2)}x</span>
+        </div>
+        <input
+          type="range" min="0.0" max="2.0" step="0.05" value={adj.saturation}
+          onChange={e => updateAdj('saturation', Number(e.target.value))}
+          style={{ width:'100%', accentColor: C.accent, cursor:'pointer' }}
+        />
+      </div>
+
+      <div style={{ marginBottom:10 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
+          <span style={{ ...ty.propLabel }}>Soft Blur</span>
+          <span style={{ ...ty.niVal }}>{adj.blurPx.toFixed(1)}px</span>
+        </div>
+        <input
+          type="range" min="0.0" max="10.0" step="0.5" value={adj.blurPx}
+          onChange={e => updateAdj('blurPx', Number(e.target.value))}
+          style={{ width:'100%', accentColor: C.accent, cursor:'pointer' }}
+        />
+      </div>
     </div>
   );
 }
 
-/* Uploads panel — shows media already added to the project */
-function UploadsPanel() {
-  const items = [
-    { name:'podcast_episode_14.mp4', type:'video', dur:'26:18' },
-    { name:'Voice accomodation.mp3',  type:'audio', dur:'26:18' },
-    { name:'Dean Martin - Volare.mp3',type:'audio', dur:'12:20' },
-  ];
+const OVERLAY_TEMPLATES = [
+  { name:'Lower third',    icon:'⊟', text:'Speaker Name · Modaya Studio', font:'sans' as const, size:'small' as const, pos:'lower' as const, align:'left' as const, bg:'box' as const },
+  { name:'Title card',     icon:'⊡', text:'Headline Title',              font:'display' as const, size:'large' as const, pos:'centre' as const, align:'centre' as const, bg:'box' as const },
+  { name:'Call to action', icon:'⭐', text:'Subscribe for more',         font:'sans' as const, size:'medium' as const, pos:'lower' as const, align:'centre' as const, bg:'box' as const },
+  { name:'Quote highlight', icon:'💬', text:'“Design is how it works.”', font:'handwritten' as const, size:'medium' as const, pos:'centre' as const, align:'centre' as const, bg:'shadow' as const },
+  { name:'Chapter stamp',  icon:'⏱️', text:'Chapter 1 — Introduction',   font:'mono' as const, size:'small' as const, pos:'top' as const, align:'left' as const, bg:'box' as const },
+  { name:'Stat callout',   icon:'🚀', text:'100% Deterministic Engine',   font:'display' as const, size:'large' as const, pos:'centre' as const, align:'centre' as const, bg:'box' as const },
+];
+
+function OverlaysPanel({
+  clips = [],
+  onUpdateClips,
+  playheadS = 0,
+  totalS = 60,
+  onPushHistory,
+  onSetTab,
+}: {
+  clips?: EditorClip[];
+  onUpdateClips?: (clips: EditorClip[]) => void;
+  playheadS?: number;
+  totalS?: number;
+  onPushHistory?: (clips: EditorClip[]) => void;
+  onSetTab?: (tab: string) => void;
+}) {
+  const addOverlayClip = (tmpl: typeof OVERLAY_TEMPLATES[number]) => {
+    if (!onUpdateClips) return;
+    const startS = Number(Math.max(0, playheadS).toFixed(2));
+    const endS   = Number(Math.min(totalS, startS + 4.0).toFixed(2));
+    const newClip: EditorClip = {
+      id: `text-${Date.now()}`,
+      trackId: 'text',
+      label: tmpl.text,
+      startS,
+      endS: Math.max(startS + 0.5, endS),
+      type: 'text',
+      textPosition: tmpl.pos,
+      textAlign: tmpl.align,
+      textStyle: {
+        font: tmpl.font,
+        size: tmpl.size,
+        background: tmpl.bg,
+        bold: true,
+        colour: '#FFFFFF',
+      },
+    };
+    onPushHistory?.(clips);
+    onUpdateClips([...clips, newClip]);
+    onSetTab?.('Text');
+  };
+
   return (
     <div style={{ flex:1, overflowY:'auto', padding:'12px' }}>
-      <SectionLabel>Project media</SectionLabel>
-      <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
-        {items.map(it => (
-          <div key={it.name} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px',
-            borderRadius:7, border:`1px solid ${C.b2}`, background:C.s3 }}>
-            <div style={{ width:28, height:28, borderRadius:5, background:C.b3, display:'flex',
-              alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-              <span style={{ fontSize:9, color:C.muted, fontWeight:600,
-                fontFamily:F, letterSpacing:'0.02em' }}>{it.type==='video'?'MP4':'MP3'}</span>
-            </div>
+      <SectionLabel>Add Text & Graphic Overlays</SectionLabel>
+      <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+        {OVERLAY_TEMPLATES.map(o => (
+          <button key={o.name} onClick={() => addOverlayClip(o)} style={{
+            display:'flex', alignItems:'center', gap:10, padding:'9px 10px', borderRadius:7,
+            border:`1px solid ${C.b2}`, background:C.s3, cursor:'pointer', transition:'all 120ms',
+            textAlign:'left' as const,
+          }}
+            onMouseEnter={e=>{ e.currentTarget.style.borderColor=C.b3; e.currentTarget.style.background=C.s2; }}
+            onMouseLeave={e=>{ e.currentTarget.style.borderColor=C.b2; e.currentTarget.style.background=C.s3; }}
+          >
+            <span style={{ fontSize:14, color:C.muted, width:18, textAlign:'center' as const, flexShrink:0 }}>{o.icon}</span>
             <div style={{ flex:1, minWidth:0 }}>
-              <span style={{ ...ty.propVal, fontSize:11, display:'block',
-                overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{it.name}</span>
-              <span style={{ ...ty.meta, display:'block', marginTop:1 }}>{it.dur}</span>
+              <span style={{ ...ty.propVal, fontSize:12, display:'block' }}>{o.name}</span>
+              <span style={{ ...ty.meta, fontSize:10, color:C.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'block' }}>{o.text}</span>
             </div>
-          </div>
+            <Plus size={11} color={C.dim} style={{ marginLeft:'auto', flexShrink:0 }} />
+          </button>
         ))}
       </div>
-      <Divider />
-      <p style={{ ...ty.hint, textAlign:'center' as const, margin:'12px 0 0' }}>
-        Add more media from the upload page
+      <p style={{ ...ty.hint, fontSize:11, color:C.muted, marginTop:12, lineHeight:1.4 }}>
+        Click any preset to add a styled overlay at the current playhead position ({clipFmt(playheadS)}).
       </p>
     </div>
   );
 }
 
-function PropertiesPanelBase({ tab }:{ tab:string }) {
-  const [fs,  setFs ] = useState(20);
-  const [bld, setBld] = useState(false);
-  const [itl, setItl] = useState(false);
-  const [uln, setUln] = useState(false);
-  const [aln, setAln] = useState(0);
+function TextInspectorPanel({
+  clips = [],
+  onUpdateClips,
+  playheadS = 0,
+  totalS = 60,
+  onPushHistory,
+}: {
+  clips?: EditorClip[];
+  onUpdateClips?: (clips: EditorClip[]) => void;
+  playheadS?: number;
+  totalS?: number;
+  onPushHistory?: (clips: EditorClip[]) => void;
+}) {
+  const textClips = clips.filter(c => c.type === 'text' || c.type === 'subtitle' || c.trackId === 'text' || c.trackId === 'subs');
+  const activeClip = textClips.find(c => playheadS >= c.startS && playheadS <= c.endS) ?? textClips[0] ?? null;
 
-  const renderBody = () => {
-    if (tab === 'Transitions') return <TransitionsPanel />;
-    if (tab === 'Effects')     return <EffectsPanel />;
-    if (tab === 'Overlays')    return <OverlaysPanel />;
-    if (tab === 'Colour')      return <ColourPanel />;
-    if (tab === 'Uploads')     return <UploadsPanel />;
-    // Text / Canvas / Subtitles — show the full text inspector
-    return (
-      <div style={{ flex:1, overflowY:'auto', padding:'10px 12px' }}>
-        <SectionLabel>Align</SectionLabel>
-        <div style={{ display:'flex', gap:3, flexWrap:'wrap', marginBottom:10 }}>
-          {[AlignLeft,AlignCenter,AlignRight,AlignLeft,AlignCenter,AlignRight].map((Icon,i)=>(
-            <button key={i} style={iB()}><Icon size={11} /></button>
-          ))}
-        </div>
-        <Divider />
-        <div style={{ display:'flex', alignItems:'center', gap:4, marginBottom:5 }}>
-          <span style={{ ...ty.propLabel, width:50, flexShrink:0 }}>Position</span>
-          <NI label="X" val={35} /><NI label="Y" val={30} /><NI label="" val={0} />
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:4, marginBottom:5 }}>
-          <span style={{ ...ty.propLabel, width:50, flexShrink:0 }}>Size</span>
-          <NI label="W" val={135} /><NI label="H" val={20} />
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:4, marginBottom:5 }}>
-          <span style={{ ...ty.propLabel, width:50, flexShrink:0 }}>Radius</span>
-          <NI label="" val={0} /><NI label="" val={0} /><NI label="" val={0} /><NI label="" val={0} />
-        </div>
-        <Divider />
-        <SectionLabel>Text</SectionLabel>
-        <textarea defaultValue="Pasta Picasso" rows={2} style={{ width:'100%', background:C.s3,
-          border:`1px solid ${C.b2}`, borderRadius:6, padding:'7px 9px', fontSize:12, color:C.text,
-          fontFamily:F, resize:'none', outline:'none', boxSizing:'border-box' as const, marginBottom:7 }} />
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
-          background:C.s3, border:`1px solid ${C.b2}`, borderRadius:6, padding:'6px 9px',
-          cursor:'pointer', marginBottom:6 }}>
-          <span style={{ ...ty.propVal }}>Satoshi Bold</span>
-          <ChevronDown size={10} color={C.muted} />
-        </div>
-        <div style={{ display:'flex', gap:5, marginBottom:6 }}>
-          <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'space-between',
-            background:C.s3, border:`1px solid ${C.b2}`, borderRadius:6, padding:'6px 9px', cursor:'pointer' }}>
-            <span style={{ ...ty.propVal, fontSize:12 }}>Medium</span>
-            <ChevronDown size={10} color={C.muted} />
+  const [textVal, setTextVal] = React.useState(activeClip?.label ?? 'Modaya Studio');
+  const [font, setFont] = React.useState(activeClip?.textStyle?.font ?? 'display');
+  const [size, setSize] = React.useState(activeClip?.textStyle?.size ?? 'medium');
+  const [position, setPosition] = React.useState<'top'|'centre'|'lower'>(activeClip?.textPosition ?? 'centre');
+  const [align, setAlign] = React.useState<'left'|'centre'|'right'>(activeClip?.textAlign ?? 'centre');
+  const [bold, setBold] = React.useState(activeClip?.textStyle?.bold ?? true);
+  const [italic, setItalic] = React.useState(activeClip?.textStyle?.italic ?? false);
+  const [uppercase, setUppercase] = React.useState(activeClip?.textStyle?.uppercase ?? false);
+  const [bgStyle, setBgStyle] = React.useState<'box'|'shadow'|'none'>(activeClip?.textStyle?.background ?? 'box');
+  const [color, setColor] = React.useState(activeClip?.textStyle?.colour ?? '#FFFFFF');
+
+  React.useEffect(() => {
+    if (activeClip) {
+      setTextVal(activeClip.label);
+      if (activeClip.textPosition) setPosition(activeClip.textPosition);
+      if (activeClip.textAlign) setAlign(activeClip.textAlign);
+      if (activeClip.textStyle?.font) setFont(activeClip.textStyle.font);
+      if (activeClip.textStyle?.size) setSize(activeClip.textStyle.size);
+      if (activeClip.textStyle?.bold !== undefined) setBold(activeClip.textStyle.bold);
+      if (activeClip.textStyle?.italic !== undefined) setItalic(activeClip.textStyle.italic);
+      if (activeClip.textStyle?.uppercase !== undefined) setUppercase(activeClip.textStyle.uppercase);
+      if (activeClip.textStyle?.background) setBgStyle(activeClip.textStyle.background);
+      if (activeClip.textStyle?.colour) setColor(activeClip.textStyle.colour);
+    }
+  }, [activeClip?.id]);
+
+  const updateActiveClip = (patch: Partial<EditorClip> & { textStyle?: Partial<NonNullable<EditorClip['textStyle']>> }) => {
+    if (!activeClip || !onUpdateClips) return;
+    const updatedClips = clips.map(c => {
+      if (c.id !== activeClip.id) return c;
+      const mergedStyle = {
+        ...(c.textStyle ?? {}),
+        ...(patch.textStyle ?? {}),
+      };
+      return {
+        ...c,
+        ...patch,
+        textStyle: mergedStyle,
+      };
+    });
+    onUpdateClips(updatedClips);
+  };
+
+  const handleAddText = () => {
+    if (!onUpdateClips) return;
+    const startS = Number(Math.max(0, playheadS).toFixed(2));
+    const endS = Number(Math.min(totalS, startS + 4.0).toFixed(2));
+    const newClip: EditorClip = {
+      id: `text-${Date.now()}`,
+      trackId: 'text',
+      label: textVal || 'New Caption',
+      startS,
+      endS: Math.max(startS + 0.5, endS),
+      type: 'text',
+      textPosition: position,
+      textAlign: align,
+      textStyle: {
+        font,
+        size,
+        bold,
+        italic,
+        uppercase,
+        background: bgStyle,
+        colour: color,
+      },
+    };
+    onPushHistory?.(clips);
+    onUpdateClips([...clips, newClip]);
+  };
+
+  const handleDeleteActive = () => {
+    if (!activeClip || !onUpdateClips) return;
+    onPushHistory?.(clips);
+    onUpdateClips(clips.filter(c => c.id !== activeClip.id));
+  };
+
+  return (
+    <div style={{ flex:1, overflowY:'auto', padding:'10px 12px' }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+        <SectionLabel>{activeClip ? 'Edit Text Overlay' : 'Add Text Overlay'}</SectionLabel>
+        {activeClip && (
+          <button
+            onClick={handleDeleteActive}
+            style={{ background:'none', border:'none', color:'#EF4444', fontSize:10, cursor:'pointer', padding:0 }}
+          >
+            Delete
+          </button>
+        )}
+      </div>
+
+      {/* Text Area */}
+      <textarea
+        value={textVal}
+        onChange={e => {
+          const v = e.target.value;
+          setTextVal(v);
+          if (activeClip) updateActiveClip({ label: v });
+        }}
+        rows={2}
+        placeholder="Enter overlay text…"
+        style={{ width:'100%', background:C.s3, border:`1px solid ${C.b2}`, borderRadius:6, padding:'7px 9px',
+          fontSize:12, color:C.text, fontFamily:F, resize:'none', outline:'none', boxSizing:'border-box' as const, marginBottom:8 }}
+      />
+
+      {/* Alignment */}
+      <SectionLabel>Alignment & Placement</SectionLabel>
+      <div style={{ display:'flex', gap:4, marginBottom:8 }}>
+        {(['left', 'centre', 'right'] as const).map(a => (
+          <button
+            key={a}
+            onClick={() => {
+              setAlign(a);
+              if (activeClip) updateActiveClip({ textAlign: a });
+            }}
+            style={{
+              flex:1, padding:'5px', borderRadius:5, border:`1px solid ${align===a ? C.accent+'66' : C.b2}`,
+              background: align===a ? C.accent+'14' : C.s3, color: align===a ? C.text : C.muted,
+              fontSize:11, cursor:'pointer', textTransform:'capitalize' as const,
+            }}
+          >
+            {a}
+          </button>
+        ))}
+      </div>
+
+      {/* Vertical Position */}
+      <div style={{ display:'flex', gap:4, marginBottom:10 }}>
+        {(['top', 'centre', 'lower'] as const).map(p => (
+          <button
+            key={p}
+            onClick={() => {
+              setPosition(p);
+              if (activeClip) updateActiveClip({ textPosition: p });
+            }}
+            style={{
+              flex:1, padding:'5px', borderRadius:5, border:`1px solid ${position===p ? C.accent+'66' : C.b2}`,
+              background: position===p ? C.accent+'14' : C.s3, color: position===p ? C.text : C.muted,
+              fontSize:11, cursor:'pointer', textTransform:'capitalize' as const,
+            }}
+          >
+            {p === 'lower' ? 'Bottom' : p}
+          </button>
+        ))}
+      </div>
+
+      <Divider />
+
+      {/* Font & Size */}
+      <SectionLabel>Typography</SectionLabel>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:4, marginBottom:8 }}>
+        {[
+          { label:'Satoshi', id:'display' as const },
+          { label:'Inter',   id:'sans' as const },
+          { label:'Mono',    id:'mono' as const },
+          { label:'Script',  id:'handwritten' as const },
+        ].map(f => (
+          <button
+            key={f.id}
+            onClick={() => {
+              setFont(f.id);
+              if (activeClip) updateActiveClip({ textStyle: { font: f.id } });
+            }}
+            style={{
+              padding:'6px 8px', borderRadius:5, border:`1px solid ${font===f.id ? C.accent+'66' : C.b2}`,
+              background: font===f.id ? C.accent+'14' : C.s3, color: font===f.id ? C.text : C.sec,
+              fontSize:11, cursor:'pointer', textAlign:'left' as const,
+            }}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Size buttons */}
+      <div style={{ display:'flex', gap:4, marginBottom:8 }}>
+        {(['small', 'medium', 'large'] as const).map(s => (
+          <button
+            key={s}
+            onClick={() => {
+              setSize(s);
+              if (activeClip) updateActiveClip({ textStyle: { size: s } });
+            }}
+            style={{
+              flex:1, padding:'4px', borderRadius:5, border:`1px solid ${size===s ? C.accent+'66' : C.b2}`,
+              background: size===s ? C.accent+'14' : C.s3, color: size===s ? C.text : C.muted,
+              fontSize:11, cursor:'pointer', textTransform:'capitalize' as const,
+            }}
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+
+      {/* Bold / Italic / Uppercase */}
+      <div style={{ display:'flex', gap:4, marginBottom:10 }}>
+        <button
+          onClick={() => {
+            const next = !bold;
+            setBold(next);
+            if (activeClip) updateActiveClip({ textStyle: { bold: next } });
+          }}
+          style={iB(bold)}
+          title="Bold"
+        >
+          <Bold size={11} />
+        </button>
+        <button
+          onClick={() => {
+            const next = !italic;
+            setItalic(next);
+            if (activeClip) updateActiveClip({ textStyle: { italic: next } });
+          }}
+          style={iB(italic)}
+          title="Italic"
+        >
+          <Italic size={11} />
+        </button>
+        <button
+          onClick={() => {
+            const next = !uppercase;
+            setUppercase(next);
+            if (activeClip) updateActiveClip({ textStyle: { uppercase: next } });
+          }}
+          style={iB(uppercase)}
+          title="Uppercase (AA)"
+        >
+          <span style={{ fontSize:10, fontWeight:700 }}>AA</span>
+        </button>
+      </div>
+
+      <Divider />
+
+      {/* Background container style */}
+      <SectionLabel>Background & Colour</SectionLabel>
+      <div style={{ display:'flex', gap:4, marginBottom:8 }}>
+        {(['box', 'shadow', 'none'] as const).map(bg => (
+          <button
+            key={bg}
+            onClick={() => {
+              setBgStyle(bg);
+              if (activeClip) updateActiveClip({ textStyle: { background: bg } });
+            }}
+            style={{
+              flex:1, padding:'4px', borderRadius:5, border:`1px solid ${bgStyle===bg ? C.accent+'66' : C.b2}`,
+              background: bgStyle===bg ? C.accent+'14' : C.s3, color: bgStyle===bg ? C.text : C.muted,
+              fontSize:11, cursor:'pointer', textTransform:'capitalize' as const,
+            }}
+          >
+            {bg === 'box' ? 'Box fill' : bg === 'shadow' ? 'Shadow' : 'None'}
+          </button>
+        ))}
+      </div>
+
+      {/* Colour swatches */}
+      <div style={{ display:'flex', gap:6, marginBottom:12 }}>
+        {['#FFFFFF', '#FACC15', '#38BDF8', '#FB7185', '#4ADE80', '#18181B'].map(hex => (
+          <div
+            key={hex}
+            role="button"
+            tabIndex={0}
+            onClick={() => {
+              setColor(hex);
+              if (activeClip) updateActiveClip({ textStyle: { colour: hex } });
+            }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                setColor(hex);
+                if (activeClip) updateActiveClip({ textStyle: { colour: hex } });
+              }
+            }}
+            style={{
+              width:20, height:20, borderRadius:'50%', background:hex,
+              border:`2px solid ${color===hex ? C.accent : C.b3}`, cursor:'pointer',
+            }}
+          />
+        ))}
+      </div>
+
+      <button
+        onClick={handleAddText}
+        style={{
+          width:'100%', padding:'8px', background:C.accent, color:'#000', border:'none',
+          borderRadius:7, fontWeight:600, fontSize:12, cursor:'pointer', display:'flex',
+          alignItems:'center', justifyContent:'center', gap:5,
+        }}
+      >
+        <Plus size={13} /> Add text at playhead
+      </button>
+    </div>
+  );
+}
+
+function UploadsPanel({
+  mediaEntry,
+  projectName,
+  totalS = 0,
+}: {
+  mediaEntry?: ReturnType<typeof getMedia> | null;
+  projectName?: string;
+  totalS?: number;
+}) {
+  const filename = mediaEntry?.filename || `${projectName || 'Video'}.mp4`;
+  const dur = fmt(totalS || mediaEntry?.durationS || 0);
+  const dims = mediaEntry?.width && mediaEntry?.height ? `${mediaEntry.width}×${mediaEntry.height}` : '1920×1080';
+  const ar = mediaEntry?.aspectRatio || '16:9';
+
+  return (
+    <div style={{ flex:1, overflowY:'auto', padding:'12px' }}>
+      <SectionLabel>Project Footage</SectionLabel>
+      <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px',
+          borderRadius:7, border:`1px solid ${C.b2}`, background:C.s3 }}>
+          <div style={{ width:28, height:28, borderRadius:5, background:C.b3, display:'flex',
+            alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            <span style={{ fontSize:9, color:C.muted, fontWeight:600, fontFamily:F, letterSpacing:'0.02em' }}>MP4</span>
           </div>
-          <div style={{ display:'flex', alignItems:'center', background:C.s3,
-            border:`1px solid ${C.b2}`, borderRadius:6, overflow:'hidden' }}>
-            <button onClick={()=>setFs(s=>Math.max(8,s-1))} style={{ width:24, display:'flex', alignItems:'center',
-              justifyContent:'center', background:'none', border:'none', cursor:'pointer', color:C.muted }}><Minus size={9}/></button>
-            <span style={{ ...ty.niVal, fontSize:13, minWidth:20, textAlign:'center' as const }}>{fs}</span>
-            <button onClick={()=>setFs(s=>s+1)} style={{ width:24, display:'flex', alignItems:'center',
-              justifyContent:'center', background:'none', border:'none', cursor:'pointer', color:C.muted }}><Plus size={9}/></button>
+          <div style={{ flex:1, minWidth:0 }}>
+            <span style={{ ...ty.propVal, fontSize:11, display:'block',
+              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{filename}</span>
+            <span style={{ ...ty.meta, display:'block', marginTop:1 }}>{dur} · {dims} ({ar})</span>
           </div>
-        </div>
-        <div style={{ display:'flex', gap:5, marginBottom:8 }}>
-          <NI label="↕" val={100} /><NI label="|A|" val={0} />
-        </div>
-        <div style={{ display:'flex', gap:3, flexWrap:'wrap' }}>
-          <button onClick={()=>setBld(b=>!b)} style={iB(bld)}><Bold size={11}/></button>
-          <button onClick={()=>setItl(i=>!i)} style={iB(itl)}><Italic size={11}/></button>
-          <button onClick={()=>setUln(u=>!u)} style={iB(uln)}><Underline size={11}/></button>
-          <div style={{ width:1, background:C.b2, margin:'0 2px' }} />
-          {[AlignLeft,AlignCenter,AlignRight].map((Icon,i)=>(
-            <button key={i} onClick={()=>setAln(i)} style={iB(aln===i)}><Icon size={11}/></button>
-          ))}
-        </div>
-        <Divider />
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:7 }}>
-          <span style={{ ...ty.propLabel, fontWeight:600, color:C.text }}>Fill</span>
-          <button style={{ width:18, height:18, borderRadius:4, background:'none',
-            border:`1px solid ${C.b3}`, display:'flex', alignItems:'center', justifyContent:'center',
-            cursor:'pointer', color:C.muted }}><Plus size={9}/></button>
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:8 }}>
-          <span style={{ ...ty.propLabel, fontSize:11 }}>Color</span>
-          <div style={{ display:'flex', alignItems:'center', gap:5, background:C.s3,
-            border:`1px solid ${C.b2}`, borderRadius:5, padding:'4px 7px', flex:1 }}>
-            <div style={{ width:13, height:13, borderRadius:3, background:'#FFFFFF', border:`1px solid ${C.b3}` }} />
-            <span style={{ ...ty.propVal, fontSize:11, flex:1 }}>FFFFFF</span>
-            <span style={{ ...ty.propLabel, fontSize:11 }}>100%</span>
-          </div>
-        </div>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-          <span style={{ ...ty.propLabel, fontWeight:600, color:C.text }}>Border</span>
-          <button style={{ width:18, height:18, borderRadius:4, background:'none',
-            border:`1px solid ${C.b3}`, display:'flex', alignItems:'center', justifyContent:'center',
-            cursor:'pointer', color:C.muted }}><Plus size={9}/></button>
         </div>
       </div>
-    );
+      <Divider />
+      <div style={{ padding:'8px 10px', background:C.s2, borderRadius:7, border:`1px solid ${C.b2}` }}>
+        <span style={{ ...ty.meta, fontSize:11, color:C.muted, display:'block', lineHeight:1.4 }}>
+          Status: <strong style={{ color:'#34D399' }}>Cached & Ready</strong>. Source footage lives in your browser’s local store and streams to the canvas renderer.
+        </span>
+      </div>
+      <p style={{ ...ty.hint, textAlign:'center' as const, margin:'12px 0 0' }}>
+        Add more media or reference videos from Studio
+      </p>
+    </div>
+  );
+}
+
+interface PropertiesPanelProps {
+  tab: string;
+  clips?: EditorClip[];
+  onUpdateClips?: (clips: EditorClip[]) => void;
+  styleLayer?: StyleLayer;
+  onUpdateStyleLayer?: (layer: StyleLayer) => void;
+  playheadS?: number;
+  totalS?: number;
+  mediaEntry?: ReturnType<typeof getMedia> | null;
+  projectName?: string;
+  onSeek?: (s: number) => void;
+  onPushHistory?: (clips: EditorClip[]) => void;
+  onSetTab?: (tab: string) => void;
+}
+
+function PropertiesPanelBase({
+  tab,
+  clips = [],
+  onUpdateClips,
+  styleLayer = {},
+  onUpdateStyleLayer,
+  playheadS = 0,
+  totalS = 60,
+  mediaEntry = null,
+  projectName = 'Project',
+  onPushHistory,
+  onSetTab,
+}: PropertiesPanelProps) {
+  const renderBody = () => {
+    if (tab === 'Transitions') return <TransitionsPanel clips={clips} onUpdateClips={onUpdateClips} onPushHistory={onPushHistory} />;
+    if (tab === 'Effects')     return <EffectsPanel clips={clips} styleLayer={styleLayer} onUpdateStyleLayer={onUpdateStyleLayer} />;
+    if (tab === 'Overlays')    return <OverlaysPanel clips={clips} onUpdateClips={onUpdateClips} playheadS={playheadS} totalS={totalS} onPushHistory={onPushHistory} onSetTab={onSetTab} />;
+    if (tab === 'Colour')      return <ColourPanel clips={clips} styleLayer={styleLayer} onUpdateStyleLayer={onUpdateStyleLayer} />;
+    if (tab === 'Uploads')     return <UploadsPanel mediaEntry={mediaEntry} projectName={projectName} totalS={totalS} />;
+    // Text / Canvas / Subtitles
+    return <TextInspectorPanel clips={clips} onUpdateClips={onUpdateClips} playheadS={playheadS} totalS={totalS} onPushHistory={onPushHistory} />;
   };
 
   return (
@@ -625,6 +1122,8 @@ function PropertiesPanelBase({ tab }:{ tab:string }) {
     </div>
   );
 }
+
+const PropertiesPanel = React.memo(PropertiesPanelBase);
 
 /* ──────────────── AI CHAT ──────────────── */
 
@@ -647,12 +1146,6 @@ interface Msg {
   /** Clipping engine results — standalone short clips, each cuttable in one tap. */
   clips?:   ClipSuggestion[];
 }
-
-const PropertiesPanel = React.memo(PropertiesPanelBase);
-
-/* ── A single clipping-engine suggestion ── */
-const clipFmt = (s: number) =>
-  `${String(Math.floor(s / 60)).padStart(1, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
 function ClipCard({ clip, onCut }: { clip: ClipSuggestion; onCut: () => void }) {
   const scoreColor = clip.score >= 80 ? '#34D399' : clip.score >= 55 ? '#FBBF24' : '#737D8D';
@@ -1380,10 +1873,10 @@ const vB:React.CSSProperties = { width:30,height:30,display:'flex',alignItems:'c
   background:'none',border:'none',cursor:'pointer',color:C.muted,borderRadius:7,transition:'all 100ms' };
 
 /* ──────────────── TIMELINE ──────────────── */
-function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, tracks, highlightIds, projectId, analysing }:
+function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, tracks, highlightIds, projectId, analysing, onUndo, onRedo, onSplit, onReset }:
   { playheadS:number; setPlayheadS:(s:number)=>void; playing:boolean; setPlaying:(b:boolean)=>void;
     totalS:number; tracks: ReturnType<typeof buildTracks>; highlightIds?: string[]; projectId?: string;
-    analysing?: boolean }) {
+    analysing?: boolean; onUndo?: () => void; onRedo?: () => void; onSplit?: () => void; onReset?: () => void }) {
 
   const [frames, setFrames] = useState<string[]>([]);
   useEffect(() => {
@@ -1717,9 +2210,10 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
       {/* ── Toolbar ── */}
       <div style={{ height:36, background:C.s2, borderBottom:`1px solid ${C.b}`,
         display:'flex', alignItems:'center', gap:3, padding:'0 10px', flexShrink:0 }}>
-        {[Scissors,RotateCcw,Undo2,Redo2].map((Icon,i)=>(
-          <button key={i} style={tB}><Icon size={12}/></button>
-        ))}
+        <button onClick={onSplit} style={tB} title="Split clip at playhead"><Scissors size={12}/></button>
+        <button onClick={onReset} style={tB} title="Reset timeline"><RotateCcw size={12}/></button>
+        <button onClick={onUndo} style={tB} title="Undo"><Undo2 size={12}/></button>
+        <button onClick={onRedo} style={tB} title="Redo"><Redo2 size={12}/></button>
         <div style={{ flex:1 }} />
         <div style={{ display:'flex',alignItems:'center',gap:5,background:C.s3,
           border:`1px solid ${C.b2}`,borderRadius:6,padding:'3px 10px' }}>
@@ -1872,6 +2366,51 @@ export function EditorShell({
   /* Per-clip source/transform/effect overrides produced by the reference pass. */
   const [styleLayer,   setStyleLayer  ] = useState<StyleLayer>({});
   const [styledDur,    setStyledDur   ] = useState<number | null>(null);
+  const [playing,      setPlaying     ] = useState(false);
+  const [phS,          setPhS         ] = useState(0);
+  const [tab,          setTab         ] = useState('Text');
+  const [expOpen,      setExpOpen     ] = useState(false);
+
+  // Undo / Redo stacks
+  const historyRef = useRef<EditorClip[][]>([]);
+  const futureRef  = useRef<EditorClip[][]>([]);
+
+  const pushHistory = useCallback((current: EditorClip[]) => {
+    historyRef.current.push([...current]);
+    futureRef.current = [];
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    if (!historyRef.current.length) return;
+    const prev = historyRef.current.pop()!;
+    futureRef.current.push([...liveClips]);
+    setLiveClips(prev);
+  }, [liveClips]);
+
+  const handleRedo = useCallback(() => {
+    if (!futureRef.current.length) return;
+    const next = futureRef.current.pop()!;
+    historyRef.current.push([...liveClips]);
+    setLiveClips(next);
+  }, [liveClips]);
+
+  const handleSplitAtPlayhead = useCallback(() => {
+    const at = phS;
+    const target = liveClips.find(c => c.type === 'video' && at > c.startS + 0.2 && at < c.endS - 0.2);
+    if (!target) return;
+    pushHistory(liveClips);
+    const first: EditorClip = { ...target, endS: Number(at.toFixed(2)) };
+    const second: EditorClip = { ...target, id: `v-${Date.now()}`, startS: Number(at.toFixed(2)) };
+    const next = liveClips.map(c => c.id === target.id ? first : c).concat(second).sort((a, b) => a.startS - b.startS);
+    setLiveClips(next);
+  }, [liveClips, phS, pushHistory]);
+
+  const handleResetTimeline = useCallback(() => {
+    pushHistory(liveClips);
+    setLiveClips(clips);
+    setStyleLayer({});
+    setStyledDur(null);
+  }, [clips, liveClips, pushHistory]);
 
   const totalS = styledDur ?? baseTotalS;
   /** Read by togglePlay, which is created before totalS exists. */
@@ -1879,6 +2418,7 @@ export function EditorShell({
   totalSRef.current = totalS;
 
   const handleStyleApplied = useCallback((plan: EditPlan) => {
+    pushHistory(liveClips);
     setLiveClips(plan.clips.map(c => ({
       id: c.id, trackId: c.trackId, label: c.label,
       startS: c.startS, endS: c.endS,
@@ -1890,7 +2430,7 @@ export function EditorShell({
     setStyledDur(plan.durationS);
     setHighlightIds(plan.clips.slice(0, 4).map(c => c.id));
     setTimeout(() => setHighlightIds([]), 3000);
-  }, []);
+  }, [liveClips, pushHistory]);
   const tracks = useMemo(() => {
     const built = buildTracks(liveClips.length ? liveClips : clips, totalS);
     return built.length ? built : baseTracks(totalS, mediaEntry?.filename ?? 'Video');
@@ -1915,16 +2455,20 @@ export function EditorShell({
   useEffect(() => { setLiveClips(clips); }, [clips]);
 
   const handleEditApplied = useCallback((affectedIds: string[], newClips: EditorClip[]) => {
-    if (newClips.length > 0) setLiveClips(newClips);
+    if (newClips.length > 0) {
+      pushHistory(liveClips);
+      setLiveClips(newClips);
+    }
     setHighlightIds(affectedIds);
     // Clear highlight after 3s
     setTimeout(() => setHighlightIds([]), 3000);
-  }, []);
+  }, [liveClips, pushHistory]);
 
   /* Clipping engine: keep only the chosen range on the timeline, as its own
      short programme. "Undo" in the chat (or the editor undo) brings the full
      video back. The surviving video clip is re-scoped to the window. */
   const handleCutToClip = useCallback((clip: ClipSuggestion) => {
+    pushHistory(liveClips);
     setLiveClips(prev => {
       const source = prev.length ? prev : clips;
       const next: EditorClip[] = source
@@ -1940,9 +2484,8 @@ export function EditorShell({
     setStyledDur(clip.endS - clip.startS);
     setPhS(0);
     setHighlightIds([]);
-  }, [clips]);
+  }, [clips, liveClips, pushHistory]);
 
-  const [tab,    setTab   ] = useState('Text');
   /** Pressing play at the very end restarts, rather than sitting there stuck. */
   const togglePlay = useCallback(() => setPlaying(p => {
     if (!p) setPhS(cur => (cur >= totalSRef.current - 0.05 ? 0 : cur));
@@ -1952,7 +2495,6 @@ export function EditorShell({
   const stopPlay   = useCallback(() => setPlaying(false), []);
   /** Reaching the end rewinds to the start, like every other player. */
   const endPlay    = useCallback(() => { setPlaying(false); setPhS(0); }, []);
-  const [expOpen,setExpOpen] = useState(false);
 
   /* Transport from the keyboard, as every editor does it: space plays and
      pauses, the arrows step a frame at a time (a second with shift), home and
@@ -1985,8 +2527,6 @@ export function EditorShell({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [expOpen, togglePlay]);
-  const [playing,setPlaying] = useState(false);
-  const [phS,    setPhS   ] = useState(0);
   const raf = useRef<number|null>(null);
 
   // Synthetic clock for the mockup only. With a real video loaded the <video>
@@ -2026,10 +2566,10 @@ export function EditorShell({
           <Logo size={22} />
           <div className="desktop-only" style={{ width:1,height:16,background:C.b2 }} />
           <button className="desktop-only" style={{ ...tB,background:C.s3,color:C.text }} title="Select"><MousePointer size={13}/></button>
-          <button className="desktop-only" style={tB} title="Cut"><Scissors size={13}/></button>
+          <button className="desktop-only" onClick={handleSplitAtPlayhead} style={tB} title="Split at playhead"><Scissors size={13}/></button>
           <div className="desktop-only" style={{ width:1,height:16,background:C.b2,margin:'0 2px' }} />
-          <button className="desktop-only" style={tB}><Undo2 size={13}/></button>
-          <button className="desktop-only" style={tB}><Redo2 size={13}/></button>
+          <button className="desktop-only" onClick={handleUndo} style={tB} title="Undo"><Undo2 size={13}/></button>
+          <button className="desktop-only" onClick={handleRedo} style={tB} title="Redo"><Redo2 size={13}/></button>
 
           {/* Centre: filename — absolutely positioned at exact midpoint, hidden on mobile */}
           <div className="desktop-only" style={{ position:'absolute', left:0, right:0, top:0, bottom:0,
@@ -2076,7 +2616,23 @@ export function EditorShell({
             </FadeUp>
             <FadeUp delay={240} style={{ display:'flex', flexShrink:0 }} >
               <div className="editor-props-panel" style={{ display:'flex' }}>
-                <PropertiesPanel tab={tab} />
+                <PropertiesPanel
+                  tab={tab}
+                  clips={liveClips}
+                  onUpdateClips={(newClips) => {
+                    pushHistory(liveClips);
+                    setLiveClips(newClips);
+                  }}
+                  styleLayer={styleLayer}
+                  onUpdateStyleLayer={setStyleLayer}
+                  playheadS={phS}
+                  totalS={totalS}
+                  mediaEntry={mediaEntry}
+                  projectName={projectName}
+                  onSeek={setPhS}
+                  onPushHistory={pushHistory}
+                  onSetTab={setTab}
+                />
               </div>
             </FadeUp>
             <FadeUp delay={360} style={{ flex:1, minWidth:0, display:'flex' }}>
@@ -2087,7 +2643,21 @@ export function EditorShell({
           {/* Timeline — zone 5, delay 480ms */}
           <FadeUp delay={480} style={{ flexShrink:0 }}>
             <div className="editor-timeline">
-              <TimelinePanel playheadS={phS} setPlayheadS={setPhS} playing={playing} setPlaying={setPlaying} totalS={totalS} tracks={tracks} highlightIds={highlightIds} projectId={projectId} analysing={analysing} />
+              <TimelinePanel
+                playheadS={phS}
+                setPlayheadS={setPhS}
+                playing={playing}
+                setPlaying={setPlaying}
+                totalS={totalS}
+                tracks={tracks}
+                highlightIds={highlightIds}
+                projectId={projectId}
+                analysing={analysing}
+                onUndo={handleUndo}
+                onRedo={handleRedo}
+                onSplit={handleSplitAtPlayhead}
+                onReset={handleResetTimeline}
+              />
             </div>
           </FadeUp>
         </div>

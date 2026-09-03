@@ -84,6 +84,35 @@ export function backupFootageToCloud(
   void uploadProjectMedia(projectId, 'main', file, meta.filename).catch(() => {});
 }
 
+/** Fire-and-forget durable backup of one B-roll library clip (by index). */
+export function backupBrollToCloud(
+  projectId: string,
+  index: number,
+  file: Blob,
+  meta: { filename: string },
+): void {
+  void uploadProjectMedia(projectId, 'broll', file, meta.filename, index).catch(() => {});
+}
+
+/**
+ * Best-effort removal of server-side B-roll objects at indexes >= count, for
+ * when the library shrinks: otherwise a fresh device would rehydrate clips
+ * the user deleted. Silently does nothing without durable storage.
+ */
+export async function trimCloudBroll(projectId: string, count: number): Promise<void> {
+  try {
+    const cap = await getCloudCapability();
+    if (!cap.available || !cap.durable) return;
+    const meta = await fetchProjectMediaMeta(projectId);
+    const brolls = meta?.brolls ?? [];
+    for (let i = count; i < brolls.length; i++) {
+      const ext = brolls[i]?.ext;
+      if (!ext) continue;
+      await fetch(mediaPath(projectId, 'broll', ext, i), { method: 'DELETE' }).catch(() => {});
+    }
+  } catch { /* library trimming is best-effort */ }
+}
+
 /** Does the server already hold an object at this path? (Range probe — 0-0.) */
 async function cloudObjectExists(url: string): Promise<boolean> {
   try {
@@ -97,6 +126,7 @@ async function cloudObjectExists(url: string): Promise<boolean> {
 export interface ProjectMediaMeta {
   main?: { ext: string };
   refs?: { ext: string }[];
+  brolls?: { ext: string }[];
 }
 
 /** Fetch the project record's media metadata (extension etc.). */
@@ -176,4 +206,68 @@ export async function getProjectMedia(projectId: string): Promise<StoredMedia | 
     width: 0, height: 0, durationS: 0, filename: stored.filename,
   }).catch(() => {});
   return stored;
+}
+
+/**
+ * Get the project's B-roll library from wherever it durably lives:
+ *   1. this browser's IndexedDB (instant), then
+ *   2. the server store (fresh device), re-cached locally like the footage.
+ * Durations may be 0 on the server path (metadata isn't stored there); the
+ * caller re-probes them from the blob before use.
+ */
+export async function getBrollLibrary(
+  projectId: string,
+): Promise<Array<{ blob: Blob; filename: string; mimeType: string; durationS: number }>> {
+  if (!projectId) return [];
+  const db = await import('./mediaDb');
+
+  // Local first.
+  const list = await db.loadBrollLibrary(projectId);
+  if (list?.length) {
+    const items = [];
+    for (let i = 0; i < list.length; i++) {
+      const rec = await db.loadBrollFile(projectId, i);
+      if (rec?.blob) {
+        items.push({ blob: rec.blob, filename: rec.filename, mimeType: rec.mimeType, durationS: rec.durationS });
+      }
+    }
+    if (items.length) return items;
+  }
+
+  // Durable server copy?
+  const cap = await getCloudCapability();
+  if (!cap.available) return [];
+  const meta = await fetchProjectMediaMeta(projectId);
+  if (!meta?.brolls?.length) return [];
+
+  const items = [];
+  for (let i = 0; i < meta.brolls.length; i++) {
+    const ext = meta.brolls[i]?.ext;
+    if (!ext) continue;
+    const url = mediaPath(projectId, 'broll', ext, i);
+    if (!(await cloudObjectExists(url))) continue;
+    const res = await fetch(url);
+    if (!res.ok) continue;
+    const blob = await res.blob();
+    items.push({
+      blob,
+      filename: `broll-${i + 1}.${ext}`,
+      mimeType: blob.type || 'video/mp4',
+      durationS: 0,
+    });
+  }
+  // Re-cache locally so the next load is instant.
+  if (items.length) {
+    await db.saveBrollLibrary(projectId, items.map(it => ({
+      filename: it.filename, mimeType: it.mimeType,
+      durationS: 0, width: 0, height: 0,
+    }))).catch(() => {});
+    for (let i = 0; i < items.length; i++) {
+      await db.saveBrollFile(projectId, i, items[i].blob, {
+        filename: items[i].filename, mimeType: items[i].mimeType,
+        durationS: 0, width: 0, height: 0,
+      }).catch(() => {});
+    }
+  }
+  return items;
 }

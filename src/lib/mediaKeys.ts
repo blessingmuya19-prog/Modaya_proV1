@@ -5,7 +5,7 @@
  * Keys are namespaced per project:
  *   `<projectId>/main.<ext>`        the source footage
  *   `<projectId>/ref/<n>.<ext>`     reference videos
- *   `<projectId>/broll/<n>.<ext>`   B-roll library clips (future)
+ *   `<projectId>/broll/<n>.<ext>`   B-roll library clips (cutaway-only uploads)
  *   `<projectId>/out.<ext>`         a rendered export
  */
 
@@ -14,6 +14,29 @@ export type MediaRole = 'main' | 'ref' | 'broll' | 'out';
 export function extFromFilename(name: string, fallback = 'mp4'): string {
   const m = /\.([A-Za-z0-9]{2,5})$/.exec(name);
   return m ? m[1].toLowerCase() : fallback;
+}
+
+export function mimeFromExt(ext: string): string {
+  const clean = ext.replace(/^\./, '').toLowerCase();
+  switch (clean) {
+    case 'mp4': case 'm4v': return 'video/mp4';
+    case 'webm': return 'video/webm';
+    case 'mov': case 'qt': return 'video/quicktime';
+    case 'mkv': return 'video/x-matroska';
+    case 'avi': return 'video/x-msvideo';
+    case 'ogv': return 'video/ogg';
+    case 'ts': return 'video/mp2t';
+    case 'mp3': return 'audio/mpeg';
+    case 'wav': return 'audio/wav';
+    case 'm4a': case 'aac': return 'audio/aac';
+    case 'ogg': case 'opus': return 'audio/ogg';
+    case 'flac': return 'audio/flac';
+    case 'jpg': case 'jpeg': return 'image/jpeg';
+    case 'png': return 'image/png';
+    case 'webp': return 'image/webp';
+    case 'gif': return 'image/gif';
+    default: return 'application/octet-stream';
+  }
 }
 
 export function mediaKey(projectId: string, role: MediaRole, ext: string, index?: number): string {

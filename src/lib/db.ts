@@ -65,6 +65,7 @@ export interface Project {
   media?: {
     main?: { ext: string };
     refs?: { ext: string }[];
+    brolls?: { ext: string }[];
   };
   /** Speech recognition output, once it has run. */
   transcript?: Transcript;

@@ -76,6 +76,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ proj
         const refs = [...(project.media?.refs ?? [])];
         refs[idx] = { ext };
         db.projects.update(projectId, { media: { ...project.media, refs } });
+      } else if (resolved.role === 'broll') {
+        const m = /^broll\/(\d+)\./.exec(tail);
+        const idx = m ? Number(m[1]) : 0;
+        const brolls = [...(project.media?.brolls ?? [])];
+        brolls[idx] = { ext };
+        db.projects.update(projectId, { media: { ...project.media, brolls } });
       }
     }
 
@@ -113,19 +119,30 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ proj
   }
 
   // Byte range for seeking (video elements send `Range: bytes=start-end`).
-  let range: { start: number; end: number } | undefined;
+  let range: { start: number; end?: number } | undefined;
   const rangeHeader = req.headers.get('range');
   if (rangeHeader) {
     const m = /bytes=(\d+)-(\d*)/.exec(rangeHeader);
     if (m) {
       const start = Number(m[1]);
       const end   = m[2] ? Number(m[2]) : undefined;
-      range = { start, end: end ?? Number.MAX_SAFE_INTEGER };
+      range = { start, end };
     }
   }
 
   const obj = await mediaStore().openRead(resolved.key, range);
   if (!obj) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  if (obj.unsatisfiable) {
+    return new NextResponse(null, {
+      status: 416,
+      headers: {
+        'content-range': `bytes */${obj.size}`,
+        'accept-ranges': 'bytes',
+        'cache-control': 'private, max-age=3600',
+      },
+    });
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { Readable } = require('stream') as typeof import('stream');

@@ -55,6 +55,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     const m = project.media;
     if (m?.main)  await store.delete(mediaKey(id, 'main', m.main.ext));
     if (m?.refs)  await Promise.all(m.refs.filter(Boolean).map((r, i) => store.delete(mediaKey(id, 'ref', r.ext, i))));
+    if (m?.brolls) await Promise.all(m.brolls.filter(Boolean).map((b, i) => store.delete(mediaKey(id, 'broll', b.ext, i))));
   } catch { /* object-store cleanup is best-effort */ }
 
   db.projects.delete(id);
