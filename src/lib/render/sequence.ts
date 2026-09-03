@@ -14,6 +14,7 @@
 import type { TextPosition, TextAlign, TextStyle } from '@/lib/ai/operations';
 import type { MultiTrackMixerConfig } from '@/lib/audio/soundMixer';
 import { DEFAULT_MIXER_CONFIG } from '@/lib/audio/soundMixer';
+import type { MotionTrackConfig } from '@/lib/ai/motionTracker';
 
 export type ClipKind = 'video' | 'audio' | 'text' | 'subtitle';
 
@@ -42,6 +43,7 @@ export interface SequenceClip {
   textPosition?: TextPosition;
   textAlign?:    TextAlign;
   textStyle?:    TextStyle;
+  motionTrack?:  MotionTrackConfig;
   label:       string;
   /** Position on the programme timeline. */
   timelineIn:  number;
@@ -83,6 +85,7 @@ export interface EditorClipLike {
   textPosition?: TextPosition;
   textAlign?:    TextAlign;
   textStyle?:    TextStyle;
+  motionTrack?:  MotionTrackConfig;
 }
 
 /**
@@ -102,6 +105,7 @@ export interface StyleLayer {
     sourceId?:  string;
     transform?: Partial<Transform>;
     effects?:   Partial<Effects>;
+    motionTrack?: MotionTrackConfig;
   };
 }
 
@@ -121,6 +125,7 @@ export function buildSequence(
       textPosition: c.textPosition,
       textAlign:    c.textAlign,
       textStyle:    c.textStyle,
+      motionTrack:  st?.motionTrack ?? c.motionTrack,
       label:       c.label,
       timelineIn:  Math.max(0, c.startS),
       timelineOut: Math.min(opts.durationS || c.endS, c.endS),

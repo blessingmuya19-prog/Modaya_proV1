@@ -16,6 +16,7 @@ import {
   sourceTimeFor, resolveGap, nextBoundary,
   fitRect, filterFor,
 } from './sequence';
+import { getTrackedPositionAt } from '@/lib/ai/motionTracker';
 
 export interface EngineStats {
   drawn:      number;
@@ -416,13 +417,29 @@ export class PreviewEngine {
     const where = clip.textPosition
       ?? (clip.kind === 'subtitle' || clip.trackId === 'subs' ? 'lower' : 'centre');
 
+    let trackX = 0.5, trackY = 0.5, trackScale = 1.0, trackRot = 0;
+    if (clip.motionTrack && clip.motionTrack.enabled) {
+      const tracked = getTrackedPositionAt(this._time, clip.motionTrack);
+      trackX = tracked.x;
+      trackY = tracked.y;
+      trackScale = tracked.scale;
+      trackRot = tracked.rotation;
+    }
+
     const scale = style.size === 'small' ? 0.034 : style.size === 'large' ? 0.075 : 0.048;
-    const size  = Math.round(H * scale);
+    const size  = Math.round(H * scale * trackScale);
     const weight = style.bold === false ? 400 : 700;
     const fontStyle = style.italic ? 'italic ' : '';
 
     /* Which side of the frame. Centred unless a corner was asked for. */
-    const side = clip.textAlign ?? 'centre';
+    const side = clip.motionTrack?.enabled ? 'centre' : (clip.textAlign ?? 'centre');
+
+    ctx.save();
+    if (trackRot !== 0) {
+      ctx.translate(trackX * W, trackY * H);
+      ctx.rotate((trackRot * Math.PI) / 180);
+      ctx.translate(-trackX * W, -trackY * H);
+    }
 
     ctx.font         = `${fontStyle}${weight} ${size}px ${FONT_STACKS[style.font ?? 'sans']}`;
     ctx.textAlign    = side === 'left' ? 'left' : side === 'right' ? 'right' : 'center';
@@ -436,10 +453,11 @@ export class PreviewEngine {
     const block = lineH * lines.length;
 
     const margin = Math.round(H * 0.08);
-    const firstBaseline =
-        where === 'top'   ? margin + size
+    const firstBaseline = clip.motionTrack?.enabled
+      ? Math.round(trackY * H - block / 2) + size
+      : (where === 'top'   ? margin + size
       : where === 'lower' ? H - margin - block + size
-      :                     Math.round(H / 2 - block / 2) + size;
+      :                     Math.round(H / 2 - block / 2) + size);
 
     const bg   = style.background ?? 'box';
     const padX = size * 0.5, padY = size * 0.32;
@@ -447,9 +465,11 @@ export class PreviewEngine {
     /* The x the text is drawn from, honouring the side margin so a corner
        caption never touches the edge of the frame. */
     const sideMargin = Math.round(W * 0.05);
-    const x = side === 'left'  ? sideMargin
-            : side === 'right' ? W - sideMargin
-            : W / 2;
+    const x = clip.motionTrack?.enabled
+      ? Math.round(trackX * W)
+      : (side === 'left'  ? sideMargin
+      : side === 'right' ? W - sideMargin
+      : W / 2);
 
     if (bg === 'box') {
       const widest = Math.max(...lines.map(l => ctx.measureText(l).width));
@@ -470,10 +490,7 @@ export class PreviewEngine {
     ctx.fillStyle = style.colour ?? '#fff';
     lines.forEach((line, i) => ctx.fillText(line, x, firstBaseline + i * lineH));
 
-    ctx.shadowColor   = 'transparent';
-    ctx.shadowBlur    = 0;
-    ctx.shadowOffsetY = 0;
-    ctx.globalAlpha   = 1;
+    ctx.restore();
   }
 
   /* ─────────── export hook ─────────── */

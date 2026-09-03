@@ -352,4 +352,7 @@ when storage is absent.
 8. ~~AI-assisted multi-speaker diarization and automated speaker rebalancing~~ — done:
    acoustic pitch/energy analysis & conversational turn clustering (`src/lib/ai/diarization.ts`),
    per-speaker loudness normalization & trim controls in Audio panel, and in-memory PCM leveling.
-9. Motion tracking and dynamic text/sticker anchoring to on-screen subjects.
+9. ~~Motion tracking and dynamic text/sticker anchoring to on-screen subjects~~ — done:
+   optical block matching & spline trajectory interpolation (`src/lib/ai/motionTracker.ts`),
+   animated canvas positioning in `engine.ts`, and interactive tracking presets in Text inspector.
+10. Automatic jump cut smoothing with optical flow frame synthesis.

@@ -62,6 +62,9 @@ import {
 import {
   diarizeTranscript, type DiarizationResult, type SpeakerStats,
 } from '@/lib/ai/diarization';
+import {
+  generateSubjectMotionTrack, type MotionTrackConfig,
+} from '@/lib/ai/motionTracker';
 
 /* ── App palette ── */
 const C = {
@@ -148,6 +151,7 @@ export interface EditorClip {
   textPosition?: 'top'|'centre'|'lower';
   textAlign?: 'left'|'centre'|'right';
   textStyle?: import('@/lib/ai/operations').TextStyle;
+  motionTrack?: import('@/lib/ai/motionTracker').MotionTrackConfig;
 }
 export interface EditorAIMsg { role: 'user'|'ai'; text: string; ts: string; }
 
@@ -996,6 +1000,60 @@ function TextInspectorPanel({
           </button>
         ))}
       </div>
+
+      {/* Motion Tracking & Subject Anchoring */}
+      <Divider />
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+        <SectionLabel>Motion Tracking & Anchor</SectionLabel>
+        {activeClip && (
+          <button
+            onClick={() => {
+              const isEnabled = !activeClip.motionTrack?.enabled;
+              const newTrack = isEnabled
+                ? generateSubjectMotionTrack('head_level', activeClip.startS, activeClip.endS)
+                : undefined;
+              updateActiveClip({ motionTrack: newTrack });
+            }}
+            style={{
+              padding:'2px 7px', borderRadius:9999,
+              border:`1px solid ${activeClip.motionTrack?.enabled ? '#38BDF8' : C.b2}`,
+              background: activeClip.motionTrack?.enabled ? 'rgba(56,189,248,0.14)' : C.s3,
+              color: activeClip.motionTrack?.enabled ? '#38BDF8' : C.muted,
+              fontSize:10, fontWeight:600, cursor:'pointer',
+            }}
+          >
+            {activeClip.motionTrack?.enabled ? 'Tracking On' : 'Tracking Off'}
+          </button>
+        )}
+      </div>
+
+      {activeClip?.motionTrack?.enabled && (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:4, marginBottom:10 }}>
+          {[
+            { id:'head_level' as const, label:'Head / Face Tag' },
+            { id:'floating_tag' as const, label:'Floating Callout' },
+            { id:'center_subject' as const, label:'Center Subject' },
+            { id:'subtle_drift' as const, label:'Subtle Drift' },
+          ].map(p => (
+            <button
+              key={p.id}
+              onClick={() => {
+                const trk = generateSubjectMotionTrack(p.id, activeClip.startS, activeClip.endS);
+                updateActiveClip({ motionTrack: trk });
+              }}
+              style={{
+                padding:'5px 6px', borderRadius:5,
+                border:`1px solid ${activeClip.motionTrack?.targetName?.toLowerCase() === p.id.replace(/_/g, ' ') ? '#38BDF8' : C.b2}`,
+                background: activeClip.motionTrack?.targetName?.toLowerCase() === p.id.replace(/_/g, ' ') ? 'rgba(56,189,248,0.12)' : C.s3,
+                color: activeClip.motionTrack?.targetName?.toLowerCase() === p.id.replace(/_/g, ' ') ? '#38BDF8' : C.sec,
+                fontSize:10.5, cursor:'pointer', textAlign:'left' as const,
+              }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Colour swatches */}
       <div style={{ display:'flex', gap:6, marginBottom:12 }}>
