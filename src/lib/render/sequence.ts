@@ -19,6 +19,7 @@ import type { MorphCutConfig } from './jumpCutSmoother';
 import { DEFAULT_MORPH_CUT_CONFIG } from './jumpCutSmoother';
 import type { AutoReframeConfig } from './autoReframe';
 import { DEFAULT_AUTOREFRAME_CONFIG } from './autoReframe';
+import type { ColorGradeConfig } from './colorGrading';
 
 export type ClipKind = 'video' | 'audio' | 'text' | 'subtitle';
 
@@ -32,11 +33,12 @@ export interface Transform {
 }
 
 export interface Effects {
-  brightness: number;    // 1 = unchanged
-  contrast:   number;
-  saturation: number;
-  blurPx:     number;
-  opacity:    number;    // 0..1
+  brightness:  number;    // 1 = unchanged
+  contrast:    number;
+  saturation:  number;
+  blurPx:      number;
+  opacity:     number;    // 0..1
+  colorGrade?: ColorGradeConfig;
 }
 
 export interface SequenceClip {
@@ -313,5 +315,11 @@ export function filterFor(fx: Effects): string {
   if (fx.contrast   !== 1) parts.push(`contrast(${fx.contrast})`);
   if (fx.saturation !== 1) parts.push(`saturate(${fx.saturation})`);
   if (fx.blurPx      >  0) parts.push(`blur(${fx.blurPx}px)`);
+  if (fx.colorGrade) {
+    const cg = fx.colorGrade;
+    if (cg.temperature > 0) parts.push(`sepia(${Math.round(cg.temperature * 0.35)}%)`);
+    else if (cg.temperature < 0) parts.push(`hue-rotate(${Math.round(cg.temperature * 0.45)}deg)`);
+    if (cg.vibrance !== 0) parts.push(`saturate(${Math.max(0, 1 + cg.vibrance * 0.01).toFixed(2)})`);
+  }
   return parts.length ? parts.join(' ') : 'none';
 }

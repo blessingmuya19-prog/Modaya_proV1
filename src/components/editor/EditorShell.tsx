@@ -86,6 +86,12 @@ import {
   generateEditSoundCues,
   type SfxType,
 } from '@/lib/audio/sfxEngine';
+import {
+  CINEMATIC_LUTS,
+  DEFAULT_COLOR_GRADE,
+  type ColorGradeConfig,
+  type LutPreset,
+} from '@/lib/render/colorGrading';
 
 /* ── App palette ── */
 const C = {
@@ -801,12 +807,16 @@ function ColourPanel({
   styleLayer?: StyleLayer;
   onUpdateStyleLayer?: (layer: StyleLayer) => void;
 }) {
-  const [look, setLook] = React.useState('Neutral');
-  const [adj, setAdj] = React.useState({ brightness: 1.0, contrast: 1.0, saturation: 1.0, blurPx: 0 });
+  const [selectedLut, setSelectedLut] = React.useState<string>('teal_orange');
+  const [grade, setGrade] = React.useState<ColorGradeConfig>({
+    ...DEFAULT_COLOR_GRADE,
+    lutId: 'teal_orange',
+  });
+  const [blurPx, setBlurPx] = React.useState(0);
 
-  const applyGrade = (newLook: string, newAdj: typeof adj) => {
-    setLook(newLook);
-    setAdj(newAdj);
+  const applyGrade = (newGrade: ColorGradeConfig, newBlur: number) => {
+    setGrade(newGrade);
+    setBlurPx(newBlur);
     if (!onUpdateStyleLayer) return;
 
     const nextLayer: StyleLayer = { ...styleLayer };
@@ -816,97 +826,164 @@ function ColourPanel({
         ...(nextLayer[c.id] ?? {}),
         effects: {
           ...(nextLayer[c.id]?.effects ?? DEFAULT_EFFECTS),
-          brightness: newAdj.brightness,
-          contrast:   newAdj.contrast,
-          saturation: newAdj.saturation,
-          blurPx:     newAdj.blurPx,
+          brightness: Math.max(0.2, 1.0 + newGrade.exposure * 0.25),
+          contrast: newGrade.contrast,
+          saturation: Math.max(0, 1.0 + newGrade.vibrance * 0.01),
+          blurPx: newBlur,
+          colorGrade: newGrade,
         },
       };
     }
     onUpdateStyleLayer(nextLayer);
   };
 
-  const handleSelectLook = (lookName: string) => {
-    const preset = LOOK_PRESETS[lookName] ?? LOOK_PRESETS['Neutral'];
-    applyGrade(lookName, preset);
+  const handleSelectLut = (lutId: string) => {
+    setSelectedLut(lutId);
+    const lut = CINEMATIC_LUTS[lutId] ?? CINEMATIC_LUTS['neutral'];
+    const newGrade: ColorGradeConfig = {
+      ...grade,
+      lutId: lut.id,
+      temperature: lut.temperature,
+      tint: lut.tint,
+      vibrance: lut.vibrance,
+      contrast: lut.contrast,
+      shadows: lut.shadows,
+      highlights: lut.highlights,
+    };
+    applyGrade(newGrade, blurPx);
   };
 
-  const updateAdj = (key: keyof typeof adj, val: number) => {
-    const next = { ...adj, [key]: val };
-    applyGrade('Custom', next);
+  const updateGradeProp = (key: keyof ColorGradeConfig, val: number) => {
+    const next = { ...grade, [key]: val };
+    applyGrade(next, blurPx);
+  };
+
+  const handleReset = () => {
+    setSelectedLut('neutral');
+    applyGrade(DEFAULT_COLOR_GRADE, 0);
   };
 
   return (
     <div style={{ flex:1, overflowY:'auto', padding:'12px' }}>
-      <SectionLabel>Colour Look</SectionLabel>
+      <SectionLabel>Cinematic 3D LUTs</SectionLabel>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:4, marginBottom:12 }}>
-        {COLOUR_LOOKS.map(l => (
-          <button key={l.name} onClick={()=>handleSelectLook(l.name)} style={{
-            padding:'8px', borderRadius:7, border:`1px solid ${look===l.name ? C.accent+'66' : C.b2}`,
-            background: look===l.name ? C.accent+'12' : C.s3, cursor:'pointer', transition:'all 120ms', textAlign:'left' as const,
-          }}>
-            <div style={{ display:'flex', gap:3, marginBottom:5 }}>
-              {l.swatch.map((c,i) => <div key={i} style={{ width:14, height:14, borderRadius:3, background:c }} />)}
-            </div>
-            <span style={{ ...ty.propVal, fontSize:11, color: look===l.name ? C.accent : C.sec }}>{l.name}</span>
-          </button>
-        ))}
+        {Object.values(CINEMATIC_LUTS).map(lut => {
+          const isSel = selectedLut === lut.id;
+          return (
+            <button
+              key={lut.id}
+              onClick={() => handleSelectLut(lut.id ?? 'neutral')}
+              style={{
+                padding:'7px 8px', borderRadius:7,
+                border:`1px solid ${isSel ? '#38BDF8' : C.b2}`,
+                background: isSel ? 'rgba(56,189,248,0.12)' : C.s3,
+                cursor:'pointer', transition:'all 120ms', textAlign:'left' as const,
+              }}
+            >
+              <div style={{ display:'flex', gap:2, marginBottom:4 }}>
+                {lut.swatch.map((c, i) => (
+                  <div key={i} style={{ flex:1, height:10, borderRadius:2, background:c }} />
+                ))}
+              </div>
+              <span style={{ ...ty.propVal, fontSize:11, color: isSel ? '#38BDF8' : C.text, display:'block' }}>
+                {lut.name}
+              </span>
+              <span style={{ ...ty.meta, fontSize:9, color:C.muted, display:'block' }}>
+                {lut.category}
+              </span>
+            </button>
+          );
+        })}
       </div>
+
       <Divider />
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
-        <SectionLabel>Adjustments</SectionLabel>
+        <SectionLabel>Color Balance & Tone</SectionLabel>
         <button
-          onClick={() => handleSelectLook('Neutral')}
+          onClick={handleReset}
           style={{ background:'none', border:'none', color:C.muted, fontSize:10, cursor:'pointer', padding:0 }}
         >
           Reset
         </button>
       </div>
 
+      {/* Temperature */}
       <div style={{ marginBottom:8 }}>
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
-          <span style={{ ...ty.propLabel }}>Exposure</span>
-          <span style={{ ...ty.niVal }}>{adj.brightness.toFixed(2)}x</span>
+          <span style={{ ...ty.propLabel }}>Temperature</span>
+          <span style={{ ...ty.niVal, color: grade.temperature > 0 ? '#F59E0B' : grade.temperature < 0 ? '#38BDF8' : C.text }}>
+            {grade.temperature > 0 ? `+${grade.temperature}` : grade.temperature}
+          </span>
         </div>
         <input
-          type="range" min="0.5" max="1.5" step="0.02" value={adj.brightness}
-          onChange={e => updateAdj('brightness', Number(e.target.value))}
-          style={{ width:'100%', accentColor: C.accent, cursor:'pointer' }}
+          type="range" min="-100" max="100" step="5" value={grade.temperature}
+          onChange={e => updateGradeProp('temperature', Number(e.target.value))}
+          style={{ width:'100%', accentColor: grade.temperature > 0 ? '#F59E0B' : '#38BDF8', cursor:'pointer' }}
         />
       </div>
 
+      {/* Tint */}
+      <div style={{ marginBottom:8 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
+          <span style={{ ...ty.propLabel }}>Tint</span>
+          <span style={{ ...ty.niVal, color: grade.tint > 0 ? '#EC4899' : grade.tint < 0 ? '#10B981' : C.text }}>
+            {grade.tint > 0 ? `+${grade.tint}` : grade.tint}
+          </span>
+        </div>
+        <input
+          type="range" min="-100" max="100" step="5" value={grade.tint}
+          onChange={e => updateGradeProp('tint', Number(e.target.value))}
+          style={{ width:'100%', accentColor: grade.tint > 0 ? '#EC4899' : '#10B981', cursor:'pointer' }}
+        />
+      </div>
+
+      {/* Vibrance */}
+      <div style={{ marginBottom:8 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
+          <span style={{ ...ty.propLabel }}>Vibrance</span>
+          <span style={{ ...ty.niVal }}>{grade.vibrance > 0 ? `+${grade.vibrance}` : grade.vibrance}%</span>
+        </div>
+        <input
+          type="range" min="-100" max="100" step="5" value={grade.vibrance}
+          onChange={e => updateGradeProp('vibrance', Number(e.target.value))}
+          style={{ width:'100%', accentColor: '#38BDF8', cursor:'pointer' }}
+        />
+      </div>
+
+      {/* Contrast */}
       <div style={{ marginBottom:8 }}>
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
           <span style={{ ...ty.propLabel }}>Contrast</span>
-          <span style={{ ...ty.niVal }}>{adj.contrast.toFixed(2)}x</span>
+          <span style={{ ...ty.niVal }}>{grade.contrast.toFixed(2)}x</span>
         </div>
         <input
-          type="range" min="0.5" max="1.5" step="0.02" value={adj.contrast}
-          onChange={e => updateAdj('contrast', Number(e.target.value))}
+          type="range" min="0.5" max="1.8" step="0.05" value={grade.contrast}
+          onChange={e => updateGradeProp('contrast', Number(e.target.value))}
           style={{ width:'100%', accentColor: C.accent, cursor:'pointer' }}
         />
       </div>
 
+      {/* LUT Intensity */}
       <div style={{ marginBottom:8 }}>
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
-          <span style={{ ...ty.propLabel }}>Saturation</span>
-          <span style={{ ...ty.niVal }}>{adj.saturation.toFixed(2)}x</span>
+          <span style={{ ...ty.propLabel }}>LUT Intensity</span>
+          <span style={{ ...ty.niVal }}>{grade.intensity}%</span>
         </div>
         <input
-          type="range" min="0.0" max="2.0" step="0.05" value={adj.saturation}
-          onChange={e => updateAdj('saturation', Number(e.target.value))}
-          style={{ width:'100%', accentColor: C.accent, cursor:'pointer' }}
+          type="range" min="0" max="100" step="5" value={grade.intensity}
+          onChange={e => updateGradeProp('intensity', Number(e.target.value))}
+          style={{ width:'100%', accentColor: '#38BDF8', cursor:'pointer' }}
         />
       </div>
 
       <div style={{ marginBottom:10 }}>
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
-          <span style={{ ...ty.propLabel }}>Soft Blur</span>
-          <span style={{ ...ty.niVal }}>{adj.blurPx.toFixed(1)}px</span>
+          <span style={{ ...ty.propLabel }}>Film Soft Blur</span>
+          <span style={{ ...ty.niVal }}>{blurPx.toFixed(1)}px</span>
         </div>
         <input
-          type="range" min="0.0" max="10.0" step="0.5" value={adj.blurPx}
-          onChange={e => updateAdj('blurPx', Number(e.target.value))}
+          type="range" min="0.0" max="8.0" step="0.5" value={blurPx}
+          onChange={e => applyGrade(grade, Number(e.target.value))}
           style={{ width:'100%', accentColor: C.accent, cursor:'pointer' }}
         />
       </div>

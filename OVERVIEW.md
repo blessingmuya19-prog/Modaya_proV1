@@ -370,3 +370,7 @@ when storage is absent.
 13. ~~Procedural Sound Effects (SFX) & Beat-Synced Audio Cue Engine~~ — done:
    DSP procedural WebAudio synthesis for cinematic SFX (whoosh, pop, impact, riser, click, ding) without external dependencies (`src/lib/audio/sfxEngine.ts`),
    spectral flux musical beat and tempo detection, automated sound cue placement on cuts and titles, and interactive sound design controls in Audio panel.
+14. ~~Cinematic 3D LUT Color Grading & Intelligent Scene Tone Mapping Engine~~ — done:
+   3D color matrix & tone mapping transforms (`src/lib/render/colorGrading.ts`),
+   cinematic LUT catalog (Teal & Orange, Kodak Portra 35mm, Fujifilm Velvia, Noir, Cyber Neon, Bleach Bypass, Golden Hour),
+   temperature, tint, skin-tone preserving vibrance, and interactive Color panel in `EditorShell.tsx`.
