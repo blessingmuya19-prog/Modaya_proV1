@@ -355,4 +355,7 @@ when storage is absent.
 9. ~~Motion tracking and dynamic text/sticker anchoring to on-screen subjects~~ — done:
    optical block matching & spline trajectory interpolation (`src/lib/ai/motionTracker.ts`),
    animated canvas positioning in `engine.ts`, and interactive tracking presets in Text inspector.
-10. Automatic jump cut smoothing with optical flow frame synthesis.
+10. ~~Automatic jump cut smoothing with optical flow frame synthesis (AI Morph Cut)~~ — done:
+   fast block-based 2D optical flow field calculation & bi-directional frame synthesis (`src/lib/render/jumpCutSmoother.ts`),
+   continuous jump cut detection across silence/retake cuts, timeline locator, and interactive
+   AI Morph Cut controls in Editor Transitions panel.

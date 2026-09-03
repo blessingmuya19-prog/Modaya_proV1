@@ -65,6 +65,9 @@ import {
 import {
   generateSubjectMotionTrack, type MotionTrackConfig,
 } from '@/lib/ai/motionTracker';
+import {
+  detectJumpCuts, DEFAULT_MORPH_CUT_CONFIG, type MorphCutConfig, type JumpCut,
+} from '@/lib/render/jumpCutSmoother';
 
 /* ── App palette ── */
 const C = {
@@ -290,6 +293,7 @@ const iB = (on?:boolean):React.CSSProperties => ({
 /* ── Panel sub-components ─────────────────────────── */
 
 const TRANSITIONS = [
+  { name:'AI Morph Cut', duration:'0.16s' },
   { name:'Fade',      duration:'0.4s' },
   { name:'Dissolve',  duration:'0.6s' },
   { name:'Cut',       duration:'0s'   },
@@ -362,14 +366,32 @@ function TransitionsPanel({
   clips = [],
   onUpdateClips,
   onPushHistory,
+  onSeek,
 }: {
   clips?: EditorClip[];
   onUpdateClips?: (clips: EditorClip[]) => void;
   onPushHistory?: (clips: EditorClip[]) => void;
+  onSeek?: (s: number) => void;
 }) {
-  const [sel, setSel] = React.useState('Fade');
-  const [duration, setDuration] = React.useState(0.4);
+  const [sel, setSel] = React.useState('AI Morph Cut');
+  const [duration, setDuration] = React.useState(0.16);
   const [ease, setEase] = React.useState('Ease in-out');
+  const [morphMode, setMorphMode] = React.useState<'optical_flow' | 'feature_morph' | 'seamless_dissolve'>('optical_flow');
+  const [headAlign, setHeadAlign] = React.useState(true);
+
+  const jumpCuts = React.useMemo(() => {
+    return detectJumpCuts(clips.map(c => ({
+      id: c.id,
+      trackId: c.trackId,
+      kind: c.type,
+      sourceId: 'main',
+      sourceIn: c.startS,
+      timelineIn: c.startS,
+      timelineOut: c.endS,
+    })), { blendDurationS: duration });
+  }, [clips, duration]);
+
+  const smoothableCount = jumpCuts.filter(j => j.smoothable).length;
 
   return (
     <div style={{ flex:1, overflowY:'auto', padding:'12px' }}>
@@ -387,15 +409,82 @@ function TransitionsPanel({
           </button>
         ))}
       </div>
+
+      {sel === 'AI Morph Cut' && (
+        <>
+          <Divider />
+          <SectionLabel>AI Jump Cut Smoothing</SectionLabel>
+          <div style={{ padding:'8px 10px', background:C.s2, borderRadius:7, border:`1px solid ${C.b2}`, marginBottom:10 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+              <span style={{ ...ty.propVal, fontSize:11, fontWeight:600 }}>Optical Flow Synthesis</span>
+              <span style={{ ...ty.badge, background:'rgba(52,211,153,0.15)', color:'#34D399', padding:'1px 5px', borderRadius:4 }}>
+                {smoothableCount} Jump Cuts
+              </span>
+            </div>
+            <span style={{ ...ty.meta, fontSize:10, color:C.muted, display:'block', lineHeight:1.35 }}>
+              Synthesizes intermediate morph frames across dialogue jump cuts so speech pauses vanish without head snap.
+            </span>
+          </div>
+
+          <div style={{ display:'flex', gap:4, marginBottom:10 }}>
+            {[
+              { id:'optical_flow' as const, label:'Optical Flow' },
+              { id:'feature_morph' as const, label:'Face Morph' },
+              { id:'seamless_dissolve' as const, label:'Soft Blend' },
+            ].map(m => (
+              <button
+                key={m.id}
+                onClick={() => setMorphMode(m.id)}
+                style={{
+                  flex:1, padding:'4px', borderRadius:5,
+                  border:`1px solid ${morphMode===m.id ? '#38BDF8' : C.b2}`,
+                  background: morphMode===m.id ? 'rgba(56,189,248,0.14)' : C.s3,
+                  color: morphMode===m.id ? '#38BDF8' : C.muted,
+                  fontSize:10, cursor:'pointer',
+                }}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          {jumpCuts.length > 0 && (
+            <div style={{ marginBottom:10 }}>
+              <span style={{ ...ty.secLabel, fontSize:9, display:'block', marginBottom:4 }}>Detected Cuts on Timeline</span>
+              <div style={{ display:'flex', flexDirection:'column', gap:3, maxHeight:90, overflowY:'auto' }}>
+                {jumpCuts.map(jc => (
+                  <button
+                    key={jc.id}
+                    onClick={() => onSeek?.(jc.cutTimelineS)}
+                    style={{
+                      display:'flex', justifyContent:'space-between', alignItems:'center',
+                      padding:'4px 6px', background:C.s3, borderRadius:5, border:`1px solid ${C.b2}`,
+                      cursor:'pointer', textAlign:'left' as const,
+                    }}
+                  >
+                    <span style={{ ...ty.niVal, fontSize:10.5, color: jc.smoothable ? '#34D399' : C.muted }}>
+                      {clipFmt(jc.cutTimelineS)}
+                    </span>
+                    <span style={{ ...ty.meta, fontSize:9.5, color:C.muted }}>
+                      {jc.reason}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
       <Divider />
-      <SectionLabel>Timing</SectionLabel>
+      <SectionLabel>Timing & Duration</SectionLabel>
       <div style={{ marginBottom:10 }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
           <span style={{ ...ty.propLabel }}>Duration</span>
-          <span style={{ ...ty.niVal }}>{duration.toFixed(1)}s</span>
+          <span style={{ ...ty.niVal }}>{(duration * 1000).toFixed(0)} ms</span>
         </div>
         <input
-          type="range" min="0.1" max="2.0" step="0.1" value={duration}
+          type="range" min="0.08" max="1.0" step="0.02" value={duration}
           onChange={e => setDuration(Number(e.target.value))}
           style={{ width:'100%', accentColor: C.accent, cursor:'pointer' }}
         />
@@ -414,7 +503,7 @@ function TransitionsPanel({
       ))}
       <div style={{ marginTop:14, padding:'8px 10px', background:C.s2, borderRadius:7, border:`1px solid ${C.b2}` }}>
         <span style={{ ...ty.meta, fontSize:11, color:C.muted, display:'block', lineHeight:1.4 }}>
-          Active transition: <strong style={{ color:C.text }}>{sel}</strong> ({duration}s, {ease}). Modaya applies smooth cut blending across sequence boundaries.
+          Active transition: <strong style={{ color:C.text }}>{sel}</strong> ({(duration * 1000).toFixed(0)}ms, {ease}). Modaya applies seamless cut blending across sequence boundaries.
         </span>
       </div>
     </div>
@@ -1545,11 +1634,12 @@ function PropertiesPanelBase({
   totalS = 60,
   mediaEntry = null,
   projectName = 'Project',
+  onSeek,
   onPushHistory,
   onSetTab,
 }: PropertiesPanelProps) {
   const renderBody = () => {
-    if (tab === 'Transitions') return <TransitionsPanel clips={clips} onUpdateClips={onUpdateClips} onPushHistory={onPushHistory} />;
+    if (tab === 'Transitions') return <TransitionsPanel clips={clips} onUpdateClips={onUpdateClips} onPushHistory={onPushHistory} onSeek={onSeek} />;
     if (tab === 'Effects')     return <EffectsPanel clips={clips} styleLayer={styleLayer} onUpdateStyleLayer={onUpdateStyleLayer} />;
     if (tab === 'Overlays')    return <OverlaysPanel clips={clips} onUpdateClips={onUpdateClips} playheadS={playheadS} totalS={totalS} onPushHistory={onPushHistory} onSetTab={onSetTab} />;
     if (tab === 'Colour')      return <ColourPanel clips={clips} styleLayer={styleLayer} onUpdateStyleLayer={onUpdateStyleLayer} />;
