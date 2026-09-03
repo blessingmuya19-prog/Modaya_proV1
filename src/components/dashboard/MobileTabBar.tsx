@@ -19,7 +19,10 @@ export function MobileTabBar() {
     <nav className="dashboard-mobile-bar" style={{
       display: 'none', /* shown via CSS at ≤640px */
       position: 'sticky', bottom: 0,
-      background: TC.surface, borderTop: `1px solid ${TC.border}`,
+      background: 'rgba(10,10,11,0.72)',
+      backdropFilter: 'blur(18px) saturate(160%)',
+      WebkitBackdropFilter: 'blur(18px) saturate(160%)',
+      borderTop: '1px solid rgba(255,255,255,0.10)',
       padding: '6px 0 env(safe-area-inset-bottom, 6px)',
       zIndex: 50,
     }}>
@@ -28,8 +31,16 @@ export function MobileTabBar() {
         return (
           <Link key={href} href={href} style={{ textDecoration: 'none', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '6px 0' }}>
             {accent ? (
-              <div style={{ width: 40, height: 40, marginTop: -14, borderRadius: '50%', background: 'linear-gradient(135deg,#FFFFFF,#A1A1AA)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(255,255,255,0.5)', border: '3px solid #0A0A0B' }}>
-                <Icon size={18} color="#09090B" strokeWidth={2.7} />
+              <div style={{
+                width: 46, height: 46, marginTop: -18, borderRadius: '50%',
+                background: 'rgba(255,255,255,0.10)',
+                backdropFilter: 'blur(14px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(14px) saturate(180%)',
+                border: '1px solid rgba(255,255,255,0.25)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 10px 28px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.25)',
+              }}>
+                <Icon size={20} color="#FFFFFF" strokeWidth={2.6} />
               </div>
             ) : (
               <Icon size={19} color={active ? TC.accent : TC.muted} strokeWidth={active ? 2.2 : 1.7} />

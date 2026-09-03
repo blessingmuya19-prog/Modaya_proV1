@@ -29,8 +29,8 @@ export function Navbar() {
   // Glass becomes more opaque and blurrier as you scroll
   const glassBlur = scrolled ? Math.min(20 + scrollY / 15, 40) : 20;
   const glassBg = scrolled
-    ? `rgba(15,20,33,${Math.min(0.72 + scrollY / 1200, 0.9)})`
-    : 'rgba(20,26,40,0.55)';
+    ? `rgba(10,10,12,${Math.min(0.72 + scrollY / 1200, 0.9)})`
+    : 'rgba(28,28,33,0.55)';
   const glassBorder = scrolled
     ? `rgba(58,68,94,${Math.min(0.7 + scrollY / 3000, 1)})`
     : 'rgba(46,55,80,0.6)';
@@ -44,7 +44,7 @@ export function Navbar() {
         backdropFilter: scrolled ? `blur(${Math.min(scrollY / 8, 18)}px)` : 'none',
         WebkitBackdropFilter: scrolled ? `blur(${Math.min(scrollY / 8, 18)}px)` : 'none',
         background: scrolled
-          ? `linear-gradient(to bottom, rgba(11,15,26,${Math.min(scrollY / 300, 0.8)}) 0%, transparent 100%)`
+          ? `linear-gradient(to bottom, rgba(0,0,0,${Math.min(scrollY / 300, 0.8)}) 0%, transparent 100%)`
           : 'transparent',
         maskImage: 'linear-gradient(to bottom, black 50%, transparent 100%)',
         WebkitMaskImage: 'linear-gradient(to bottom, black 50%, transparent 100%)',
@@ -169,7 +169,7 @@ export function Navbar() {
         {menuOpen && (
           <div style={{
             maxWidth: 1200, margin: '8px auto 0', pointerEvents: 'auto',
-            background: 'rgba(15,20,33,0.92)', backdropFilter: 'blur(32px) saturate(180%)',
+            background: 'rgba(10,10,12,0.92)', backdropFilter: 'blur(32px) saturate(180%)',
             border: '1px solid #27272A', borderRadius: 20, boxShadow: '0 18px 50px rgba(0,0,0,0.45)',
             padding: '12px', display: 'flex', flexDirection: 'column', gap: 2,
           }}>
