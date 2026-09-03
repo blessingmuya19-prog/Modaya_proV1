@@ -5,7 +5,7 @@
  * Keys are namespaced per project:
  *   `<projectId>/main.<ext>`        the source footage
  *   `<projectId>/ref/<n>.<ext>`     reference videos
- *   `<projectId>/broll/<n>.<ext>`   B-roll library clips (future)
+ *   `<projectId>/broll/<n>.<ext>`   B-roll library clips (cutaway-only uploads)
  *   `<projectId>/out.<ext>`         a rendered export
  */
 

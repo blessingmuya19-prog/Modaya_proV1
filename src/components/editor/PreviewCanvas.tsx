@@ -15,6 +15,9 @@ interface Props {
   sequence:  Sequence;
   sourceUrl: string | null;
   sourceId:  string;
+  /** Additional media objects clips may read from — a B-roll library:
+   *  source id → object URL. The engine resolves each clip's sourceId. */
+  extraSources?: Record<string, string>;
   playing:   boolean;
   playheadS: number;
   onTime:    (t: number) => void;
@@ -26,7 +29,7 @@ interface Props {
 }
 
 export default function PreviewCanvas({
-  sequence, sourceUrl, sourceId, playing, playheadS, onTime, onPaused, onEnded, style,
+  sequence, sourceUrl, sourceId, extraSources, playing, playheadS, onTime, onPaused, onEnded, style,
 }: Props) {
   const hostRef   = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -62,6 +65,14 @@ export default function PreviewCanvas({
   useEffect(() => {
     if (sourceUrl) engineRef.current?.setSource(sourceId, sourceUrl);
   }, [sourceId, sourceUrl]);
+
+  // B-roll library objects — registered whenever the set changes identity.
+  useEffect(() => {
+    if (!extraSources) return;
+    for (const [id, url] of Object.entries(extraSources)) {
+      if (url) engineRef.current?.setSource(id, url);
+    }
+  }, [extraSources]);
 
   useEffect(() => {
     const e = engineRef.current;

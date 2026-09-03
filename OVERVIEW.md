@@ -28,7 +28,8 @@ of technical UI:
 
 > Drop footage → (optionally) add a reference by **📁 uploading a video or
 > 🔗 pasting a direct video link**, optionally scoped to a section with
-> **"Use: 00:12 – 01:04"** → **Create edit** → watch Modaya run named creative
+> **"Use: 00:12 – 01:04"** → (optionally) drop extra clips into the **B-roll
+> library** for cutaways → **Create edit** → watch Modaya run named creative
 > stages (understand footage → learn reference → find moments → match pacing →
 > captions → build edit → render) → get a finished video with **Export**,
 > **Regenerate**, and a **"Tell Modaya what to change"** box.
@@ -109,7 +110,7 @@ what happened.
 | AI text | Provider-agnostic (`src/lib/ai/llm.ts`): Groq, Gemini, OpenRouter, Cloudflare, local Ollama — auto-detected |
 | Speech-to-text | Groq Whisper `whisper-large-v3-turbo`, chunked uploads |
 | Clip ranking (visual) | Optional **TwelveLabs Pegasus 1.5** (`src/lib/ai/twelvelabs.ts`) |
-| Tests | Vitest, **429 tests**, no browser required |
+| Tests | Vitest, **538 tests**, no browser required |
 
 ---
 
@@ -138,11 +139,13 @@ strongest **moments** (the best one leads as the **hook**), cuts dead air to the
 reference's pace, adds **punch-ins**, burns in **real captions** (Whisper via a
 free key; silent without one), fits the **target format** automatically
 (9:16 vertical with cover-crop for shorts, 16:9 for long-form re-cuts), and
-inserts silent **B-roll cutaways** from other strong parts of the source while
-the talk track keeps playing. Plain-language refinements ("faster", "more
-punch-ins", "use captions more") regenerate the plan. This is heuristic analysis
-of real pixels/audio, not a neural style transfer, and cutaway footage is drawn
-from the same source today (separate B-roll upload is future work).
+inserts silent **B-roll cutaways** while the talk track keeps playing. Those
+cutaways prefer an uploaded **B-roll library** — extra clips dropped as
+cutaway-only material (multi-file, listed with durations, removable) — and
+fall back to visually strong, unused parts of the source when no library
+exists. Plain-language refinements ("faster", "more punch-ins", "use captions
+more") regenerate the plan. This is heuristic analysis of real pixels/audio,
+not a neural style transfer.
 
 ### The clipping engine (the headline feature)
 Turns one long video into several standalone short-form clips. Two stages:
@@ -250,7 +253,7 @@ Read this section before promising anything to a user.
 
 ### Testing / ops
 
-9. Coverage is **unit/logic-level** (429 Vitest tests). There is no browser
+9. Coverage is **unit/logic-level** (538 Vitest tests). There is no browser
    E2E suite, and the canvas renderer/export path isn't covered end-to-end.
 10. `npm run lint` has pre-existing issues; the enforced gates are
     `tsc --noEmit`, `vitest run`, and `next build`.
@@ -321,6 +324,9 @@ reopens on any device and a remote ranker can fetch it.
 - `src/lib/mediaCloud.ts` — browser client: capability probe, fire-and-forget
   upload after a local save, and `getProjectMedia()` which reads IndexedDB
   first then the server copy (re-probing metadata and re-caching locally).
+  The B-roll library uses the same machinery (`/broll/<n>` objects, backed up
+  when an edit uses them, rehydrated on reopen, trimmed server-side when the
+  library shrinks).
 
 With durable storage **and** `PUBLIC_BASE_URL` set, the clips route
 automatically mints a signed URL for the footage so TwelveLabs Pegasus can rank
@@ -330,8 +336,10 @@ when storage is absent.
 ## 8. Suggested next steps (in priority order)
 
 1. ~~Durable storage + Pegasus upload staging~~ — done (section 7).
-2. **Separate B-roll upload** — the drop zone + `/broll/` objects so cutaways
-   draw from a dedicated library instead of reusing source windows.
+2. ~~Separate B-roll upload~~ — done: the drop screen has a B-roll library
+   (drop/browse multiple clips, listed and removable) persisted like the other
+   media (`/broll/<n>` objects, IndexedDB + durable store, rehydrated on
+   reopen), and cutaways prefer it over recycled source windows.
 3. Make the left-nav edit panels (effects/transitions/text) actually apply
    operations, or clearly label them as previews.
 4. Faster-than-real-time export (WebCodecs/ffmpeg-wasm) for long videos.
