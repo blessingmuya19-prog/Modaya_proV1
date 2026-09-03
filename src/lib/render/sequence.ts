@@ -187,7 +187,7 @@ export function clipsAt(seq: Sequence, t: number, kind?: ClipKind): SequenceClip
 /** All video clips on screen at `t`, in draw order (lowest z first). */
 export function videoClipsAt(seq: Sequence, t: number): SequenceClip[] {
   return seq.clips
-    .filter(c => c.kind === 'video' && t >= c.timelineIn && t < c.timelineOut)
+    .filter(c => c.kind === 'video' && t >= c.timelineIn && (t < c.timelineOut || (t <= seq.durationS && c.timelineOut >= seq.durationS)))
     .sort((a, b) => a.z - b.z);
 }
 

@@ -392,7 +392,7 @@ export class PreviewEngine {
 
     // Swap to the spare element, which has already been seeked to this point
     const spare   = this.other();
-    if (nextUrl && spare.src === nextUrl) {
+    if (nextUrl && spare.src === nextUrl && spare.readyState >= 2) {
       this.active = this.active === 0 ? 1 : 0;
       try { outgoing.pause(); } catch {}
       spare.muted = next.muted;
@@ -400,6 +400,16 @@ export class PreviewEngine {
     } else if (isSameSource) {
       try { outgoing.currentTime = next.sourceIn; } catch {}
       outgoing.muted = next.muted;
+      if (outgoing.paused && this._playing) {
+        void outgoing.play().catch(() => {});
+      }
+    } else if (nextUrl) {
+      if (spare.src !== nextUrl) { spare.src = nextUrl; try { spare.load(); } catch {} }
+      spare.muted = next.muted;
+      this.active = this.active === 0 ? 1 : 0;
+      try { outgoing.pause(); } catch {}
+      try { spare.currentTime = next.sourceIn; } catch {}
+      void spare.play().catch(() => {});
     }
 
     this._time         = next.timelineIn;
@@ -443,6 +453,18 @@ export class PreviewEngine {
 
     const W = canvas.width, H = canvas.height;
 
+    const clips = videoClipsAt(seq, this._time);
+    const hasReadyVideo = clips.some(clip => {
+      const v = clip === this.cutawayClip ? this.overlayEl : this.el();
+      return v && v.videoWidth > 0 && v.videoHeight > 0 && v.readyState >= 2;
+    });
+
+    // Frame preservation: If the video is momentarily seeking or buffering between frames,
+    // retain the previously rendered frame on canvas instead of blanking to solid black!
+    if (!hasReadyVideo && this.stats.drawn > 0 && (this._playing || this.stats.buffering)) {
+      return;
+    }
+
     ctx.save();
     ctx.filter = 'none';
     ctx.globalAlpha = 1;
@@ -452,7 +474,6 @@ export class PreviewEngine {
     // Draw every video clip on screen, lowest z first — so a B-roll cutaway
     // (higher z, muted) paints over the base talk track while the base keeps
     // owning the audio clock.
-    const clips = videoClipsAt(seq, this._time);
     for (const clip of clips) {
       const v = clip === this.cutawayClip ? this.overlayEl : this.el();
       if (!v) continue;
@@ -470,11 +491,18 @@ export class PreviewEngine {
           };
         }
         const r = fitRect(w, h, W, H, tr);
-        ctx.filter      = filterFor(clip.effects);
-        ctx.globalAlpha = clip.effects.opacity;
+        const filterStr = filterFor(clip.effects);
+        if (filterStr && filterStr !== 'none') {
+          ctx.filter = filterStr;
+        } else if (ctx.filter !== 'none') {
+          ctx.filter = 'none';
+        }
+        if (clip.effects.opacity < 1) {
+          ctx.globalAlpha = clip.effects.opacity;
+        }
         try { ctx.drawImage(v, r.x, r.y, r.w, r.h); this.stats.drawn++; } catch {}
-        ctx.filter      = 'none';
-        ctx.globalAlpha = 1;
+        if (ctx.filter !== 'none') ctx.filter = 'none';
+        if (ctx.globalAlpha !== 1) ctx.globalAlpha = 1;
       }
     }
 
