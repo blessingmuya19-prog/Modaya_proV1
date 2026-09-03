@@ -107,10 +107,20 @@ function writeJson(file: string, data: unknown): void {
   } catch { /* ignore write failures */ }
 }
 
-// ── In-memory stores (hydrated from disk on first access in dev) ──────────────
+// ── In-memory stores (hydrated from disk/driver on first access) ──────────────
 
+import { resolveDbDriver, type DatabaseDriver } from '@/lib/server/dbAdapter';
+
+let _driver:   DatabaseDriver       | null = null;
 let _users:    Map<string, User>    | null = null;
 let _projects: Map<string, Project> | null = null;
+
+function getDriver(): DatabaseDriver {
+  if (!_driver) {
+    _driver = resolveDbDriver();
+  }
+  return _driver;
+}
 
 function users(): Map<string, User> {
   if (!_users) {
@@ -128,8 +138,22 @@ function projects(): Map<string, Project> {
   return _projects;
 }
 
-function saveUsers()    { writeJson('users.json',    Array.from(users().values())); }
-function saveProjects() { writeJson('projects.json', Array.from(projects().values())); }
+function saveUsers() {
+  const list = Array.from(users().values());
+  writeJson('users.json', list);
+  void getDriver().saveUsers(list).catch(() => {});
+}
+
+function saveProjects() {
+  const list = Array.from(projects().values());
+  writeJson('projects.json', list);
+  void getDriver().saveProjects(list).catch(() => {});
+}
+
+export function getDbDriverInfo(): { driver: string; isDurable: boolean } {
+  const d = getDriver();
+  return { driver: d.driver, isDurable: d.isDurable };
+}
 
 // ── Public API ────────────────────────────────────────────────────────────────
 

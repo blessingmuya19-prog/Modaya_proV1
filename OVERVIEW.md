@@ -206,7 +206,11 @@ Read this section before promising anything to a user.
    Resolution never upscales past the source, and media must be available in the browser.
    Code: `src/lib/render/exporter.ts`, `src/lib/render/muxer.ts`.
 
-2. **Data does not persist on a serverless host.** `db.ts` is an in-process
+2. ~~Data does not persist on a serverless host~~ — **Pluggable Database Adapters**:
+   `src/lib/server/dbAdapter.ts` provides swappable database persistence drivers:
+   Neon / Postgres over HTTP (`DATABASE_URL` / `POSTGRES_URL`), local filesystem
+   under `<DATA_DIR>` (`users.json`, `projects.json`), and in-memory fallback for
+   ephemeral test environments.
    store. In development it writes `data/*.json`; **on Vercel the filesystem is
    read-only and memory is recycled**, so accounts, projects and uploads do not
    survive a redeploy or an idle instance. Source media lives in the browser's
@@ -339,4 +343,6 @@ when storage is absent.
    seamless fallback to `MediaRecorder`.
 5. ~~Audio waveform rendering on timeline tracks~~ — done: real RMS envelope extraction,
    dynamic resampling per clip range, and local caching (`src/lib/waveformStore.ts`).
-6. Persistent database backends (SQLite / Postgres / Neon) for serverless deployments.
+6. ~~Persistent database backends (Postgres / Neon / FS / Mem)~~ — done: pluggable
+   database drivers with auto-detection in `src/lib/server/dbAdapter.ts`.
+7. Audio ducking & multi-track sound mixing during speech segments.
