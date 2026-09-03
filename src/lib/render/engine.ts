@@ -467,6 +467,7 @@ export class PreviewEngine {
     /* Long lines are wrapped rather than run off both edges of the frame. */
     const maxW  = W * 0.86;
     const lines = wrapText(ctx, text, maxW);
+    if (!lines.length) { ctx.restore(); return; }
     const lineH = Math.round(size * 1.22);
     const block = lineH * lines.length;
 
@@ -490,7 +491,7 @@ export class PreviewEngine {
       : W / 2);
 
     if (bg === 'box') {
-      const widest = Math.max(...lines.map(l => ctx.measureText(l).width));
+      const widest = Math.max(0, ...lines.map(l => ctx.measureText(l).width));
       const boxX = side === 'left'  ? x - padX
                  : side === 'right' ? x - widest - padX
                  : x - widest / 2 - padX;

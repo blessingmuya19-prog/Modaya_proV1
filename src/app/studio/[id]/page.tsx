@@ -10,6 +10,7 @@
 import React, { useEffect, useState, Suspense } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import Studio from '@/components/studio/Studio';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 
 function StudioInner() {
   const params = useParams<{ id: string }>();
@@ -31,8 +32,10 @@ function StudioInner() {
 
 export default function StudioPage() {
   return (
-    <Suspense fallback={null}>
-      <StudioInner />
-    </Suspense>
+    <ErrorBoundary>
+      <Suspense fallback={null}>
+        <StudioInner />
+      </Suspense>
+    </ErrorBoundary>
   );
 }

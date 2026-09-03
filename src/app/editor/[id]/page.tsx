@@ -105,6 +105,8 @@ async function prepareMedia(id: string, serverThumb?: string) {
   }
 }
 
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+
 export default function EditorPage() {
   const { id }       = useParams<{ id: string }>();
   const { addToast } = useToast();
@@ -205,13 +207,15 @@ export default function EditorPage() {
   }
 
   return (
-    <EditorShell
-      projectId={id}
-      projectName={project!.title}
-      onAIAction={handleAIAction}
-      clips={project!.clips}
-      durationS={project!.durationS}
-      aiHistory={project!.aiHistory}
-    />
+    <ErrorBoundary>
+      <EditorShell
+        projectId={id}
+        projectName={project!.title}
+        onAIAction={handleAIAction}
+        clips={project!.clips}
+        durationS={project!.durationS}
+        aiHistory={project!.aiHistory}
+      />
+    </ErrorBoundary>
   );
 }

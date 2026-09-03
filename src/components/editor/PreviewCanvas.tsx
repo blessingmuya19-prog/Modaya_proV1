@@ -45,48 +45,71 @@ export default function PreviewCanvas({
   // Create once
   useEffect(() => {
     if (!canvasRef.current || !hostRef.current) return;
-    const engine = new PreviewEngine();
-    engineRef.current = engine;
-    engine.mount(hostRef.current);
-    engine.attach(canvasRef.current);
+    let engine: PreviewEngine | null = null;
+    let offTime = () => {};
+    let offState = () => {};
+    let offEnd = () => {};
 
-    const offTime = engine.onTime(t => {
-      echoed.current = t;
-      onTimeRef.current(t);
-    });
-    const offState = engine.onState(p => { if (!p) onPauseRef.current(); });
-    const offEnd   = engine.onEnd(() => onEndRef.current());
+    try {
+      engine = new PreviewEngine();
+      engineRef.current = engine;
+      engine.mount(hostRef.current);
+      engine.attach(canvasRef.current);
 
-    return () => { offTime(); offState(); offEnd(); engine.destroy(); engineRef.current = null; };
+      offTime = engine.onTime(t => {
+        echoed.current = t;
+        onTimeRef.current(t);
+      });
+      offState = engine.onState(p => { if (!p) onPauseRef.current(); });
+      offEnd   = engine.onEnd(() => onEndRef.current());
+    } catch (e) {
+      console.warn('PreviewEngine initialization failed', e);
+    }
+
+    return () => {
+      offTime(); offState(); offEnd();
+      try { engine?.destroy(); } catch {}
+      engineRef.current = null;
+    };
   }, []);
 
-  useEffect(() => { engineRef.current?.setSequence(sequence); }, [sequence]);
+  useEffect(() => {
+    try { engineRef.current?.setSequence(sequence); } catch {}
+  }, [sequence]);
 
   useEffect(() => {
-    if (sourceUrl) engineRef.current?.setSource(sourceId, sourceUrl);
+    try {
+      if (sourceUrl) engineRef.current?.setSource(sourceId, sourceUrl);
+    } catch {}
   }, [sourceId, sourceUrl]);
 
   // B-roll library objects — registered whenever the set changes identity.
   useEffect(() => {
     if (!extraSources) return;
-    for (const [id, url] of Object.entries(extraSources)) {
-      if (url) engineRef.current?.setSource(id, url);
-    }
+    try {
+      for (const [id, url] of Object.entries(extraSources)) {
+        if (url) engineRef.current?.setSource(id, url);
+      }
+    } catch {}
   }, [extraSources]);
 
   useEffect(() => {
     const e = engineRef.current;
     if (!e) return;
-    if (playing) void e.play(); else e.pause();
+    try {
+      if (playing) void e.play(); else e.pause();
+    } catch {}
   }, [playing]);
 
   // Only follow the playhead when the change came from outside the engine
   useEffect(() => {
     const e = engineRef.current;
     if (!e) return;
-    if (Math.abs(playheadS - echoed.current) < 0.05) return;
-    if (Math.abs(e.time - playheadS) < 0.05) return;
-    e.seek(playheadS);
+    try {
+      if (Math.abs(playheadS - echoed.current) < 0.05) return;
+      if (Math.abs(e.time - playheadS) < 0.05) return;
+      e.seek(playheadS);
+    } catch {}
   }, [playheadS]);
 
   return (
