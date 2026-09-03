@@ -305,10 +305,12 @@ export interface ExportModalProps {
   sequence?:  Sequence | null;
   sourceUrl?: string | null;
   sourceId?:  string;
+  /** B-roll library objects the sequence reads (id → URL). */
+  extraSources?: Record<string, string>;
   projectName?: string;
 }
 
-export function ExportModal({ open, onClose, sequence = null, sourceUrl = null, sourceId = 'main', projectName }: ExportModalProps) {
+export function ExportModal({ open, onClose, sequence = null, sourceUrl = null, sourceId = 'main', extraSources, projectName }: ExportModalProps) {
   const [state,    setState]    = useState<ExportState>('configure');
   const [format,   setFormat]   = useState<Format>('MP4');
   const [res,      setRes]      = useState<Res>('1080p');
@@ -339,6 +341,7 @@ export function ExportModal({ open, onClose, sequence = null, sourceUrl = null, 
         sequence,
         sourceUrl,
         sourceId,
+        extraSources,
         resLongEdge: RES_LONG_EDGE[res],
         fps,
         videoBits: QUALITY_INFO[quality].videoBits,

@@ -76,6 +76,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ proj
         const refs = [...(project.media?.refs ?? [])];
         refs[idx] = { ext };
         db.projects.update(projectId, { media: { ...project.media, refs } });
+      } else if (resolved.role === 'broll') {
+        const m = /^broll\/(\d+)\./.exec(tail);
+        const idx = m ? Number(m[1]) : 0;
+        const brolls = [...(project.media?.brolls ?? [])];
+        brolls[idx] = { ext };
+        db.projects.update(projectId, { media: { ...project.media, brolls } });
       }
     }
 
