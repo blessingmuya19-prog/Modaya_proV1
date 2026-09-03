@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
-  exportSupported, describeBytes, downloadBlob, renderToFile,
+  exportSupported, webCodecsSupported, describeBytes, downloadBlob, renderToFile,
 } from '@/lib/render/exporter';
 import type { Sequence } from '@/lib/render/sequence';
 
@@ -21,12 +21,20 @@ const seq: Sequence = {
   } as never],
 } as unknown as Sequence;
 
-describe('exportSupported', () => {
-  it('is false in environments without captureStream/MediaRecorder (jsdom)', () => {
+describe('exportSupported & webCodecsSupported', () => {
+  it('is false in environments without captureStream/MediaRecorder/WebCodecs (jsdom)', () => {
     expect(exportSupported()).toBe(false);
+    expect(webCodecsSupported()).toBe(false);
   });
 
-  it('is true when all the browser pieces exist', () => {
+  it('reports webCodecsSupported when VideoEncoder and VideoFrame exist', () => {
+    vi.stubGlobal('VideoEncoder', class { static isConfigSupported = vi.fn(); });
+    vi.stubGlobal('VideoFrame', class {});
+    expect(webCodecsSupported()).toBe(true);
+    expect(exportSupported()).toBe(true);
+  });
+
+  it('is true when MediaRecorder and captureStream exist', () => {
     vi.stubGlobal('MediaRecorder', class {});
     vi.stubGlobal('AudioContext', class {});
     // captureStream on the canvas prototype
@@ -41,7 +49,7 @@ describe('renderToFile', () => {
     await expect(renderToFile({
       sequence: seq, sourceUrl: 'blob:x', sourceId: 'main',
       resLongEdge: 1920, fps: 30, videoBits: 12_000_000,
-    })).rejects.toThrow(/cannot record|captureStream|MediaRecorder/i);
+    })).rejects.toThrow(/cannot record|captureStream|MediaRecorder|WebCodecs/i);
   });
 });
 

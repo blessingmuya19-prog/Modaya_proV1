@@ -17,6 +17,7 @@
  */
 import { PreviewEngine } from './engine';
 import type { Sequence } from './sequence';
+import { buildWebmBlob, buildMp4Blob, type EncodedChunk } from './muxer';
 
 export interface ExportOptions {
   sequence:      Sequence;
@@ -40,7 +41,7 @@ export interface ExportOptions {
 
 export interface ExportResult {
   blob:      Blob;
-  /** 'mp4' or 'webm' — what MediaRecorder actually produced. */
+  /** 'mp4' or 'webm' — what container was actually produced. */
   extension: 'mp4' | 'webm';
   mimeType:  string;
   durationS: number;
@@ -72,26 +73,188 @@ function pickMime(prefer: 'mp4' | 'webm'): { mimeType: string; extension: 'mp4' 
   return null;
 }
 
-/** Guard so the export button can be disabled honestly where unsupported. */
-export function exportSupported(): boolean {
+/** Check if hardware-accelerated WebCodecs is available in this browser. */
+export function webCodecsSupported(): boolean {
   return (
-    typeof HTMLCanvasElement !== 'undefined' &&
-    typeof HTMLCanvasElement.prototype.captureStream === 'function' &&
-    typeof MediaRecorder !== 'undefined' &&
-    typeof AudioContext !== 'undefined'
+    typeof VideoEncoder !== 'undefined' &&
+    typeof VideoFrame !== 'undefined'
   );
 }
 
-export async function renderToFile(opts: ExportOptions): Promise<ExportResult> {
-  if (!exportSupported()) {
-    throw new Error('This browser cannot record a video here (needs captureStream + MediaRecorder).');
+/** Guard so the export button can be disabled honestly where unsupported. */
+export function exportSupported(): boolean {
+  return (
+    webCodecsSupported() ||
+    (
+      typeof HTMLCanvasElement !== 'undefined' &&
+      typeof HTMLCanvasElement.prototype.captureStream === 'function' &&
+      typeof MediaRecorder !== 'undefined' &&
+      typeof AudioContext !== 'undefined'
+    )
+  );
+}
+
+/**
+ * Fast offline WebCodecs export. Steps through sequence frames at maximum
+ * hardware encoding speed rather than waiting on real-time playback.
+ */
+async function renderWithWebCodecs(opts: ExportOptions): Promise<ExportResult> {
+  const { sequence, sourceUrl, sourceId, fps, videoBits, preferFormat = 'mp4' } = opts;
+  const durationS = Math.max(0.1, sequence.durationS);
+
+  const host = document.createElement('div');
+  host.style.cssText = 'position:fixed;left:-10000px;top:0;width:2px;height:2px;opacity:0;pointer-events:none;';
+  document.body.appendChild(host);
+
+  const canvas = document.createElement('canvas');
+  host.appendChild(canvas);
+
+  const engine = new PreviewEngine();
+  engine.mount(host);
+  engine.attach(canvas);
+
+  engine.setSequence(sequence, opts.resLongEdge);
+  engine.setSource(sourceId, sourceUrl);
+  for (const [id, url] of Object.entries(opts.extraSources ?? {})) {
+    if (url) engine.setSource(id, url);
   }
 
+  // Calculate pixel dimensions
+  const scale = Math.min(1, opts.resLongEdge / Math.max(sequence.width, sequence.height));
+  let width = Math.max(2, Math.round(sequence.width * scale));
+  let height = Math.max(2, Math.round(sequence.height * scale));
+  // Video encoders require even dimensions
+  if (width % 2 !== 0) width--;
+  if (height % 2 !== 0) height--;
+
+  canvas.width = width;
+  canvas.height = height;
+
+  const chunks: EncodedChunk[] = [];
+  let avcCDecoderConfig: Uint8Array | undefined;
+
+  // Codec candidates based on format preference
+  const candidateCodecs = preferFormat === 'mp4'
+    ? ['avc1.42E01E', 'avc1.4D401E', 'avc1.640028', 'vp09.00.10.08', 'vp8']
+    : ['vp09.00.10.08', 'vp8', 'avc1.42E01E', 'av01.0.04M.08'];
+
+  let chosenCodec = candidateCodecs[0];
+  for (const c of candidateCodecs) {
+    try {
+      const support = await VideoEncoder.isConfigSupported({
+        codec: c,
+        width,
+        height,
+        bitrate: videoBits,
+        framerate: fps,
+      });
+      if (support && support.supported) {
+        chosenCodec = c;
+        break;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  const encoder = new VideoEncoder({
+    output: (chunk, metadata) => {
+      const data = new Uint8Array(chunk.byteLength);
+      chunk.copyTo(data);
+      chunks.push({
+        data,
+        timestampUs: chunk.timestamp,
+        type: chunk.type,
+        track: 'video',
+      });
+      if (metadata?.decoderConfig?.description) {
+        avcCDecoderConfig = new Uint8Array(metadata.decoderConfig.description as ArrayBuffer);
+      }
+    },
+    error: (e) => {
+      console.warn('VideoEncoder error:', e);
+    },
+  });
+
+  encoder.configure({
+    codec: chosenCodec,
+    width,
+    height,
+    bitrate: videoBits,
+    framerate: fps,
+  });
+
+  const totalFrames = Math.max(1, Math.round(durationS * fps));
+  const dt = 1 / fps;
+
+  try {
+    for (let i = 0; i < totalFrames; i++) {
+      const t = Math.min(durationS, i * dt);
+      engine.seek(t);
+      engine.renderFrame();
+
+      const frame = new VideoFrame(canvas, {
+        timestamp: Math.round(t * 1_000_000),
+        duration: Math.round(dt * 1_000_000),
+      });
+
+      const isKey = i % (fps * 2) === 0;
+      encoder.encode(frame, { keyFrame: isKey });
+      frame.close();
+
+      opts.onProgress?.(Math.min(0.99, (i + 1) / totalFrames));
+
+      // Yield event loop every few frames for UI responsiveness
+      if (i % 15 === 0) {
+        await new Promise(r => setTimeout(r, 0));
+      }
+    }
+
+    await encoder.flush();
+    encoder.close();
+
+    const isMp4 = preferFormat === 'mp4' && chosenCodec.startsWith('avc');
+    let blob: Blob;
+
+    if (isMp4) {
+      blob = buildMp4Blob(chunks, {
+        width,
+        height,
+        fps,
+        durationS,
+        avcC: avcCDecoderConfig,
+      });
+    } else {
+      blob = buildWebmBlob(chunks, {
+        width,
+        height,
+        fps,
+        durationS,
+        videoCodec: chosenCodec.startsWith('avc') ? 'V_MPEG4/ISO/AVC' : chosenCodec.startsWith('vp8') ? 'V_VP8' : 'V_VP9',
+      });
+    }
+
+    opts.onProgress?.(1);
+
+    return {
+      blob,
+      extension: isMp4 ? 'mp4' : 'webm',
+      mimeType: blob.type,
+      durationS,
+    };
+  } finally {
+    try { engine.destroy(); } catch {}
+    host.parentNode?.removeChild(host);
+  }
+}
+
+/**
+ * Real-time MediaRecorder export. Fallback for browsers without WebCodecs.
+ */
+async function renderWithMediaRecorder(opts: ExportOptions): Promise<ExportResult> {
   const { sequence, sourceUrl, sourceId, fps, videoBits } = opts;
   const durationS = Math.max(0.1, sequence.durationS);
 
-  // Create everything synchronously first, in the user-gesture call chain, so
-  // the AudioContext and video playback aren't blocked by autoplay policy.
   const host = document.createElement('div');
   host.style.cssText = 'position:fixed;left:-10000px;top:0;width:2px;height:2px;opacity:0;pointer-events:none;';
   document.body.appendChild(host);
@@ -197,6 +360,32 @@ export async function renderToFile(opts: ExportOptions): Promise<ExportResult> {
   }
 
   return done;
+}
+
+export async function renderToFile(opts: ExportOptions): Promise<ExportResult> {
+  if (!exportSupported()) {
+    throw new Error('This browser cannot record a video here (needs WebCodecs or captureStream + MediaRecorder).');
+  }
+
+  // Prefer fast hardware-accelerated WebCodecs when supported
+  if (webCodecsSupported()) {
+    try {
+      return await renderWithWebCodecs(opts);
+    } catch (e) {
+      console.warn('WebCodecs export failed, falling back to MediaRecorder:', e);
+      // Fallback to real-time MediaRecorder
+      if (
+        typeof HTMLCanvasElement !== 'undefined' &&
+        typeof HTMLCanvasElement.prototype.captureStream === 'function' &&
+        typeof MediaRecorder !== 'undefined'
+      ) {
+        return await renderWithMediaRecorder(opts);
+      }
+      throw e;
+    }
+  }
+
+  return renderWithMediaRecorder(opts);
 }
 
 /** Trigger a browser download of an exported blob. */

@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { Download, CheckCircle, X, ChevronDown, AlertTriangle } from 'lucide-react';
 import {
-  renderToFile, downloadBlob, describeBytes, exportSupported,
+  renderToFile, downloadBlob, describeBytes, exportSupported, webCodecsSupported,
 } from '@/lib/render/exporter';
 import type { Sequence } from '@/lib/render/sequence';
 
@@ -223,7 +223,9 @@ function RenderingScreen({ resolution, quality, progress, error, onBack }: {
           </div>
 
           <p style={{ fontFamily: F, fontSize: 11, fontWeight: 400, color: C.dim, margin: '24px 0 0', textAlign: 'center' }}>
-            Recording in real time — it takes about as long as the finished clip. Keep this tab in the foreground.
+            {webCodecsSupported()
+              ? 'Hardware-accelerated encoding in progress. Keep this tab in the foreground.'
+              : 'Recording in real time — it takes about as long as the finished clip. Keep this tab in the foreground.'}
           </p>
         </>
       )}
@@ -445,7 +447,9 @@ export function ExportModal({ open, onClose, sequence = null, sourceUrl = null, 
               Export · {res} · {QUALITY_INFO[quality].label}
             </button>
             <p style={{ fontFamily: F, fontSize: 11, fontWeight: 400, color: C.dim, margin: '10px 0 0', textAlign: 'center' }}>
-              Records in real time ({Math.round((sequence?.durationS ?? 0))}s ≈ that long) and downloads on this device.
+              {webCodecsSupported()
+                ? 'Hardware-accelerated fast export · downloads directly on this device.'
+                : `Records in real time (${Math.round((sequence?.durationS ?? 0))}s ≈ that long) and downloads on this device.`}
             </p>
           </div>
         )}
