@@ -17,6 +17,8 @@ import { DEFAULT_MIXER_CONFIG } from '@/lib/audio/soundMixer';
 import type { MotionTrackConfig } from '@/lib/ai/motionTracker';
 import type { MorphCutConfig } from './jumpCutSmoother';
 import { DEFAULT_MORPH_CUT_CONFIG } from './jumpCutSmoother';
+import type { AutoReframeConfig } from './autoReframe';
+import { DEFAULT_AUTOREFRAME_CONFIG } from './autoReframe';
 
 export type ClipKind = 'video' | 'audio' | 'text' | 'subtitle';
 
@@ -67,6 +69,7 @@ export interface Sequence {
   clips:     SequenceClip[];
   audioMix?: MultiTrackMixerConfig;
   morphCut?: MorphCutConfig;
+  autoReframe?: AutoReframeConfig;
 }
 
 export const DEFAULT_TRANSFORM: Transform = {
@@ -115,7 +118,8 @@ export interface StyleLayer {
 export function buildSequence(
   clips: EditorClipLike[],
   opts: { durationS: number; width: number; height: number; sourceId: string;
-          style?: StyleLayer; audioMix?: MultiTrackMixerConfig; morphCut?: MorphCutConfig },
+          style?: StyleLayer; audioMix?: MultiTrackMixerConfig; morphCut?: MorphCutConfig;
+          autoReframe?: AutoReframeConfig },
 ): Sequence {
   const usable = (clips ?? []).filter(c => c.endS > c.startS);
 
@@ -160,12 +164,13 @@ export function buildSequence(
   seqClips.sort((a, b) => a.timelineIn - b.timelineIn || a.z - b.z);
 
   return {
-    durationS: opts.durationS,
-    width:     opts.width  || 1920,
-    height:    opts.height || 1080,
-    clips:     seqClips,
-    audioMix:  opts.audioMix,
-    morphCut:  opts.morphCut,
+    durationS:   opts.durationS,
+    width:       opts.width  || 1920,
+    height:      opts.height || 1080,
+    clips:       seqClips,
+    audioMix:    opts.audioMix,
+    morphCut:    opts.morphCut,
+    autoReframe: opts.autoReframe,
   };
 }
 

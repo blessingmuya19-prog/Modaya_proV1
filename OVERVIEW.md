@@ -359,3 +359,7 @@ when storage is absent.
    fast block-based 2D optical flow field calculation & bi-directional frame synthesis (`src/lib/render/jumpCutSmoother.ts`),
    continuous jump cut detection across silence/retake cuts, timeline locator, and interactive
    AI Morph Cut controls in Editor Transitions panel.
+11. ~~Auto-Reframe & Dynamic Aspect Ratio Fitting with Intelligent Subject Tracking~~ — done:
+   saliency centroid estimation & camera deadzone pan smoothing (`src/lib/render/autoReframe.ts`),
+   aspect ratio presets (9:16 Shorts/Reels, 16:9 Landscape, 1:1 Square, 4:5 Portrait, 21:9 Ultrawide),
+   canvas compositor viewport resizing & dynamic tracking in `engine.ts`, and interactive Canvas panel in `EditorShell.tsx`.

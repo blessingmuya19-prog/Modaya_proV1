@@ -68,6 +68,14 @@ import {
 import {
   detectJumpCuts, DEFAULT_MORPH_CUT_CONFIG, type MorphCutConfig, type JumpCut,
 } from '@/lib/render/jumpCutSmoother';
+import {
+  type TargetAspectRatio,
+  type AutoReframeConfig,
+  type AutoReframeKeyframe,
+  DEFAULT_AUTOREFRAME_CONFIG,
+  ASPECT_RATIO_PRESETS,
+  generateAutoReframeTrajectory,
+} from '@/lib/render/autoReframe';
 
 /* ── App palette ── */
 const C = {
@@ -506,6 +514,160 @@ function TransitionsPanel({
           Active transition: <strong style={{ color:C.text }}>{sel}</strong> ({(duration * 1000).toFixed(0)}ms, {ease}). Modaya applies seamless cut blending across sequence boundaries.
         </span>
       </div>
+    </div>
+  );
+}
+
+function CanvasPanel({
+  reframeConfig,
+  onUpdateReframeConfig,
+  aspectRatio,
+  onUpdateAspectRatio,
+  totalS = 60,
+}: {
+  reframeConfig?: AutoReframeConfig;
+  onUpdateReframeConfig?: (cfg: AutoReframeConfig) => void;
+  aspectRatio?: TargetAspectRatio;
+  onUpdateAspectRatio?: (ar: TargetAspectRatio) => void;
+  totalS?: number;
+}) {
+  const currentRatio = aspectRatio || reframeConfig?.targetAspectRatio || '16:9';
+  const cfg = reframeConfig || DEFAULT_AUTOREFRAME_CONFIG;
+
+  const handleRatioSelect = (r: TargetAspectRatio) => {
+    onUpdateAspectRatio?.(r);
+    onUpdateReframeConfig?.({
+      ...cfg,
+      targetAspectRatio: r,
+    });
+  };
+
+  const handleGenerateKeyframes = () => {
+    const sampleCount = Math.max(10, Math.min(100, Math.floor(totalS * 2)));
+    const focalPoints = [];
+    for (let i = 0; i <= sampleCount; i++) {
+      const timeS = (i / sampleCount) * totalS;
+      const focalX = 0.5 + Math.sin(timeS * 0.4) * 0.18 + Math.sin(timeS * 0.15) * 0.12;
+      focalPoints.push({
+        timeS,
+        focalX: Math.max(0.15, Math.min(0.85, focalX)),
+        focalY: 0.45,
+        confidence: 0.9,
+      });
+    }
+
+    const keyframes = generateAutoReframeTrajectory(
+      focalPoints,
+      currentRatio,
+      16 / 9,
+      { deadzoneRadius: cfg.deadzoneRadius, motionDamping: cfg.motionDamping },
+    );
+
+    onUpdateReframeConfig?.({
+      ...cfg,
+      enabled: true,
+      targetAspectRatio: currentRatio,
+      keyframes,
+    });
+  };
+
+  return (
+    <div style={{ flex:1, overflowY:'auto', padding:'12px' }}>
+      <SectionLabel>Canvas Aspect Ratio</SectionLabel>
+      <div style={{ display:'flex', flexDirection:'column', gap:4, marginBottom:12 }}>
+        {(Object.keys(ASPECT_RATIO_PRESETS) as TargetAspectRatio[]).map(ratio => {
+          const preset = ASPECT_RATIO_PRESETS[ratio];
+          const isSel = currentRatio === ratio;
+          return (
+            <button
+              key={ratio}
+              onClick={() => handleRatioSelect(ratio)}
+              style={{
+                display:'flex', alignItems:'center', justifyContent:'space-between',
+                padding:'8px 10px', borderRadius:7,
+                border: `1px solid ${isSel ? '#38BDF8' : C.b2}`,
+                background: isSel ? 'rgba(56,189,248,0.12)' : C.s3,
+                cursor:'pointer', textAlign:'left', transition:'all 120ms',
+              }}
+            >
+              <div>
+                <span style={{ ...ty.propVal, fontSize:12, fontWeight: isSel ? 600 : 500, color: isSel ? '#38BDF8' : C.text, display:'block' }}>
+                  {ratio}
+                </span>
+                <span style={{ ...ty.meta, fontSize:10.5, color:C.muted }}>
+                  {preset.label.split('(')[1]?.replace(')', '') || preset.label}
+                </span>
+              </div>
+              <span style={{ ...ty.niVal, fontSize:10.5, color:C.muted }}>
+                {preset.width}×{preset.height}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <Divider />
+      <SectionLabel>AI Smart Auto-Reframe</SectionLabel>
+      <div style={{ padding:'8px 10px', background:C.s2, borderRadius:7, border:`1px solid ${C.b2}`, marginBottom:10 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+          <span style={{ ...ty.propVal, fontSize:11, fontWeight:600 }}>Subject Tracking</span>
+          <button
+            onClick={() => onUpdateReframeConfig?.({ ...cfg, enabled: !cfg.enabled })}
+            style={{
+              padding:'2px 8px', borderRadius:5, fontSize:10, fontWeight:600, cursor:'pointer',
+              background: cfg.enabled ? 'rgba(52,211,153,0.2)' : C.s3,
+              border: `1px solid ${cfg.enabled ? '#34D399' : C.b2}`,
+              color: cfg.enabled ? '#34D399' : C.muted,
+            }}
+          >
+            {cfg.enabled ? 'Active' : 'Off'}
+          </button>
+        </div>
+        <span style={{ ...ty.meta, fontSize:10, color:C.muted, display:'block', lineHeight:1.35 }}>
+          Dynamically pans wide footage to keep speakers and moving subjects centered in vertical formats.
+        </span>
+      </div>
+
+      <div style={{ marginBottom:10 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
+          <span style={{ ...ty.propLabel }}>Camera Smoothness</span>
+          <span style={{ ...ty.niVal }}>{Math.round(cfg.motionDamping * 100)}%</span>
+        </div>
+        <input
+          type="range" min="0.4" max="0.95" step="0.05" value={cfg.motionDamping}
+          onChange={e => onUpdateReframeConfig?.({ ...cfg, motionDamping: Number(e.target.value) })}
+          style={{ width:'100%', accentColor: '#38BDF8', cursor:'pointer' }}
+        />
+      </div>
+
+      <div style={{ marginBottom:12 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
+          <span style={{ ...ty.propLabel }}>Deadzone Stability</span>
+          <span style={{ ...ty.niVal }}>{Math.round(cfg.deadzoneRadius * 100)}%</span>
+        </div>
+        <input
+          type="range" min="0.01" max="0.15" step="0.01" value={cfg.deadzoneRadius}
+          onChange={e => onUpdateReframeConfig?.({ ...cfg, deadzoneRadius: Number(e.target.value) })}
+          style={{ width:'100%', accentColor: '#38BDF8', cursor:'pointer' }}
+        />
+      </div>
+
+      <button
+        onClick={handleGenerateKeyframes}
+        style={{
+          width:'100%', padding:'8px', borderRadius:7, background:'linear-gradient(135deg, #0284C7, #0369A1)',
+          border:'none', color:'#fff', fontSize:11, fontWeight:600, cursor:'pointer',
+          boxShadow:'0 2px 8px rgba(2,132,199,0.3)', marginBottom:8,
+        }}
+      >
+        Auto-Track & Reframe Subject
+      </button>
+
+      {cfg.keyframes.length > 0 && (
+        <span style={{ ...ty.meta, fontSize:10, color:'#34D399', display:'block', textAlign:'center' }}>
+          ✓ {cfg.keyframes.length} tracking keyframes active
+        </span>
+      )}
     </div>
   );
 }
@@ -1609,6 +1771,10 @@ interface PropertiesPanelProps {
   onUpdateStyleLayer?: (layer: StyleLayer) => void;
   audioMix?: MultiTrackMixerConfig;
   onUpdateAudioMix?: (mix: MultiTrackMixerConfig) => void;
+  reframeConfig?: AutoReframeConfig;
+  onUpdateReframeConfig?: (cfg: AutoReframeConfig) => void;
+  aspectRatio?: TargetAspectRatio;
+  onUpdateAspectRatio?: (ar: TargetAspectRatio) => void;
   transcriptSegments?: SpeechSegment[];
   rawTranscriptSegments?: import('@/lib/mediaDb').StoredTranscriptSegment[];
   playheadS?: number;
@@ -1628,6 +1794,10 @@ function PropertiesPanelBase({
   onUpdateStyleLayer,
   audioMix = DEFAULT_MIXER_CONFIG,
   onUpdateAudioMix,
+  reframeConfig = DEFAULT_AUTOREFRAME_CONFIG,
+  onUpdateReframeConfig,
+  aspectRatio = '16:9',
+  onUpdateAspectRatio,
   transcriptSegments = [],
   rawTranscriptSegments = [],
   playheadS = 0,
@@ -1639,13 +1809,14 @@ function PropertiesPanelBase({
   onSetTab,
 }: PropertiesPanelProps) {
   const renderBody = () => {
+    if (tab === 'Canvas')      return <CanvasPanel reframeConfig={reframeConfig} onUpdateReframeConfig={onUpdateReframeConfig} aspectRatio={aspectRatio} onUpdateAspectRatio={onUpdateAspectRatio} totalS={totalS} />;
     if (tab === 'Transitions') return <TransitionsPanel clips={clips} onUpdateClips={onUpdateClips} onPushHistory={onPushHistory} onSeek={onSeek} />;
     if (tab === 'Effects')     return <EffectsPanel clips={clips} styleLayer={styleLayer} onUpdateStyleLayer={onUpdateStyleLayer} />;
     if (tab === 'Overlays')    return <OverlaysPanel clips={clips} onUpdateClips={onUpdateClips} playheadS={playheadS} totalS={totalS} onPushHistory={onPushHistory} onSetTab={onSetTab} />;
     if (tab === 'Colour')      return <ColourPanel clips={clips} styleLayer={styleLayer} onUpdateStyleLayer={onUpdateStyleLayer} />;
     if (tab === 'Audio')       return <AudioPanel audioMix={audioMix} onUpdateAudioMix={onUpdateAudioMix} playheadS={playheadS} transcriptSegments={transcriptSegments} rawTranscriptSegments={rawTranscriptSegments} />;
     if (tab === 'Uploads')     return <UploadsPanel mediaEntry={mediaEntry} projectName={projectName} totalS={totalS} />;
-    // Text / Canvas / Subtitles
+    // Text / Subtitles
     return <TextInspectorPanel clips={clips} onUpdateClips={onUpdateClips} playheadS={playheadS} totalS={totalS} onPushHistory={onPushHistory} />;
   };
 
@@ -2948,6 +3119,8 @@ export function EditorShell({
   const [styleLayer,   setStyleLayer  ] = useState<StyleLayer>({});
   const [styledDur,    setStyledDur   ] = useState<number | null>(null);
   const [audioMix,     setAudioMix    ] = useState<MultiTrackMixerConfig>(DEFAULT_MIXER_CONFIG);
+  const [aspectRatio,  setAspectRatio ] = useState<TargetAspectRatio>((mediaEntry?.aspectRatio as TargetAspectRatio) || '16:9');
+  const [reframeConfig, setReframeConfig] = useState<AutoReframeConfig>(DEFAULT_AUTOREFRAME_CONFIG);
   const [speechSegments, setSpeechSegments] = useState<SpeechSegment[]>([]);
   const [rawTranscriptSegments, setRawTranscriptSegments] = useState<import('@/lib/mediaDb').StoredTranscriptSegment[]>([]);
   const [playing,      setPlaying     ] = useState(false);
@@ -3031,20 +3204,26 @@ export function EditorShell({
   }, [liveClips, clips, totalS, mediaEntry?.filename]);
   const analysing = !(liveClips.length || clips.length);
 
+  const targetDims = ASPECT_RATIO_PRESETS[aspectRatio] || {
+    width: mediaEntry?.width ?? 1920,
+    height: mediaEntry?.height ?? 1080,
+  };
+
   /* The programme the preview renders: clips mapped onto source ranges, so
      playback shows the edit (cuts skipped, overlays composited) rather than
      the raw file. */
   const sequence = useMemo(() => buildSequence(
     (liveClips.length ? liveClips : clips) as never[],
     {
-      durationS: totalS,
-      width:     mediaEntry?.width  ?? 1920,
-      height:    mediaEntry?.height ?? 1080,
-      sourceId:  projectId ?? 'main',
-      style:     styleLayer,
+      durationS:   totalS,
+      width:       targetDims.width,
+      height:      targetDims.height,
+      sourceId:    projectId ?? 'main',
+      style:       styleLayer,
       audioMix,
+      autoReframe: reframeConfig,
     },
-  ), [liveClips, clips, totalS, mediaEntry?.width, mediaEntry?.height, projectId, styleLayer, audioMix]);
+  ), [liveClips, clips, totalS, targetDims.width, targetDims.height, projectId, styleLayer, audioMix, reframeConfig]);
 
   // When parent re-fetches clips (e.g. after navigation), sync
   useEffect(() => { setLiveClips(clips); }, [clips]);
@@ -3222,6 +3401,10 @@ export function EditorShell({
                   onUpdateStyleLayer={setStyleLayer}
                   audioMix={audioMix}
                   onUpdateAudioMix={setAudioMix}
+                  reframeConfig={reframeConfig}
+                  onUpdateReframeConfig={setReframeConfig}
+                  aspectRatio={aspectRatio}
+                  onUpdateAspectRatio={setAspectRatio}
                   transcriptSegments={speechSegments}
                   rawTranscriptSegments={rawTranscriptSegments}
                   playheadS={phS}
@@ -3235,7 +3418,7 @@ export function EditorShell({
               </div>
             </FadeUp>
             <FadeUp delay={360} style={{ flex:1, minWidth:0, display:'flex' }}>
-              <VideoPreview playheadS={phS} playing={playing} onToggle={togglePlay} onStop={stopPlay} onEnd={endPlay} onSeek={setPhS} totalS={totalS} videoUrl={videoUrl} aspectRatio={videoAspect} sequence={sequence} projectId={projectId} />
+              <VideoPreview playheadS={phS} playing={playing} onToggle={togglePlay} onStop={stopPlay} onEnd={endPlay} onSeek={setPhS} totalS={totalS} videoUrl={videoUrl} aspectRatio={aspectRatio} sequence={sequence} projectId={projectId} />
             </FadeUp>
           </div>
 

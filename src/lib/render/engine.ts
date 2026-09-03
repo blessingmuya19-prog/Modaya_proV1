@@ -17,6 +17,7 @@ import {
   fitRect, filterFor,
 } from './sequence';
 import { getTrackedPositionAt } from '@/lib/ai/motionTracker';
+import { getAutoReframeOffset } from './autoReframe';
 
 export interface EngineStats {
   drawn:      number;
@@ -385,7 +386,18 @@ export class PreviewEngine {
       if (!v) continue;
       const w = v.videoWidth, h = v.videoHeight;
       if (w && h && v.readyState >= 2) {
-        const r = fitRect(w, h, W, H, clip.transform);
+        let tr = clip.transform;
+        if (seq.autoReframe?.enabled && seq.autoReframe.keyframes.length > 0) {
+          const rf = getAutoReframeOffset(seq.autoReframe.keyframes, this._time);
+          tr = {
+            ...tr,
+            fit: 'cover',
+            offsetX: tr.offsetX + rf.offsetX,
+            offsetY: tr.offsetY + rf.offsetY,
+            scale: tr.scale * rf.scale,
+          };
+        }
+        const r = fitRect(w, h, W, H, tr);
         ctx.filter      = filterFor(clip.effects);
         ctx.globalAlpha = clip.effects.opacity;
         try { ctx.drawImage(v, r.x, r.y, r.w, r.h); this.stats.drawn++; } catch {}
