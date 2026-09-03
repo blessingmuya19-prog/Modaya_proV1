@@ -15,8 +15,8 @@ const sizeStyles = {
   lg: { padding: '0 26px', height: '48px', fontSize: '15px' },
 };
 
-const BTN_SHADOW = '0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(255,255,255,0.35), inset 0 1px 0 rgba(255,255,255,0.18)';
-const BTN_SHADOW_HOVER = '0 2px 4px rgba(0,0,0,0.35), 0 10px 26px rgba(255,255,255,0.45), inset 0 1px 0 rgba(255,255,255,0.22)';
+const BTN_SHADOW = '0 1px 2px rgba(0,0,0,0.45)';
+const BTN_SHADOW_HOVER = '0 2px 6px rgba(0,0,0,0.55)';
 const BTN_BG = 'linear-gradient(180deg,#FFFFFF,#E4E4E7)';
 const BTN_BG_HOVER = 'linear-gradient(180deg,#F4F4F5,#D4D4D8)';
 

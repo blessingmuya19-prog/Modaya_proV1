@@ -274,8 +274,8 @@ function DoneScreen({ result, filename, onDownload, onClose }: {
         <button onClick={onDownload} style={{
           flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
           padding: '13px', fontFamily: F, fontSize: 13, fontWeight: 600, letterSpacing: '-0.01em',
-          background: C.accent, color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer',
-          boxShadow: `0 4px 16px ${C.accent}44`, transition: 'all 150ms',
+          background: C.accent, color: '#09090B', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, cursor: 'pointer',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.45)', transition: 'all 150ms',
         }}
           onMouseEnter={e => { e.currentTarget.style.background = C.accentH; }}
           onMouseLeave={e => { e.currentTarget.style.background = C.accent; }}
@@ -434,10 +434,10 @@ export function ExportModal({ open, onClose, sequence = null, sourceUrl = null, 
             <button onClick={startExport} disabled={!supported || !ready} style={{
               width: '100%', padding: '14px', fontFamily: F, fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em',
               background: (!supported || !ready) ? C.b3 : C.accent,
-              color: (!supported || !ready) ? C.dim : '#fff',
-              border: 'none', borderRadius: 10,
+              color: (!supported || !ready) ? C.dim : '#09090B',
+              border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10,
               cursor: (!supported || !ready) ? 'not-allowed' : 'pointer',
-              boxShadow: (!supported || !ready) ? 'none' : `0 4px 20px ${C.accent}44`, transition: 'all 150ms',
+              boxShadow: (!supported || !ready) ? 'none' : '0 1px 2px rgba(0,0,0,0.45)', transition: 'all 150ms',
             }}>
               Export · {res} · {QUALITY_INFO[quality].label}
             </button>

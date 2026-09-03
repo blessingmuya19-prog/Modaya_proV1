@@ -119,9 +119,9 @@ export function EditorTopbar({ projectName }: { projectName: string }) {
         <button onClick={() => setExportOpen(true)} style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: '0 18px', height: 34, fontSize: 13, fontWeight: 600,
-          background: '#FAFAFA', color: '#fff', border: 'none',
+          background: '#FAFAFA', color: '#09090B', border: '1px solid rgba(255,255,255,0.12)',
           borderRadius: 8, cursor: 'pointer', flexShrink: 0,
-          boxShadow: '0 2px 12px rgba(255,255,255,0.25)',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.45)',
           transition: 'all 150ms',
         }}
           onMouseEnter={e => { e.currentTarget.style.background = '#D4D4D8'; e.currentTarget.style.transform = 'translateY(-1px)'; }}

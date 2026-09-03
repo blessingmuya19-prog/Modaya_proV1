@@ -124,7 +124,7 @@ function ModeCard({ hero, icon, title, body, chips, cta, onClick, busy, disabled
         background: TC.surface,
         border: hero ? `1.5px solid rgba(255,255,255,0.5)` : `1.5px solid ${TC.border}`,
         borderRadius: 22, padding: '28px 26px 24px', color: TC.text, fontFamily: FONT,
-        boxShadow: hero ? '0 18px 50px rgba(255,255,255,0.28)' : '0 8px 30px rgba(0,0,0,0.4)',
+        boxShadow: '0 16px 40px rgba(0,0,0,0.55)',
         display: 'flex', flexDirection: 'column', minHeight: 340, overflow: 'hidden',
         transition: 'transform 160ms ease, box-shadow 160ms ease',
       }}
@@ -144,7 +144,7 @@ function ModeCard({ hero, icon, title, body, chips, cta, onClick, busy, disabled
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: hero ? GLOW_GRADIENT : TC.surface3,
         color: hero ? '#09090B' : TC.muted,
-        boxShadow: hero ? '0 8px 20px rgba(255,255,255,0.5)' : 'none', border: hero ? 'none' : `1px solid ${TC.border2}` }}>
+        boxShadow: '0 1px 3px rgba(0,0,0,0.4)', border: hero ? 'none' : `1px solid ${TC.border2}` }}>
         {icon}
       </span>
       <span style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.025em', marginBottom: 8, position: 'relative' }}>{title}</span>

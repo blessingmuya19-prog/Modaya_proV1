@@ -19,9 +19,11 @@ export const GLOW_GRADIENT = 'linear-gradient(135deg, #FFFFFF 0%, #A1A1AA 100%)'
 /** The primary button fill — a subtle vertical white → light-grey gradient. */
 export const BTN_GRADIENT = 'linear-gradient(180deg, #FFFFFF 0%, #E4E4E7 100%)';
 export const BTN_GRADIENT_HOVER = 'linear-gradient(180deg, #F4F4F5 0%, #D4D4D8 100%)';
-export const BTN_SHADOW = '0 1px 2px rgba(0,0,0,0.5), 0 6px 18px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.6)';
-export const BTN_SHADOW_HOVER = '0 2px 4px rgba(0,0,0,0.5), 0 10px 26px rgba(255,255,255,0.14), inset 0 1px 0 rgba(255,255,255,0.7)';
-export const BTN_SHADOW_ACTIVE = '0 1px 2px rgba(0,0,0,0.5), 0 3px 10px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.5)';
+// Flat (no glow) — used for in-app primary actions. The landing page keeps its
+// own glowing buttons; these deliberately carry only a soft contact shadow.
+export const BTN_SHADOW = '0 1px 2px rgba(0,0,0,0.5)';
+export const BTN_SHADOW_HOVER = '0 2px 6px rgba(0,0,0,0.55)';
+export const BTN_SHADOW_ACTIVE = '0 1px 2px rgba(0,0,0,0.5)';
 
 export const TC = {
   /* canvas + surfaces */

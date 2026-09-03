@@ -48,7 +48,7 @@ export function Sidebar() {
             width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
             padding: '11px', fontSize: 13.5, fontWeight: 600, letterSpacing: '-0.01em', fontFamily: FONT,
             background: 'linear-gradient(180deg,#FFFFFF,#E4E4E7)', color: '#09090B', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, cursor: 'pointer',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(255,255,255,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.45)',
             transition: 'all 150ms ease',
           }}
             onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.filter = 'brightness(1.05)'; }}
