@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { CheckCircle, AlertCircle, Info, X } from 'lucide-react';
 
-const F = "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif";
+const F = "'Inter',system-ui,-apple-system,sans-serif";
 const DURATION = 4000;
 
 type ToastType = 'success' | 'error' | 'info';

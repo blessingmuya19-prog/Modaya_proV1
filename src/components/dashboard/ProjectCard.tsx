@@ -90,7 +90,7 @@ export function ProjectCard({ project }: { project: Project }) {
             </button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#737D8D' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#737D8D', fontFamily: "'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace", fontVariantNumeric: 'tabular-nums' }}>
               <Play size={10} />{project.duration}
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#737D8D' }}>
@@ -109,7 +109,7 @@ export function EmptyProjectState() {
       <div style={{ width: 56, height: 56, borderRadius: 16, background: '#111111', border: '1px solid #242424', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
         <Play size={22} style={{ color: '#737D8D' }} />
       </div>
-      <h3 style={{ fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontWeight: 600, fontSize: 16, letterSpacing: '-0.025em', color: '#F5F7FA', margin: '0 0 8px' }}>
+      <h3 style={{ fontFamily: "'Satoshi','Inter',system-ui,-apple-system,sans-serif", fontWeight: 700, fontSize: 16, letterSpacing: '-0.025em', color: '#F5F7FA', margin: '0 0 8px' }}>
         Your next edit starts here.
       </h3>
       <p style={{ fontSize: 13, color: '#737D8D', margin: '0 0 24px' }}>Create a video and let AI do the editing.</p>

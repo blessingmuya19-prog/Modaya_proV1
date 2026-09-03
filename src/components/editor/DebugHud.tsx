@@ -83,7 +83,7 @@ export default function DebugHud({ projectId }: { projectId?: string }) {
     <div style={{
       position: 'fixed', bottom: 10, left: 10, zIndex: 9999,
       background: 'rgba(0,0,0,0.88)', border: '1px solid #2a3140', borderRadius: 8,
-      padding: '10px 12px', font: "11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace",
+      padding: '10px 12px', font: "11px/1.4 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
       pointerEvents: 'none', maxWidth: 460,
     }}>
       <div style={{ color: '#FAFAFA', fontWeight: 700, marginBottom: 4 }}>MODAYA DIAGNOSTICS</div>

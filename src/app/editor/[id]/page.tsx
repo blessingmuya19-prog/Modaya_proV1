@@ -8,7 +8,7 @@ import { extractFrames, setProjectFrames, capturePoster, savePoster, loadPoster 
 import { loadFrames, saveFrames, saveMediaFile } from '@/lib/mediaDb';
 import { getProjectMedia } from '@/lib/mediaCloud';
 
-const F = "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif";
+const F = "'Inter',system-ui,-apple-system,sans-serif";
 const C = { bg: '#050505', muted: '#737D8D', accent: '#FAFAFA' };
 
 interface ProjectData {

@@ -176,7 +176,7 @@ export function AIChatPanel({ onAction }: { onAction: (id: string) => void }) {
             rows={1}
             style={{
               flex: 1, background: 'transparent', border: 'none', outline: 'none',
-              fontSize: 13, color: '#FFFFFF', fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif",
+              fontSize: 13, color: '#FFFFFF', fontFamily: "'Inter',system-ui,-apple-system,sans-serif",
               resize: 'none', lineHeight: 1.5, maxHeight: 80, overflowY: 'auto',
             }}
           />

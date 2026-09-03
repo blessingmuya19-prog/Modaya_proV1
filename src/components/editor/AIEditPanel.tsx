@@ -116,7 +116,7 @@ export function AIEditPanel({ onAction }: { onAction: (id: string, prompt?: stri
               rows={3}
               style={{
                 width: '100%', background: 'transparent', border: 'none', outline: 'none',
-                fontSize: 12, color: '#FFFFFF', fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif",
+                fontSize: 12, color: '#FFFFFF', fontFamily: "'Inter',system-ui,-apple-system,sans-serif",
                 resize: 'none', lineHeight: 1.6, boxSizing: 'border-box',
               }}
             />

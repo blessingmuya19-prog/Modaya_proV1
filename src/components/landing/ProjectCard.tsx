@@ -109,7 +109,7 @@ export function EmptyProjectState() {
       <div style={{ width: 56, height: 56, borderRadius: 16, background: '#0A0A0B', border: '1px solid #242424', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
         <Play size={22} style={{ color: '#737D8D' }} />
       </div>
-      <h3 style={{ fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontWeight: 650, fontSize: 18, letterSpacing: '-0.03em', color: '#FAFAFA', margin: '0 0 8px' }}>
+      <h3 style={{ fontFamily: "'Satoshi','Inter',system-ui,-apple-system,sans-serif", fontWeight: 650, fontSize: 18, letterSpacing: '-0.03em', color: '#FAFAFA', margin: '0 0 8px' }}>
         Your next edit starts here.
       </h3>
       <p style={{ fontSize: 13, color: '#737D8D', margin: '0 0 24px' }}>Create a video and let AI do the editing.</p>

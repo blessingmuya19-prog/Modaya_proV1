@@ -55,12 +55,12 @@ export function ProcessingScreen({ filename, onComplete }: { filename?: string; 
         <div style={{ marginBottom: 40 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#FAFAFA', animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
-            <span style={{ fontSize: 10, color: '#FAFAFA', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>AI is working</span>
+            <span style={{ fontSize: 10, color: '#FAFAFA', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', fontFamily: "'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace" }}>AI is working</span>
           </div>
-          <h2 style={{ fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontWeight: 700, fontSize: 28, letterSpacing: '-0.04em', lineHeight: 1.1, color: '#FFFFFF', margin: '0 0 6px' }}>
+          <h2 style={{ fontFamily: "'Satoshi','Inter',system-ui,-apple-system,sans-serif", fontWeight: 700, fontSize: 28, letterSpacing: '-0.04em', lineHeight: 1.1, color: '#FFFFFF', margin: '0 0 6px' }}>
             Understanding your video
           </h2>
-          {filename && <p style={{ fontSize: 13, color: '#666', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{filename}</p>}
+          {filename && <p style={{ fontSize: 12.5, color: '#888', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace" }}>{filename}</p>}
         </div>
 
         <ProgressBar value={progress} style={{ marginBottom: 40 }} />
@@ -112,7 +112,7 @@ export function ProcessingScreen({ filename, onComplete }: { filename?: string; 
           })}
         </div>
 
-        <p style={{ fontSize: 12, color: '#444', textAlign: 'center', marginTop: 40 }}>
+        <p style={{ fontSize: 11.5, color: '#666', textAlign: 'center', marginTop: 40, fontFamily: "'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace", letterSpacing: '0.01em' }}>
           Average processing time: 90 seconds
         </p>
       </div>

@@ -14,7 +14,7 @@ const C = {
   text:   '#F5F7FA', sec: '#A5ADBA', muted: '#737D8D', dim: '#4D5664',
   green:  '#34D399', greenBg: 'rgba(5,150,105,0.12)', greenBorder: 'rgba(52,211,153,0.25)',
 };
-const F = "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif";
+const F = "'Inter',system-ui,-apple-system,sans-serif";
 
 /* ── Export options ── */
 type Format   = 'MP4' | 'MOV' | 'WebM';

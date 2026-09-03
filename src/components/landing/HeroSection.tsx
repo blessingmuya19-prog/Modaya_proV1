@@ -103,7 +103,7 @@ export function HeroSection() {
       <div style={{ position:'relative', zIndex:10, maxWidth:'min(860px,90vw)', margin:'0 auto', padding:'clamp(100px,14vw,160px) clamp(14px,4vw,32px) 0', textAlign:'center' }}>
 
         {/* Headline */}
-        <h1 style={{ fontFamily:"'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontWeight:800, fontSize:'clamp(36px,7vw,76px)', letterSpacing:'-0.045em', lineHeight:1.05, color:'#FAFAFA', margin:'0 0 20px', animation:'slide-up 0.6s cubic-bezier(0.22,1,0.36,1) 0.05s both' }}>
+        <h1 style={{ fontFamily:"'Satoshi','Inter',system-ui,-apple-system,sans-serif", fontWeight:800, fontSize:'clamp(36px,7vw,76px)', letterSpacing:'-0.045em', lineHeight:1.05, color:'#FAFAFA', margin:'0 0 20px', animation:'slide-up 0.6s cubic-bezier(0.22,1,0.36,1) 0.05s both' }}>
           {uploadState === 'empty'
             ? <>Your videos,<br /><span style={{ color:'#71717A' }}>edited by AI.</span></>
             : <>Your footage<br /><span style={{ color:'#71717A' }}>is ready.</span></>
@@ -190,8 +190,8 @@ export function HeroSection() {
                   <div>
                     <p style={{ fontSize:13, color:'#71717A', margin:'0 0 10px', lineHeight:1.6 }}>{DEMO_PROMPT}</p>
                     <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
-                      {demoSteps.map((s, i) => <div key={i} style={{ display:'flex', alignItems:'center', gap:7, animation:'step-in 0.28s ease both' }}><span style={{ fontSize:11, color:'#71717A', fontFamily:"'Uni Neue','Manrope',system-ui,-apple-system,sans-serif" }}>{s[0]}</span><span style={{ fontSize:12, color:'#A1A1AA' }}>{s.slice(2)}</span></div>)}
-                      {promptPhase === 'done' && <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:4, animation:'edit-ready 0.4s ease both' }}><span style={{ fontSize:12, fontWeight:700, color:'#FAFAFA' }}>✦ Edit ready</span><span style={{ fontSize:10, color:'#D4D4D8', background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.22)', padding:'2px 8px', borderRadius:9999, fontWeight:600 }}>3:42 · was 42:18</span></div>}
+                      {demoSteps.map((s, i) => <div key={i} style={{ display:'flex', alignItems:'center', gap:7, animation:'step-in 0.28s ease both' }}><span style={{ fontSize:11, color:'#71717A', fontFamily:"'Inter',system-ui,-apple-system,sans-serif" }}>{s[0]}</span><span style={{ fontSize:12, color:'#A1A1AA' }}>{s.slice(2)}</span></div>)}
+                      {promptPhase === 'done' && <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:4, animation:'edit-ready 0.4s ease both' }}><span style={{ fontSize:12, fontWeight:700, color:'#FAFAFA' }}>✦ Edit ready</span><span style={{ fontSize:10, color:'#D4D4D8', background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.22)', padding:'2px 8px', borderRadius:9999, fontWeight:600, fontFamily:"'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace", fontVariantNumeric:'tabular-nums' }}>3:42 · was 42:18</span></div>}
                     </div>
                   </div>
                 )}

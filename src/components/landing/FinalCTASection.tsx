@@ -28,7 +28,7 @@ export function FinalCTASection() {
           <span style={{ fontSize:11, color:'#D4D4D8', fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase' }}>Get started free</span>
         </div>
 
-        <h2 style={{ fontFamily:"'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontWeight:800, fontSize:'clamp(36px,7vw,72px)', letterSpacing:'-0.055em', lineHeight:0.95, margin:'0 0 24px', color:'#FAFAFA' }}>
+        <h2 style={{ fontFamily:"'Satoshi','Satoshi','Inter',system-ui,-apple-system,sans-serif", fontWeight:800, fontSize:'clamp(36px,7vw,72px)', letterSpacing:'-0.055em', lineHeight:0.95, margin:'0 0 24px', color:'#FAFAFA' }}>
           Upload a video.<br />
           <span style={{ color:'#D4D4D8' }}>We&apos;ll handle the edit.</span>
         </h2>
@@ -54,7 +54,7 @@ export function FinalCTASection() {
           {SOCIAL_PROOF.map((s, i) => (
             <React.Fragment key={i}>
               <div style={{ padding:'0 32px', textAlign:'center' }}>
-                <p style={{ fontFamily:"'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontSize:'clamp(22px,3.5vw,32px)', fontWeight:800, color:'#FAFAFA', letterSpacing:'-0.04em', margin:'0 0 4px' }}>{s.stat}</p>
+                <p style={{ fontFamily:"'Satoshi','Inter',system-ui,-apple-system,sans-serif", fontSize:'clamp(22px,3.5vw,32px)', fontWeight:800, color:'#FAFAFA', letterSpacing:'-0.04em', margin:'0 0 4px' }}>{s.stat}</p>
                 <p style={{ fontSize:12, color:'#A1A1AA', margin:0 }}>{s.label}</p>
               </div>
               {i < SOCIAL_PROOF.length - 1 && <div style={{ width:1, height:36, background:'#3F3F46' }} />}

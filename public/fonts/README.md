@@ -1,17 +1,30 @@
-# Brand font: Uni Neue
+# Modaya type system
 
-Uni Neue is a commercial typeface by Fontfabric. It is NOT bundled here.
+Three tiers:
 
-To activate it, drop these licensed WOFF2 files into this folder
-(`public/fonts/`):
+| Tier        | Font            | Used for                              | Loaded from              |
+|-------------|-----------------|---------------------------------------|--------------------------|
+| **Display** | **Satoshi Bold**| Logo + major headlines                | Fontshare CDN (free)     |
+| **UI/body** | **Inter**       | All UI text + body copy (default)     | Google Fonts (free)      |
+| **Mono**    | **JetBrains Mono** | Timestamps / technical / processing | Google Fonts (free)      |
 
-  UniNeue-Regular.woff2   (weight 400)
-  UniNeue-Bold.woff2      (weight 700)
-  UniNeue-Heavy.woff2     (weight 800)
+All three are **free for commercial use**, so no licensed files are required —
+they load from CDN (`api.fontshare.com` for Satoshi, `fonts.googleapis.com` for
+Inter + JetBrains Mono). Nothing needs to be placed in this folder.
 
-The `@font-face` rules in `src/app/globals.css` reference these exact
-paths. Until the files are present, the UI automatically falls back to
-**Manrope** (loaded from Google Fonts), a free geometric sans-serif with
-a very similar look and feel.
+## Optional: self-host Satoshi
 
-Licenses: https://fontfabric.com/uni-neue/
+If you prefer not to depend on the Fontshare CDN for the display face, download
+Satoshi (free) from <https://www.fontshare.com/fonts/satoshi> and drop these
+WOFF2 files here:
+
+    Satoshi-Bold.woff2    (weight 700)
+    Satoshi-Black.woff2   (weight 900)
+
+The `@font-face` rules in `src/app/globals.css` reference these exact paths and
+will pick up the local files automatically (they take precedence over the CDN
+copy thanks to `font-display: swap`). Remove the Fontshare `<link>` from
+`src/app/layout.tsx` if you fully self-host.
+
+Inter and JetBrains Mono can likewise be self-hosted via Fontsource
+(`@fontsource/inter`, `@fontsource/jetbrains-mono`) if desired.

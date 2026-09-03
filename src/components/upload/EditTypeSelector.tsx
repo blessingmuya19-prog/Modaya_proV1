@@ -55,7 +55,7 @@ export function EditTypeSelector({ selected, onSelect }: { selected: string; onS
             </div>
 
             <div>
-              <p style={{ fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontWeight: 650, fontSize: 13, color: isSelected ? '#FFFFFF' : '#A1A1A1', margin: '0 0 2px' }}>
+              <p style={{ fontFamily: "'Inter',system-ui,-apple-system,sans-serif", fontWeight: 650, fontSize: 13, color: isSelected ? '#FFFFFF' : '#A1A1A1', margin: '0 0 2px' }}>
                 {type.title}
               </p>
               <p style={{ fontSize: 11, color: '#666', margin: 0 }}>{type.subtitle}</p>

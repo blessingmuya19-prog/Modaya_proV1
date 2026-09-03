@@ -57,7 +57,7 @@ export function HowItWorksSection() {
             <span style={{ width:5, height:5, borderRadius:'50%', background:'#D4D4D8', display:'inline-block' }} />
             <span style={{ fontSize:11, color:'#D4D4D8', fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase' }}>How it works</span>
           </div>
-          <h2 style={{ fontFamily:"'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontWeight:700, fontSize:'clamp(30px,5vw,52px)', letterSpacing:'-0.025em', lineHeight:1.05, color:'#FAFAFA', margin:'0 0 18px' }}>
+          <h2 style={{ fontFamily:"'Satoshi','Satoshi','Inter',system-ui,-apple-system,sans-serif", fontWeight:700, fontSize:'clamp(30px,5vw,52px)', letterSpacing:'-0.025em', lineHeight:1.05, color:'#FAFAFA', margin:'0 0 18px' }}>
             Three steps.<br />
             <span style={{ color:'#D4D4D8' }}>No learning curve.</span>
           </h2>
@@ -85,10 +85,10 @@ export function HowItWorksSection() {
                     <div style={{ width:52, height:52, borderRadius:14, background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.18)', display:'flex', alignItems:'center', justifyContent:'center' }}>
                       <Icon size={22} color="#D4D4D8" strokeWidth={1.6} />
                     </div>
-                    <span style={{ fontFamily:"'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontSize:48, fontWeight:800, color:'rgba(255,255,255,0.18)', letterSpacing:'-0.06em', lineHeight:1 }}>{step.number}</span>
+                    <span style={{ fontFamily:"'Satoshi','Inter',system-ui,-apple-system,sans-serif", fontSize:48, fontWeight:800, color:'rgba(255,255,255,0.18)', letterSpacing:'-0.06em', lineHeight:1 }}>{step.number}</span>
                   </div>
 
-                  <h3 style={{ fontFamily:"'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontSize:22, fontWeight:700, color:'#FAFAFA', letterSpacing:'-0.03em', margin:'0 0 12px' }}>{step.title}</h3>
+                  <h3 style={{ fontFamily:"'Satoshi','Satoshi','Inter',system-ui,-apple-system,sans-serif", fontSize:22, fontWeight:700, color:'#FAFAFA', letterSpacing:'-0.03em', margin:'0 0 12px' }}>{step.title}</h3>
                   <p style={{ fontSize:15, color:'#D4D4D8', lineHeight:1.65, margin:'0 0 16px', flex:1 }}>{step.body}</p>
                   <p style={{ fontSize:12, color:'#A1A1AA', margin:0, fontStyle:'italic', lineHeight:1.5 }}>{step.detail}</p>
                 </div>

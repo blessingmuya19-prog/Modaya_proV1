@@ -36,7 +36,7 @@ import { parseTimeRange } from '@/lib/referenceLink';
 import { GlowButton, GLOW_GRADIENT } from '../ui/theme';
 import type { EditorClip } from '../editor/EditorShell';
 
-const F = "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif";
+const F = "'Inter',system-ui,-apple-system,sans-serif";
 /**
  * Dark, premium SaaS theme. `surface`/`s2`/`s3` are the charcoal raised
  * panels and wells; `media` is the near-black video canvas (darkest of all).
@@ -839,7 +839,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           <div style={{ borderLeft: `1px solid ${C.b}`, display: 'flex', flexDirection: 'column', minHeight: 0, background: C.surface }}>
             <div style={{ padding: '16px 18px', borderBottom: `1px solid ${C.b}`, display: 'flex', alignItems: 'center', gap: 8 }}>
               <Sparkles size={17} color={C.accent} />
-              <span style={{ fontWeight: 700, fontSize: 14 }}>Modaya</span>
+              <span style={{ fontWeight: 900, fontSize: 15, fontFamily: "'Satoshi','Inter',system-ui,-apple-system,sans-serif", letterSpacing: '-0.02em' }}>Modaya</span>
               <span style={{ marginLeft: 'auto', color: C.dim, fontSize: 11 }}>Tell it what to change</span>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>

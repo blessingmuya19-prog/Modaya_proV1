@@ -6,7 +6,7 @@ import { useProjects, fmtDuration, fmtRelative, ProjectSummary } from '@/lib/use
 import { capturePoster, savePoster, loadPoster } from '@/lib/thumbnailStore';
 import { getMedia } from '@/lib/videoStore';
 
-const F = "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif";
+const F = "'Inter',system-ui,-apple-system,sans-serif";
 const C = {
   bg: '#000000', surface: '#0A0A0B', s2: '#131316', s3: '#1C1C21',
   b: '#27272A', b2: '#3F3F46', b3: '#3F3F46',

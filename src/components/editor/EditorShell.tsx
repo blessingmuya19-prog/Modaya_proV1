@@ -65,7 +65,7 @@ const C = {
 };
 
 /* ── Typography foundation ── */
-const F = "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif";
+const F = "'Inter',system-ui,-apple-system,sans-serif";
 
 /*
  * ty — single source of truth for all editor type styles.
@@ -551,7 +551,7 @@ function PropertiesPanelBase({ tab }:{ tab:string }) {
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
           background:C.s3, border:`1px solid ${C.b2}`, borderRadius:6, padding:'6px 9px',
           cursor:'pointer', marginBottom:6 }}>
-          <span style={{ ...ty.propVal }}>Uni Neue</span>
+          <span style={{ ...ty.propVal }}>Satoshi Bold</span>
           <ChevronDown size={10} color={C.muted} />
         </div>
         <div style={{ display:'flex', gap:5, marginBottom:6 }}>
@@ -1764,7 +1764,7 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
               <span style={{ fontSize:11, color:tr.color, flexShrink:0, lineHeight:1 }}>{tr.icon}</span>
               <span style={{ fontSize:10, fontWeight:700, color:'#4a4a4a',
                 textTransform:'uppercase', letterSpacing:'0.07em',
-                fontFamily:"'Uni Neue','Manrope',system-ui,-apple-system,sans-serif",
+                fontFamily:"'Inter',system-ui,-apple-system,sans-serif",
                 whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{tr.label}</span>
             </div>
           ))}

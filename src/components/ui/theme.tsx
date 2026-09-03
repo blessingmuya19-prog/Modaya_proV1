@@ -11,7 +11,12 @@
  */
 import React from 'react';
 
-export const FONT = "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif";
+/** UI + body text. */
+export const FONT = "'Inter',system-ui,-apple-system,sans-serif";
+/** Logo + major headlines (Satoshi Bold). */
+export const FONT_DISPLAY = "'Satoshi','Inter',system-ui,-apple-system,sans-serif";
+/** Technical details / timestamps / processing. */
+export const FONT_MONO = "'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace";
 
 /** Neutral light gradient used for small icon tiles / accents. */
 export const GLOW_GRADIENT = 'linear-gradient(135deg, #FFFFFF 0%, #A1A1AA 100%)';

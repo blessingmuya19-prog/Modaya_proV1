@@ -52,7 +52,7 @@ export function UploadZone({ onFileSelect }: { onFileSelect: (file: File) => voi
       </div>
 
       <p style={{
-        fontFamily: "'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontWeight: 650, fontSize: 18,
+        fontFamily: "'Inter',system-ui,-apple-system,sans-serif", fontWeight: 650, fontSize: 18,
         color: dragging ? '#FAFAFA' : '#FFFFFF',
         margin: '0 0 8px', letterSpacing: '-0.025em',
         transition: 'color 200ms',

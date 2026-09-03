@@ -163,11 +163,11 @@ export function Timeline() {
         <div style={{ width:1, height:18, background:'#141414', margin:'0 4px' }} />
 
         {/* Timecode */}
-        <span style={{ fontFamily:"'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontSize:12, color:'#666', letterSpacing:'0.06em', minWidth:44 }}>
+        <span style={{ fontFamily:"'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace", fontSize:12, color:'#666', letterSpacing:'0.06em', minWidth:44 }}>
           {fmt(playheadS)}
         </span>
         <span style={{ fontSize:11, color:'#222' }}>/</span>
-        <span style={{ fontFamily:"'Uni Neue','Manrope',system-ui,-apple-system,sans-serif", fontSize:11, color:'#2a2a2a', minWidth:36 }}>
+        <span style={{ fontFamily:"'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace", fontSize:11, color:'#2a2a2a', minWidth:36 }}>
           {fmt(TOTAL_S)}
         </span>
 
@@ -248,7 +248,7 @@ export function Timeline() {
                 <div key={i} style={{ position:'absolute', left:t.s * zoom, top:0, bottom:0, display:'flex', flexDirection:'column', alignItems:'center' }}>
                   <div style={{ width:1, height: t.major ? 10 : 5, background: t.major ? '#2a2a2a' : '#1a1a1a', marginTop:'auto' }} />
                   {t.major && (
-                    <span style={{ position:'absolute', bottom:2, left:3, fontSize:9, color:'#333', whiteSpace:'nowrap', fontFamily:"'Uni Neue','Manrope',system-ui,-apple-system,sans-serif" }}>
+                    <span style={{ position:'absolute', bottom:2, left:3, fontSize:9, color:'#333', whiteSpace:'nowrap', fontFamily:"'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace" }}>
                       {fmt(t.s)}
                     </span>
                   )}
@@ -369,7 +369,7 @@ export function Timeline() {
                 {/* Hover tooltip */}
                 {hoveredCut === cut.id && (
                   <div style={{ position:'absolute', top:-52, left:'50%', transform:'translateX(-50%)', background:'#111', border:'1px solid #222', borderRadius:8, padding:'8px 12px', whiteSpace:'nowrap', boxShadow:'0 8px 30px rgba(0,0,0,0.7)', zIndex:100, pointerEvents:'none' }}>
-                    <p style={{ fontSize:11, fontWeight:600, color:'#FF5252', margin:'0 0 2px' }}>AI removed · {fmt(cut.end - cut.start)} sec</p>
+                    <p style={{ fontSize:11, fontWeight:600, color:'#FF5252', margin:'0 0 2px', fontFamily:"'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace" }}>AI removed · {fmt(cut.end - cut.start)} sec</p>
                     <p style={{ fontSize:10, color:'#555', margin:0 }}>{cut.reason}</p>
                     <div style={{ position:'absolute', bottom:-5, left:'50%', transform:'translateX(-50%)', width:8, height:8, background:'#111', border:'1px solid #222', borderBottom:'none', borderRight:'none', rotate:'225deg' }} />
                   </div>

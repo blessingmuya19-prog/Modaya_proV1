@@ -101,7 +101,7 @@ export function VideoPlayer() {
             <SkipForward size={14} />
           </button>
 
-          <span style={{ fontSize: 11, color: '#666', marginLeft: 4 }}>{fmt(currentSecs)} / 3:32</span>
+          <span style={{ fontSize: 11, color: '#666', marginLeft: 4, fontFamily: "'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace", fontVariantNumeric: 'tabular-nums', letterSpacing: '0.02em' }}>{fmt(currentSecs)} / 3:32</span>
 
           <div style={{ flex: 1 }} />
 
