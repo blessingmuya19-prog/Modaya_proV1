@@ -72,13 +72,13 @@ export function measureFrame(ctx: CanvasRenderingContext2D, t: number): FrameSam
  *  sampled and frame times are rebased to the window start (so the resulting
  *  profile describes that section alone). */
 export async function sampleFrames(
-  url: string, durationS: number, fps = 4, maxFrames = 480,
+  url: string, durationS: number, fps = 1, maxFrames = 45,
   onProgress?: (p: number) => void,
   range?: { startS: number; lenS: number },
 ): Promise<FrameSample[]> {
   const windowLen = range?.lenS ?? durationS;
   const rangeStart = range?.startS ?? 0;
-  const count = Math.max(8, Math.min(maxFrames, Math.round(windowLen * fps)));
+  const count = Math.max(6, Math.min(maxFrames, Math.round(windowLen * fps)));
   const step  = windowLen / count;
 
   const video = document.createElement('video');
@@ -103,24 +103,41 @@ export async function sampleFrames(
   });
 
   const frames: FrameSample[] = [];
+  const startTime = Date.now();
+  const MAX_SAMPLE_TIME_MS = 10000; // 10s hard cutoff
+
   try {
     video.load();
-    if (!(await once('loadeddata', 15000))) return [];
+    if (!(await once('loadeddata', 8000))) return [];
 
     for (let i = 0; i < count; i++) {
+      if (Date.now() - startTime > MAX_SAMPLE_TIME_MS) break;
+
       // Seek to the absolute position in the media; store the relative
       // (within-window) time so cut times come out relative to the section.
       const rel = Math.min(windowLen - 0.05, i * step);
       video.currentTime = rangeStart + rel;
-      if (!(await once('seeked', 5000))) break;
+      if (!(await once('seeked', 2000))) {
+        continue;
+      }
       try {
         ctx.drawImage(video, 0, 0, SAMPLE_W, SAMPLE_H);
         frames.push(measureFrame(ctx, rel));
       } catch { /* tainted or not ready — skip */ }
-      if (i % 8 === 0) onProgress?.(i / count);
+      
+      if (i % 4 === 0) {
+        onProgress?.(i / count);
+        // Yield to browser event loop to prevent watchdog tab crash
+        await new Promise(r => setTimeout(r, 4));
+      }
     }
   } finally {
-    video.src = ''; video.removeAttribute('src');
+    try {
+      video.pause();
+      video.src = '';
+      video.removeAttribute('src');
+      video.load();
+    } catch { /* cleanup */ }
   }
   onProgress?.(1);
   return frames;
@@ -148,11 +165,21 @@ export async function analyseAudio(file: Blob): Promise<AudioEnvelope | null> {
     : new Ctor!();
 
   try {
-    const buf   = await file.arrayBuffer();
-    const audio = await ctx.decodeAudioData(buf);
-    const ch    = audio.getChannelData(0);
-    const hopS  = 0.05;
-    const hop   = Math.max(1, Math.round(audio.sampleRate * hopS));
+    // If file is very large (> 40MB), slice to avoid huge arrayBuffer memory allocation
+    const safeBlob = file.size > 40 * 1024 * 1024 ? file.slice(0, 40 * 1024 * 1024) : file;
+    const buf = await safeBlob.arrayBuffer();
+
+    // Decode with timeout guard so large audio files don't hang the worker
+    const audioPromise = ctx.decodeAudioData(buf);
+    const timeoutPromise = new Promise<null>((_, reject) =>
+      setTimeout(() => reject(new Error('decodeAudioData timeout')), 8000)
+    );
+    const audio = await Promise.race([audioPromise, timeoutPromise]);
+    if (!audio) return null;
+
+    const ch = audio.getChannelData(0);
+    const hopS = 0.05;
+    const hop = Math.max(1, Math.round(audio.sampleRate * hopS));
 
     const rms: number[] = [];
     for (let i = 0; i + hop <= ch.length; i += hop) {
