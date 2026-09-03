@@ -1,15 +1,22 @@
 /**
- * Modaya Typography System
- * Primary: Inter Tight — used for ALL UI text
- * Secondary: Inter — only for long-form body copy / dense descriptions
+ * Modaya Typography System — three tiers
+ * · display: Satoshi Bold — logo + major headlines
+ * · sans:    Inter       — UI + body text (default)
+ * · mono:    JetBrains Mono — technical details / timestamps / processing
  *
  * Design intent: modern, compact, premium, AI-native.
  * Feels like Lovable / Suno / OpusClip — not Premiere Pro.
  */
 
 export const FONT = {
-  tight:  "'Inter Tight', sans-serif",
-  body:   "'Inter', sans-serif",
+  /** Satoshi — logo + major headlines. */
+  display: "'Satoshi','Inter',system-ui,-apple-system,sans-serif",
+  /** Inter — UI text. */
+  tight:   "'Inter',system-ui,-apple-system,sans-serif",
+  /** Inter — body copy. */
+  body:    "'Inter',system-ui,-apple-system,sans-serif",
+  /** JetBrains Mono — timestamps / technical / processing. */
+  mono:    "'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace",
 } as const;
 
 export const SIZE = {
@@ -81,7 +88,7 @@ export const TEXT = {
   muted:     '#737D8D',
   dim:       '#4D5664',
   active:    '#FFFFFF',
-  accent:    '#4F8CFF',
+  accent:    '#FAFAFA',
   placeholder: '#737D8D',
 } as const;
 
@@ -90,41 +97,41 @@ export const TEXT = {
 export const T = {
   /* Marketing */
   heroXL: {
-    fontFamily: FONT.tight, fontSize: SIZE.heroXL,
+    fontFamily: FONT.display, fontSize: SIZE.heroXL,
     fontWeight: WEIGHT.bold, letterSpacing: TRACKING.tightest,
     lineHeight: LINE.heading, color: TEXT.active,
   },
   sectionH: {
-    fontFamily: FONT.tight, fontSize: SIZE.sectionH,
+    fontFamily: FONT.display, fontSize: SIZE.sectionH,
     fontWeight: WEIGHT.bold, letterSpacing: TRACKING.tight,
     lineHeight: LINE.heading, color: TEXT.active,
   },
   stat: {
-    fontFamily: FONT.tight, fontSize: SIZE.stat,
+    fontFamily: FONT.display, fontSize: SIZE.stat,
     fontWeight: WEIGHT.bold, letterSpacing: TRACKING.tight,
     lineHeight: LINE.heading, color: TEXT.active,
   },
 
   /* App headings */
   h1: {
-    fontFamily: FONT.tight, fontSize: SIZE.h1,
+    fontFamily: FONT.display, fontSize: SIZE.h1,
     fontWeight: WEIGHT.bold, letterSpacing: TRACKING.tight,
     lineHeight: LINE.compact, color: TEXT.active,
   },
   h2: {
-    fontFamily: FONT.tight, fontSize: SIZE.h2,
+    fontFamily: FONT.display, fontSize: SIZE.h2,
     fontWeight: WEIGHT.semibold, letterSpacing: TRACKING.ui,
     lineHeight: LINE.compact, color: TEXT.active,
   },
   h3: {
-    fontFamily: FONT.tight, fontSize: SIZE.h3,
+    fontFamily: FONT.display, fontSize: SIZE.h3,
     fontWeight: WEIGHT.semibold, letterSpacing: TRACKING.ui,
     lineHeight: LINE.compact, color: TEXT.active,
   },
 
   /* Editor UI */
   projectTitle: {
-    fontFamily: FONT.tight, fontSize: SIZE.projectTitle,
+    fontFamily: FONT.display, fontSize: SIZE.projectTitle,
     fontWeight: WEIGHT.semibold, letterSpacing: TRACKING.ui,
     lineHeight: LINE.compact, color: TEXT.primary,
   },
@@ -154,7 +161,7 @@ export const T = {
     lineHeight: LINE.timeline, color: TEXT.primary,
   },
   timelineMeta: {
-    fontFamily: FONT.tight, fontSize: SIZE.timelineMeta,
+    fontFamily: FONT.mono, fontSize: SIZE.timelineMeta,
     fontWeight: WEIGHT.medium, letterSpacing: TRACKING.timeline,
     lineHeight: LINE.timeline, color: TEXT.muted,
   },
@@ -179,7 +186,7 @@ export const T = {
     lineHeight: LINE.body, color: TEXT.primary,
   },
   videoMeta: {
-    fontFamily: FONT.tight, fontSize: SIZE.videoMeta,
+    fontFamily: FONT.mono, fontSize: SIZE.videoMeta,
     fontWeight: WEIGHT.medium, letterSpacing: TRACKING.timeline,
     lineHeight: LINE.timeline, color: TEXT.secondary,
     fontVariantNumeric: 'tabular-nums' as const,

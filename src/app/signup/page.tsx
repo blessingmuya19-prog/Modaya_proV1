@@ -6,12 +6,12 @@ import { Logo } from '@/components/ui/Logo';
 import { apiRegister } from '@/lib/useAuth';
 import { Eye, EyeOff, ArrowRight, Check } from 'lucide-react';
 
-const F = "'Inter Tight', Inter, system-ui, sans-serif";
+const F = "'Inter',system-ui,-apple-system,sans-serif";
 const C = {
   bg: '#050505', surface: '#070707', s2: '#0a0a0a', s3: '#0e0e0e',
   b: '#111', b2: '#141414', b3: '#1a1a1a',
   text: '#F5F7FA', sec: '#A5ADBA', muted: '#737D8D', dim: '#4D5664',
-  accent: '#4F8CFF', accentH: '#6EA3FF', err: '#f87171', green: '#34D399',
+  accent: '#FAFAFA', accentH: '#D4D4D8', err: '#f87171', green: '#34D399',
 };
 
 const PERKS = [

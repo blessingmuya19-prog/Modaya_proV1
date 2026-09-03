@@ -6,20 +6,20 @@ import { useProjects, fmtDuration, fmtRelative, ProjectSummary } from '@/lib/use
 import { capturePoster, savePoster, loadPoster } from '@/lib/thumbnailStore';
 import { getMedia } from '@/lib/videoStore';
 
-const F = "'Inter Tight', Inter, system-ui, sans-serif";
+const F = "'Inter',system-ui,-apple-system,sans-serif";
 const C = {
-  bg: '#050505', surface: '#070707', s2: '#0a0a0a', s3: '#0e0e0e',
-  b: '#111', b2: '#141414', b3: '#1a1a1a',
-  text: '#F5F7FA', sec: '#A5ADBA', muted: '#737D8D', dim: '#4D5664',
-  accent: '#4F8CFF', accentH: '#6EA3FF', danger: '#f87171', dangerBg: 'rgba(248,113,113,0.08)',
+  bg: '#000000', surface: '#0A0A0B', s2: '#131316', s3: '#1C1C21',
+  b: '#27272A', b2: '#3F3F46', b3: '#3F3F46',
+  text: '#FAFAFA', sec: '#D4D4D8', muted: '#A1A1AA', dim: '#71717A',
+  accent: '#FAFAFA', accentH: '#D4D4D8', danger: '#F87171', dangerBg: 'rgba(248,113,113,0.10)',
 };
 
 const STATUS_BADGE: Record<string, { bg: string; color: string; label: string }> = {
-  ready:      { bg: 'rgba(52,211,153,0.1)',  color: '#34D399', label: 'Ready'      },
-  processing: { bg: 'rgba(79,140,255,0.1)',  color: '#4F8CFF', label: 'Processing' },
-  uploading:  { bg: 'rgba(79,140,255,0.07)', color: '#4F8CFF', label: 'Uploading'  },
-  draft:      { bg: 'rgba(115,125,141,0.1)', color: '#737D8D', label: 'Draft'      },
-  failed:     { bg: 'rgba(248,113,113,0.1)', color: '#f87171', label: 'Failed'     },
+  ready:      { bg: 'rgba(52,211,153,0.12)',  color: '#34D399', label: 'Ready'      },
+  processing: { bg: 'rgba(255,255,255,0.14)',  color: '#D4D4D8', label: 'Processing' },
+  uploading:  { bg: 'rgba(255,255,255,0.10)',  color: '#D4D4D8', label: 'Uploading'  },
+  draft:      { bg: 'rgba(139,149,173,0.14)', color: '#A1A1AA', label: 'Draft'      },
+  failed:     { bg: 'rgba(248,113,113,0.12)', color: '#F87171', label: 'Failed'     },
 };
 
 const filters = ['all', 'ready', 'processing', 'draft'] as const;
@@ -69,11 +69,11 @@ function DeleteConfirmModal({
           top: '50%', left: '50%',
           transform: 'translate(-50%, -50%)',
           width: '100%', maxWidth: 420,
-          background: '#0c0c0c',
-          border: '1px solid #1e1e1e',
+          background: '#0A0A0B',
+          border: '1px solid #27272A',
           borderRadius: 16,
           padding: '28px 28px 24px',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
+          boxShadow: '0 28px 70px rgba(0,0,0,0.6)',
           animation: 'scaleIn 140ms cubic-bezier(0.34,1.56,0.64,1)',
           fontFamily: F,
         }}
@@ -114,12 +114,12 @@ function DeleteConfirmModal({
             disabled={deleting}
             style={{
               flex: 1, height: 40, fontFamily: F, fontSize: 14, fontWeight: 600,
-              letterSpacing: '-0.01em', background: '#141414', color: C.sec,
-              border: '1px solid #1e1e1e', borderRadius: 10, cursor: 'pointer',
+              letterSpacing: '-0.01em', background: '#1C1C21', color: C.sec,
+              border: '1px solid #27272A', borderRadius: 10, cursor: 'pointer',
               transition: 'all 120ms', opacity: deleting ? 0.5 : 1,
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#1a1a1a'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#141414'; }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#3F3F46'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#1C1C21'; }}
           >
             Cancel
           </button>
@@ -129,15 +129,15 @@ function DeleteConfirmModal({
             style={{
               flex: 1, height: 40, fontFamily: F, fontSize: 14, fontWeight: 600,
               letterSpacing: '-0.01em',
-              background: deleting ? '#1a0f0f' : 'rgba(248,113,113,0.12)',
+              background: deleting ? 'rgba(248,113,113,0.08)' : 'rgba(248,113,113,0.14)',
               color: deleting ? C.dim : C.danger,
-              border: `1px solid ${deleting ? '#1e1e1e' : 'rgba(248,113,113,0.3)'}`,
+              border: `1px solid ${deleting ? '#27272A' : 'rgba(248,113,113,0.4)'}`,
               borderRadius: 10, cursor: deleting ? 'not-allowed' : 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
               transition: 'all 120ms',
             }}
-            onMouseEnter={e => { if (!deleting) { e.currentTarget.style.background = 'rgba(248,113,113,0.2)'; e.currentTarget.style.borderColor = 'rgba(248,113,113,0.5)'; } }}
-            onMouseLeave={e => { if (!deleting) { e.currentTarget.style.background = 'rgba(248,113,113,0.12)'; e.currentTarget.style.borderColor = 'rgba(248,113,113,0.3)'; } }}
+            onMouseEnter={e => { if (!deleting) { e.currentTarget.style.background = 'rgba(248,113,113,0.22)'; e.currentTarget.style.borderColor = 'rgba(248,113,113,0.6)'; } }}
+            onMouseLeave={e => { if (!deleting) { e.currentTarget.style.background = 'rgba(248,113,113,0.14)'; e.currentTarget.style.borderColor = 'rgba(248,113,113,0.4)'; } }}
           >
             {deleting
               ? <><div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} /> Deleting…</>
@@ -363,7 +363,10 @@ function ProjectCard({ project, viewMode, onRequestDelete, onRename }: {
   );
 
   return isReady ? (
-    <Link href={`/editor/${project.id}`} style={{ textDecoration: 'none' }}>{card}</Link>
+    // Open the simple Studio experience (Lovable-for-video), not the
+    // advanced pro editor — that stays one "Advanced"/"Take full control"
+    // click away from inside the Studio.
+    <Link href={`/studio/${project.id}`} style={{ textDecoration: 'none' }}>{card}</Link>
   ) : card;
 }
 
@@ -381,14 +384,15 @@ function EmptyState({ filtered }: { filtered: boolean }) {
         {filtered ? 'No projects match that filter' : 'No projects yet'}
       </p>
       <p style={{ fontFamily: F, fontSize: 13, color: C.muted, margin: '0 0 24px' }}>
-        {filtered ? 'Try a different filter.' : 'Upload your first video to get started.'}
+        {filtered ? 'Try a different filter.' : 'Create your first video to get started.'}
       </p>
       {!filtered && (
-        <Link href="/upload" style={{ textDecoration: 'none' }}>
-          <button style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 18px', height: 38,
-            fontFamily: F, fontSize: 13, fontWeight: 600, background: C.accent, color: '#fff',
-            border: 'none', borderRadius: 9, cursor: 'pointer' }}>
-            <Plus size={13}/> Upload video
+        <Link href="/new" style={{ textDecoration: 'none' }}>
+          <button style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 22px', height: 42,
+            fontFamily: F, fontSize: 14, fontWeight: 600,
+            background: 'linear-gradient(180deg,#FFFFFF,#E4E4E7)', color: '#09090B',
+            border: 'none', borderRadius: 12, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.45)', transition: 'all 150ms ease' }}>
+            <Plus size={15} strokeWidth={2.7}/> Create video
           </button>
         </Link>
       )}
@@ -444,14 +448,15 @@ export default function DashboardPage() {
             {projects.length > 0 && !loading && ` · last edited ${fmtRelative(projects[0]?.updatedAt)}`}
           </p>
         </div>
-        <Link href="/upload" style={{ textDecoration: 'none' }}>
-          <button style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 18px', height: 38,
-            fontFamily: F, fontSize: 13, fontWeight: 600, background: C.accent, color: '#fff',
-            border: 'none', borderRadius: 9, cursor: 'pointer', boxShadow: `0 2px 12px ${C.accent}33`,
+        <Link href="/new" style={{ textDecoration: 'none' }}>
+          <button style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 22px', height: 40,
+            fontFamily: F, fontSize: 13.5, fontWeight: 600,
+            background: 'linear-gradient(180deg,#FFFFFF,#E4E4E7)', color: '#09090B',
+            border: 'none', borderRadius: 12, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.45)',
             transition: 'all 150ms' }}
-            onMouseEnter={e => { e.currentTarget.style.background = C.accentH; }}
-            onMouseLeave={e => { e.currentTarget.style.background = C.accent; }}
-          ><Plus size={13} strokeWidth={2.5}/> New video</button>
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.filter = 'brightness(1.05)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.filter = ''; }}
+          ><Plus size={15} strokeWidth={2.7}/> Create video</button>
         </Link>
       </div>
 
@@ -523,7 +528,7 @@ export default function DashboardPage() {
           ))}
         </div>
       ) : error ? (
-        <div style={{ padding: '32px', fontFamily: F, fontSize: 13, color: '#f87171' }}>
+        <div style={{ padding: '32px', fontFamily: F, fontSize: 13, color: C.danger }}>
           Failed to load: {error}
         </div>
       ) : filtered.length === 0 ? (

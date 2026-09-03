@@ -126,7 +126,7 @@ export function buildSequence(
       transform:   { ...DEFAULT_TRANSFORM, ...(st?.transform ?? {}) },
       effects:     { ...DEFAULT_EFFECTS,   ...(st?.effects   ?? {}) },
       z:           Z_BY_TRACK[c.trackId] ?? 5,
-      muted:       c.type === 'text' || c.type === 'subtitle',
+      muted:       c.type === 'text' || c.type === 'subtitle' || c.trackId === 'overlay',
     };
   });
 
@@ -160,12 +160,35 @@ export function clipsAt(seq: Sequence, t: number, kind?: ClipKind): SequenceClip
     (kind ? c.kind === kind : true) && t >= c.timelineIn && t < c.timelineOut);
 }
 
+/** All video clips on screen at `t`, in draw order (lowest z first). */
+export function videoClipsAt(seq: Sequence, t: number): SequenceClip[] {
+  return seq.clips
+    .filter(c => c.kind === 'video' && t >= c.timelineIn && t < c.timelineOut)
+    .sort((a, b) => a.z - b.z);
+}
+
 /** The visual clip that should be on screen at `t` (topmost by z). */
 export function videoClipAt(seq: Sequence, t: number): SequenceClip | null {
-  const hits = seq.clips.filter(c =>
-    c.kind === 'video' && t >= c.timelineIn && t < c.timelineOut);
+  const hits = videoClipsAt(seq, t);
   if (!hits.length) return null;
-  return hits.reduce((top, c) => (c.z >= top.z ? c : top));
+  return hits[hits.length - 1];
+}
+
+/**
+ * The clip that OWNS the audio and playback clock at `t`. With B-roll this is
+ * the base (lowest-z) clip — a cutaway sits on top (higher z, muted) while the
+ * talk track underneath keeps talking. Falls back to the topmost clip when
+ * everything is muted, so the single-video path behaves exactly as before.
+ */
+export function baseClipAt(seq: Sequence, t: number): SequenceClip | null {
+  const hits = videoClipsAt(seq, t);
+  if (!hits.length) return null;
+  return hits.find(c => !c.muted) ?? hits[hits.length - 1];
+}
+
+/** A higher-z muted video clip covering `t` — a B-roll cutaway — if present. */
+export function cutawayClipAt(seq: Sequence, t: number): SequenceClip | null {
+  return videoClipsAt(seq, t).find(c => c.muted && c.z > 0) ?? null;
 }
 
 /** Text / subtitle clips visible at `t`, in draw order. */

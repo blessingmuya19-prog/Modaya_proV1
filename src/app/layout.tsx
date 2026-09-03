@@ -46,13 +46,20 @@ export default function RootLayout({
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://api.fontshare.com" crossOrigin="anonymous" />
+        {/* Inter (UI + body) + JetBrains Mono (technical / timestamps) */}
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,100..900;1,100..900&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+        {/* Satoshi (display — logo + major headlines) */}
+        <link
+          href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap"
           rel="stylesheet"
         />
         <meta name="theme-color" content="#050505" />
       </head>
-      <body style={{ background: '#050505', color: '#F5F7FA', margin: 0, padding: 0, fontFamily: "'Inter Tight', sans-serif", WebkitFontSmoothing: 'antialiased', MozOsxFontSmoothing: 'grayscale', textRendering: 'optimizeLegibility' }}>
+      <body style={{ background: '#050505', color: '#F5F7FA', margin: 0, padding: 0, fontFamily: "'Inter',system-ui,-apple-system,sans-serif", WebkitFontSmoothing: 'antialiased', MozOsxFontSmoothing: 'grayscale', textRendering: 'optimizeLegibility' }}>
         <ScrollToTop />
         <ToastProvider>
           {children}

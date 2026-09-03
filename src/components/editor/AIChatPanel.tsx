@@ -83,10 +83,10 @@ export function AIChatPanel({ onAction }: { onAction: (id: string) => void }) {
     }}>
       {/* Header */}
       <div style={{ padding: '12px 16px', borderBottom: '1px solid #111', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-        <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#4F8CFF', boxShadow: '0 0 6px rgba(79,140,255,0.6)' }} />
+        <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#FAFAFA', boxShadow: '0 0 6px rgba(255,255,255,0.6)' }} />
         <span style={{ fontSize: 12, fontWeight: 600, color: '#A1A1A1', letterSpacing: '-0.01em' }}>AI Assistant</span>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(79,140,255,0.08)', border: '1px solid rgba(79,140,255,0.18)', borderRadius: 9999, padding: '2px 8px' }}>
-          <span style={{ fontSize: 10, color: '#4F8CFF', fontWeight: 600 }}>v3</span>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 9999, padding: '2px 8px' }}>
+          <span style={{ fontSize: 10, color: '#FAFAFA', fontWeight: 600 }}>v3</span>
         </div>
       </div>
 
@@ -95,13 +95,13 @@ export function AIChatPanel({ onAction }: { onAction: (id: string) => void }) {
         {messages.map(msg => (
           <div key={msg.id} style={{ display: 'flex', flexDirection: 'column', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
             {msg.role === 'ai' && (
-              <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(79,140,255,0.1)', border: '1px solid rgba(79,140,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 5, flexShrink: 0 }}>
-                <span style={{ fontSize: 8, fontWeight: 700, color: '#4F8CFF' }}>AI</span>
+              <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 5, flexShrink: 0 }}>
+                <span style={{ fontSize: 8, fontWeight: 700, color: '#FAFAFA' }}>AI</span>
               </div>
             )}
             <div style={{
               maxWidth: '90%', padding: '10px 13px', borderRadius: msg.role === 'user' ? '12px 12px 4px 12px' : '4px 12px 12px 12px',
-              background: msg.role === 'user' ? '#4F8CFF' : '#0e0e0e',
+              background: msg.role === 'user' ? '#FAFAFA' : '#0e0e0e',
               border: msg.role === 'user' ? 'none' : '1px solid #1a1a1a',
               fontSize: 13, color: msg.role === 'user' ? '#fff' : '#A1A1A1',
               lineHeight: 1.65,
@@ -126,8 +126,8 @@ export function AIChatPanel({ onAction }: { onAction: (id: string) => void }) {
         {/* Typing indicator */}
         {isTyping && (
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-            <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(79,140,255,0.1)', border: '1px solid rgba(79,140,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <span style={{ fontSize: 8, fontWeight: 700, color: '#4F8CFF' }}>AI</span>
+            <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <span style={{ fontSize: 8, fontWeight: 700, color: '#FAFAFA' }}>AI</span>
             </div>
             <div style={{ padding: '10px 14px', background: '#0e0e0e', border: '1px solid #1a1a1a', borderRadius: '4px 12px 12px 12px', display: 'flex', alignItems: 'center', gap: 4 }}>
               {[0, 1, 2].map(i => (
@@ -176,7 +176,7 @@ export function AIChatPanel({ onAction }: { onAction: (id: string) => void }) {
             rows={1}
             style={{
               flex: 1, background: 'transparent', border: 'none', outline: 'none',
-              fontSize: 13, color: '#FFFFFF', fontFamily: "'Inter',sans-serif",
+              fontSize: 13, color: '#FFFFFF', fontFamily: "'Inter',system-ui,-apple-system,sans-serif",
               resize: 'none', lineHeight: 1.5, maxHeight: 80, overflowY: 'auto',
             }}
           />
@@ -185,7 +185,7 @@ export function AIChatPanel({ onAction }: { onAction: (id: string) => void }) {
             disabled={!input.trim() || isTyping}
             style={{
               width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: input.trim() && !isTyping ? '#4F8CFF' : '#141414',
+              background: input.trim() && !isTyping ? '#FAFAFA' : '#141414',
               border: 'none', cursor: input.trim() && !isTyping ? 'pointer' : 'not-allowed',
               flexShrink: 0, transition: 'all 150ms',
             }}

@@ -172,7 +172,8 @@ describe('PreviewEngine', () => {
     const before = document.querySelectorAll('video').length;
     expect(before).toBeGreaterThan(0);
     engine.destroy();
-    expect(document.querySelectorAll('video').length).toBe(before - 2);
+    // two talk-track elements plus the (always-present) B-roll cutaway element
+    expect(document.querySelectorAll('video').length).toBe(before - 3);
   });
 });
 

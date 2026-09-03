@@ -55,13 +55,13 @@ function FooterLogo() {
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       {/* Mark */}
       <svg width="22" height="22" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect width="32" height="32" rx="8" fill="#4F8CFF" fillOpacity="0.12" />
-        <rect x="1" y="1" width="30" height="30" rx="7" stroke="#4F8CFF" strokeOpacity="0.3" strokeWidth="1" />
-        <path d="M9 23 L16 9 L23 23" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M11.5 18 L20.5 18" stroke="#4F8CFF" strokeWidth="2" strokeLinecap="round" />
+        <rect width="32" height="32" rx="8" fill="#D4D4D8" fillOpacity="0.12" />
+        <rect x="1" y="1" width="30" height="30" rx="7" stroke="#D4D4D8" strokeOpacity="0.3" strokeWidth="1" />
+        <path d="M9 23 L16 9 L23 23" stroke="#D4D4D8" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M11.5 18 L20.5 18" stroke="#D4D4D8" strokeWidth="2" strokeLinecap="round" />
       </svg>
       {/* Wordmark */}
-      <span style={{ fontFamily: "'Inter Tight', sans-serif", fontSize: 17, fontWeight: 700, color: '#FFFFFF', letterSpacing: '-0.04em' }}>
+      <span style={{ fontFamily: "'Satoshi','Inter',system-ui,-apple-system,sans-serif", fontSize: 17, fontWeight: 900, color: '#FAFAFA', letterSpacing: '-0.04em' }}>
         Modaya
       </span>
     </div>
@@ -72,8 +72,8 @@ export function Footer() {
   return (
     <footer style={{
       position: 'relative', zIndex: 0,
-      background: '#050505',
-      borderTop: '1px solid #141414',
+      background: '#000000',
+      borderTop: '1px solid #27272A',
     }}>
       {/* Top section */}
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: 'clamp(40px,6vw,80px) clamp(16px,3vw,48px) clamp(32px,4vw,56px)' }}>
@@ -82,7 +82,7 @@ export function Footer() {
           {/* Brand column */}
           <div className="footer-brand-col" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <FooterLogo />
-            <p style={{ fontSize: 13, color: '#737D8D', lineHeight: 1.5, letterSpacing: '-0.01em', maxWidth: 200, margin: 0 }}>
+            <p style={{ fontSize: 13, color: '#A1A1AA', lineHeight: 1.5, letterSpacing: '-0.01em', maxWidth: 200, margin: 0 }}>
               Upload your footage.<br />Tell AI how to edit it.
             </p>
 
@@ -91,12 +91,12 @@ export function Footer() {
               {SOCIALS.map(s => (
                 <a key={s.label} href={s.href} aria-label={s.label} style={{
                   width: 34, height: 34, borderRadius: 8,
-                  background: '#0f0f0f', border: '1px solid #1e1e1e',
+                  background: '#131316', border: '1px solid #27272A',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#737D8D', textDecoration: 'none', transition: 'all 200ms ease',
+                  color: '#A1A1AA', textDecoration: 'none', transition: 'all 200ms ease',
                 }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#111'; e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.color = '#FFFFFF'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#0a0a0a'; e.currentTarget.style.borderColor = '#141414'; e.currentTarget.style.color = '#737D8D'; }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#1C1C21'; e.currentTarget.style.borderColor = '#3F3F46'; e.currentTarget.style.color = '#FAFAFA'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#131316'; e.currentTarget.style.borderColor = '#3F3F46'; e.currentTarget.style.color = '#A1A1AA'; }}
                 >
                   <span dangerouslySetInnerHTML={{ __html: s.svg }} />
                 </a>
@@ -104,12 +104,12 @@ export function Footer() {
             </div>
 
             {/* CTA */}
-            <Link href="/upload" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+            <Link href="/new" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '8px 16px', fontSize: 13, fontWeight: 600, color: '#FFFFFF',
-                background: 'linear-gradient(135deg, #4F8CFF 0%, #326FEA 100%)',
-                borderRadius: 8, boxShadow: '0 4px 14px rgba(79,140,255,0.25)',
+                padding: '9px 18px', fontSize: 13, fontWeight: 700, color: '#09090B',
+                background: 'linear-gradient(180deg,#FFFFFF,#E4E4E7)',
+                borderRadius: 12, boxShadow: '0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(255,255,255,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
               }}>
                 Start editing free <ArrowUpRight size={13} />
               </span>
@@ -119,22 +119,22 @@ export function Footer() {
           {/* Nav columns */}
           {NAV_COLS.map(col => (
             <div key={col.heading} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <p style={{ fontSize: 11, fontWeight: 600, color: '#4D5664', letterSpacing: '0.06em', textTransform: 'uppercase', margin: 0 }}>
+              <p style={{ fontSize: 11, fontWeight: 600, color: '#71717A', letterSpacing: '0.06em', textTransform: 'uppercase', margin: 0 }}>
                 {col.heading}
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {col.links.map(link => (
                   <a key={link.label} href={link.href} style={{
-                    fontSize: 14, color: '#737D8D', textDecoration: 'none',
+                    fontSize: 14, color: '#A1A1AA', textDecoration: 'none',
                     display: 'inline-flex', alignItems: 'center', gap: 7,
                     transition: 'color 200ms ease',
                   }}
-                    onMouseEnter={e => { e.currentTarget.style.color = '#A1A1A1'; }}
-                    onMouseLeave={e => { e.currentTarget.style.color = '#737D8D'; }}
+                    onMouseEnter={e => { e.currentTarget.style.color = '#D4D4D8'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = '#A1A1AA'; }}
                   >
                     {link.label}
                     {'badge' in link && link.badge && (
-                      <span style={{ fontSize: 9, fontWeight: 600, color: '#4F8CFF', background: 'rgba(79,140,255,0.1)', border: '1px solid rgba(79,140,255,0.2)', padding: '1px 6px', borderRadius: 9999, letterSpacing: '0.04em' }}>
+                      <span style={{ fontSize: 9, fontWeight: 600, color: '#D4D4D8', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', padding: '1px 6px', borderRadius: 9999, letterSpacing: '0.04em' }}>
                         {link.badge}
                       </span>
                     )}
@@ -148,16 +148,16 @@ export function Footer() {
 
       {/* Hairline */}
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 clamp(16px,3vw,48px)' }}>
-        <div style={{ height: 1, background: 'linear-gradient(to right, transparent, #181818 20%, #181818 80%, transparent)' }} />
+        <div style={{ height: 1, background: 'linear-gradient(to right, transparent, #1C1C21 20%, #1C1C21 80%, transparent)' }} />
       </div>
 
       {/* Bottom bar */}
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: 'clamp(16px,2vw,24px) clamp(16px,3vw,48px)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <p style={{ fontSize: 12, color: '#4D5664', margin: 0 }}>
+          <p style={{ fontSize: 12, color: '#71717A', margin: 0 }}>
             © 2026 Modaya. All rights reserved.
           </p>
-          <p style={{ fontSize: 12, color: '#222', margin: 0 }}>
+          <p style={{ fontSize: 12, color: '#71717A', margin: 0 }}>
             Made for creators who have footage, not time.
           </p>
         </div>

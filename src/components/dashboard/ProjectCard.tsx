@@ -25,7 +25,7 @@ export function ProjectCard({ project }: { project: Project }) {
   const [hovered, setHovered] = useState(false);
 
   return (
-    <Link href={`/editor/${project.id}`} style={{ textDecoration: 'none' }}>
+    <Link href={`/studio/${project.id}`} style={{ textDecoration: 'none' }}>
       <div
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
@@ -68,8 +68,8 @@ export function ProjectCard({ project }: { project: Project }) {
           {/* Processing overlay */}
           {project.status === 'processing' && (
             <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-              <Cpu size={14} style={{ color: '#4F8CFF', animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
-              <span style={{ fontSize: 12, color: '#4F8CFF', fontWeight: 600 }}>AI editing...</span>
+              <Cpu size={14} style={{ color: '#FAFAFA', animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
+              <span style={{ fontSize: 12, color: '#FAFAFA', fontWeight: 600 }}>AI editing...</span>
             </div>
           )}
         </div>
@@ -90,7 +90,7 @@ export function ProjectCard({ project }: { project: Project }) {
             </button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#737D8D' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#737D8D', fontFamily: "'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace", fontVariantNumeric: 'tabular-nums' }}>
               <Play size={10} />{project.duration}
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#737D8D' }}>
@@ -109,17 +109,17 @@ export function EmptyProjectState() {
       <div style={{ width: 56, height: 56, borderRadius: 16, background: '#111111', border: '1px solid #242424', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
         <Play size={22} style={{ color: '#737D8D' }} />
       </div>
-      <h3 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 600, fontSize: 16, letterSpacing: '-0.025em', color: '#F5F7FA', margin: '0 0 8px' }}>
+      <h3 style={{ fontFamily: "'Satoshi','Inter',system-ui,-apple-system,sans-serif", fontWeight: 700, fontSize: 16, letterSpacing: '-0.025em', color: '#F5F7FA', margin: '0 0 8px' }}>
         Your next edit starts here.
       </h3>
-      <p style={{ fontSize: 13, color: '#737D8D', margin: '0 0 24px' }}>Upload a video and let AI do the editing.</p>
-      <Link href="/upload" style={{ textDecoration: 'none' }}>
+      <p style={{ fontSize: 13, color: '#737D8D', margin: '0 0 24px' }}>Create a video and let AI do the editing.</p>
+      <Link href="/new" style={{ textDecoration: 'none' }}>
         <button style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: '0 20px', height: 42, fontSize: 13, fontWeight: 600,
-          background: '#4F8CFF', color: '#050505', border: 'none', borderRadius: 10, cursor: 'pointer',
+          background: 'linear-gradient(180deg,#FFFFFF,#E4E4E7)', color: '#09090B', border: 'none', borderRadius: 10, cursor: 'pointer',
         }}>
-          Upload a video
+          Create video
         </button>
       </Link>
     </div>

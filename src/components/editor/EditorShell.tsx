@@ -18,9 +18,11 @@ import { saveTranscript, loadTranscript, StoredTranscript } from '@/lib/mediaDb'
 import { StyleProfile, describeStyle } from '@/lib/ai/styleProfile';
 import { generateEditPlan, EditPlan } from '@/lib/ai/styleTransfer';
 import { detectSilences } from '@/lib/ai/operations';
+import type { ClipSuggestion } from '@/lib/ai/clips';
+import { parseClipRequest } from '@/lib/ai/clips';
 import { scanVideo, compactScan, type VisualScan, type Keyframe } from '@/lib/ai/visualScan';
 import { analyseFile } from '@/lib/videoStore';
-import { loadMediaFile } from '@/lib/mediaDb';
+import { getProjectMedia } from '@/lib/mediaCloud';
 import { getProjectFrames } from '@/lib/thumbnailStore';
 
 /* ──────────────── STAGGER FADE-UP ──────────────── */
@@ -52,7 +54,7 @@ import {
 const C = {
   bg:      '#050505', surface: '#070707', s2: '#0a0a0a', s3: '#0e0e0e',
   b:       '#111111', b2:      '#141414', b3: '#1a1a1a',
-  accent:  '#4F8CFF', accentH: '#6EA3FF',
+  accent:  '#FAFAFA', accentH: '#D4D4D8',
   /* Text colour scale — spec §17 */
   text:    '#F5F7FA',   // primary
   sec:     '#A5ADBA',   // secondary
@@ -63,7 +65,7 @@ const C = {
 };
 
 /* ── Typography foundation ── */
-const F = "'Inter Tight', Inter, system-ui, sans-serif";
+const F = "'Inter',system-ui,-apple-system,sans-serif";
 
 /*
  * ty — single source of truth for all editor type styles.
@@ -162,7 +164,7 @@ const fmt = (s: number) =>
 
 /* ── track config — keyed by trackId ── */
 const TRACK_META: Record<string,{label:string;icon:string;color:string;bg:string;h:number;thumb?:boolean;wave?:boolean}> = {
-  text:  { label:'Text',  icon:'T', color:'#7C3AED', bg:'#2d1b69', h:44 },
+  text:  { label:'Text',  icon:'T', color:'#E4E4E7', bg:'#2d1b69', h:44 },
   video: { label:'Video', icon:'▣', color:'#2563EB', bg:'#0d1a2e', h:80, thumb:true },
   aud1:  { label:'Audio', icon:'♫', color:'#059669', bg:'#022c22', h:52, wave:true },
   aud2:  { label:'Audio', icon:'♫', color:'#059669', bg:'#022c22', h:52, wave:true },
@@ -199,7 +201,7 @@ function buildTracks(clips: EditorClip[], totalS: number) {
   const ids = [...TRACK_ORDER.filter(id => byTrack[id]), ...Object.keys(byTrack).filter(id => !TRACK_ORDER.includes(id))];
 
   return ids.map(id => {
-    const meta = TRACK_META[id] ?? { label: id, icon: '▣', color: '#4F8CFF', bg: '#0d1520', h: 46 };
+    const meta = TRACK_META[id] ?? { label: id, icon: '▣', color: '#FAFAFA', bg: '#0d1520', h: 46 };
     return {
       id,
       ...meta,
@@ -549,7 +551,7 @@ function PropertiesPanelBase({ tab }:{ tab:string }) {
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
           background:C.s3, border:`1px solid ${C.b2}`, borderRadius:6, padding:'6px 9px',
           cursor:'pointer', marginBottom:6 }}>
-          <span style={{ ...ty.propVal }}>Inter Tight</span>
+          <span style={{ ...ty.propVal }}>Satoshi Bold</span>
           <ChevronDown size={10} color={C.muted} />
         </div>
         <div style={{ display:'flex', gap:5, marginBottom:6 }}>
@@ -628,10 +630,10 @@ function PropertiesPanelBase({ tab }:{ tab:string }) {
 
 const QUICK = [
   { label: 'Cut silences',   prompt: 'Remove all pauses and dead air.'           },
+  { label: 'Find clips',     prompt: 'Find me 5 short clips for TikTok and Reels.', highlight: true },
   { label: 'Clean fillers',  prompt: 'Remove filler words and repeated phrases.' },
   { label: 'Best moments',   prompt: 'Find the strongest 90 seconds.'            },
   { label: 'Add captions',   prompt: 'Transcribe and add accurate captions.'     },
-  { label: 'Make vertical',  prompt: 'Reframe for 9:16 vertical format.'         },
 ];
 
 interface Msg {
@@ -642,9 +644,62 @@ interface Msg {
   undoable?: boolean;
   /** A learned reference style the user can apply. */
   style?:   StyleProfile;
+  /** Clipping engine results — standalone short clips, each cuttable in one tap. */
+  clips?:   ClipSuggestion[];
 }
 
 const PropertiesPanel = React.memo(PropertiesPanelBase);
+
+/* ── A single clipping-engine suggestion ── */
+const clipFmt = (s: number) =>
+  `${String(Math.floor(s / 60)).padStart(1, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+function ClipCard({ clip, onCut }: { clip: ClipSuggestion; onCut: () => void }) {
+  const scoreColor = clip.score >= 80 ? '#34D399' : clip.score >= 55 ? '#FBBF24' : '#737D8D';
+  const isAi = clip.source !== 'measurement';
+  return (
+    <div style={{
+      background: C.s2, border: `1px solid ${C.b3}`, borderRadius: 10, padding: '9px 11px',
+      animation: 'msg-in 260ms cubic-bezier(0.22,1,0.36,1)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+        <span style={{ ...ty.badge, color: C.accent, background: `${C.accent}18`,
+          border: `1px solid ${C.accent}33`, borderRadius: 5, padding: '1px 6px' }}>
+          {clipFmt(clip.startS)}–{clipFmt(clip.endS)}
+        </span>
+        <span style={{ flex: 1, ...ty.meta, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: scoreColor }} />
+          {clip.score}
+        </span>
+        <span style={{ ...ty.meta, color: isAi ? C.accent : C.dim }}>
+          {isAi ? 'AI pick' : 'measured'}
+        </span>
+      </div>
+      <p style={{ ...ty.aiMsg, fontSize: 12.5, color: C.text, fontWeight: 600, margin: '0 0 3px',
+        lineHeight: 1.35 }}>{clip.title}</p>
+      {clip.reason && (
+        <p style={{ ...ty.meta, color: C.muted, margin: '0 0 8px', lineHeight: 1.4 }}>{clip.reason}</p>
+      )}
+      {clip.tags.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+          {clip.tags.map(t => (
+            <span key={t} style={{ ...ty.meta, color: C.sec, background: C.s3,
+              border: `1px solid ${C.b2}`, borderRadius: 9999, padding: '1px 7px' }}>#{t}</span>
+          ))}
+        </div>
+      )}
+      <button onClick={onCut}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          width: '100%', padding: '6px', background: C.accent, border: 'none', borderRadius: 7,
+          fontFamily: F, fontSize: 12, fontWeight: 600, color: '#fff', cursor: 'pointer',
+          transition: 'background 120ms' }}
+        onMouseEnter={e => { e.currentTarget.style.background = C.accentH; }}
+        onMouseLeave={e => { e.currentTarget.style.background = C.accent; }}>
+        <Scissors size={11} /> Cut to this clip
+      </button>
+    </div>
+  );
+}
 
 interface AIChatPanelProps {
   projectId:      string;
@@ -652,9 +707,11 @@ interface AIChatPanelProps {
   totalS:         number;
   onEditApplied?: (affectedIds: string[], newClips: EditorClip[]) => void;
   onStyleApplied?: (plan: EditPlan) => void;
+  /** Isolate a suggested clip on the timeline (keep only that range). */
+  onCutToClip?:   (clip: ClipSuggestion) => void;
 }
 
-function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onStyleApplied }: AIChatPanelProps) {
+function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onStyleApplied, onCutToClip }: AIChatPanelProps) {
   const [msgs,    setMsgs   ] = useState<Msg[]>(() => {
     if (initialHistory && initialHistory.length > 0) {
       return initialHistory.map(m => ({ role: m.role, text: m.text }));
@@ -689,12 +746,28 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
   const audioState = useRef<'pending' | 'ready' | 'failed'>('pending');
   const [asr, setAsr] = useState<'idle' | 'running' | 'done' | 'failed'>('idle');
   /**
+   * Whether a key-free provider can actually answer. Discovered once; gates
+   * auto-transcription for clipping so a user with no key gets measured clips
+   * straight away instead of a doomed Whisper call (speech recognition needs
+   * a Groq key; the measurement engine does not).
+   */
+  const aiReady = useRef<boolean | null>(null);
+  /**
    * The transcript lives in the browser and travels with every AI request.
    * The server keeps a copy, but on a serverless host the next request can
    * land on an instance that has never seen it — so the browser is the source
    * of truth.
    */
   const transcript = useRef<StoredTranscript | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/settings/ai')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (!cancelled) aiReady.current = !!d?.configured; })
+      .catch(() => { if (!cancelled) aiReady.current = false; });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -709,7 +782,7 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
     audioState.current = 'pending';
     (async () => {
       try {
-        const stored = await loadMediaFile(projectId);
+        const stored = await getProjectMedia(projectId);
         if (!stored || cancelled) { audioState.current = 'failed'; return; }
         const env = await analyseAudio(stored.blob);
         if (cancelled) return;
@@ -731,7 +804,7 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
     const stop = new AbortController();
     (async () => {
       try {
-        const stored = await loadMediaFile(projectId);
+        const stored = await getProjectMedia(projectId);
         if (!stored || stop.signal.aborted) return;
         const seen = await scanVideo(stored.blob, { signal: stop.signal });
         if (!seen || stop.signal.aborted) return;
@@ -757,7 +830,7 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
     say({ role: 'ai', text: 'Listening to the audio and writing down what is said…' });
 
     try {
-      const stored = await loadMediaFile(projectId);
+      const stored = await getProjectMedia(projectId);
       if (!stored) {
         replaceLast("I can't find the media for this project in this browser — reopen it and try again.");
         setAsr('failed');
@@ -875,7 +948,7 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
 
     try {
       // The target's own audio decides which sections survive the cut
-      const stored = await loadMediaFile(projectId);
+      const stored = await getProjectMedia(projectId);
       const env    = stored ? await analyseAudio(stored.blob) : null;
       const dur    = stored?.durationS || totalS;
 
@@ -904,6 +977,16 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
     /caption|subtitle|filler|\bums?\b|\buhs?\b|transcri|what (did|do|does|is)\s+(they|he|she|it|the)|what.*(say|said|talk|about)|quote|word/i
       .test(text);
 
+  /**
+   * Finding clips on meaning rather than loudness needs the words too — with
+   * a Groq key the transcript is what lets the model pick moments, write hook
+   * titles and score shareability instead of just ranking energy. Asking for
+   * clips is consent for speech recognition, exactly as captions are.
+   */
+  const wantsClips = (text: string) =>
+    /\bclips?\b|\bshorts?\b|tiktok|reels?|viral|\b(?:give|find|make)(?: me)?\s*\d+\b/i
+      .test(text);
+
   /** Questions that are only answerable by looking at the picture. */
   const needsVision = (text: string) =>
     /what (?:can |do )?you see|what.?s (?:in|happening|going on)|describe|look at|watch|see the|visual|colour|color|wearing|who is|what is (?:he|she|it|this|that)|jersey|logo|scene|shot|background/i
@@ -919,33 +1002,70 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
     try {
       // Transcribe first rather than refusing. The request itself is consent —
       // nobody asks for captions and then objects to speech recognition.
-      if (needsTranscript(text) && asr !== 'done' && !asrTried.current) {
+      // Captions/filler always need words. Clips only auto-transcribe when a
+      // provider is actually configured: transcription needs a Groq key, and
+      // with no key the measurement engine answers fine on its own — there is
+      // no point failing a Whisper call that was never going to work.
+      const clipReq = wantsClips(text) ? parseClipRequest(text) : null;
+      const needWords = needsTranscript(text) ||
+        (wantsClips(text) && aiReady.current !== false);
+      if (needWords && asr !== 'done' && !asrTried.current) {
         await transcribe();
       }
 
-      const res  = await fetch(`/api/projects/${projectId}/ai`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          message:  text.trim(),
-          silences: silences.current.slice(0, 200),
-          energy:   energy.current.slice(0, 7200),
-          audio:    audioState.current,
-          transcript: transcript.current ?? undefined,
-          style:    learnedStyle ?? undefined,
-          visual:   visual.current ?? undefined,
-          // Frames are heavy. They travel only when the question needs eyes.
-          frames:   needsVision(text) ? keyframes.current.map(k => k.dataUrl).slice(0, 6) : undefined,
-        }),
-      });
-      const data = await res.json();
+      // Clip-hunting ("find me 5 clips", "90 second short", "viral moments")
+      // goes to the dedicated clipping engine: free browser measurements, an
+      // OpenShorts-style virality score from the transcript LLM, and the
+      // optional TwelveLabs Pegasus visual ranker. Everything else is a normal
+      // edit question for the general AI route.
+      let data: any = null;
+      if (clipReq) {
+        const res = await fetch(`/api/projects/${projectId}/clips`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            message:  text.trim(),
+            count:    clipReq.count,
+            targetLenS: clipReq.targetLenS,
+            bias:     clipReq.bias,
+            silences: silences.current.slice(0, 200),
+            energy:   energy.current.slice(0, 7200),
+            visual:   visual.current ?? undefined,
+            transcript: transcript.current ?? undefined,
+          }),
+        });
+        data = await res.json().catch(() => null);
+      }
+      if (!clipReq || !Array.isArray(data?.clips) || data.clips.length === 0) {
+        const res  = await fetch(`/api/projects/${projectId}/ai`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            message:  text.trim(),
+            silences: silences.current.slice(0, 200),
+            energy:   energy.current.slice(0, 7200),
+            audio:    audioState.current,
+            transcript: transcript.current ?? undefined,
+            style:    learnedStyle ?? undefined,
+            visual:   visual.current ?? undefined,
+            // Frames are heavy. They travel only when the question needs eyes.
+            frames:   needsVision(text) ? keyframes.current.map(k => k.dataUrl).slice(0, 6) : undefined,
+          }),
+        });
+        data = await res.json();
+      }
+
+      const clipsOut: ClipSuggestion[] | undefined = clipReq
+        ? (Array.isArray(data?.clips) ? data.clips : undefined)
+        : (Array.isArray(data?.edit?.clips) ? data.edit.clips : undefined);
 
       const aiReply: Msg = {
         role:     'ai',
-        text:     data.aiMessage?.text ?? 'Edit applied.',
+        text:     data?.reply ?? data.aiMessage?.text ?? 'Edit applied.',
         summary:  data.edit?.summary,
         savedS:   data.edit?.savedS,
         undoable: true,
+        ...(clipsOut && clipsOut.length ? { clips: clipsOut } : {}),
       };
 
       // Save undo snapshot before applying
@@ -1041,6 +1161,15 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
               </button>
             )}
 
+            {/* Clipping engine results — one tap to isolate a clip */}
+            {m.clips && m.clips.length > 0 && (
+              <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6, width: '100%', maxWidth: 340 }}>
+                {m.clips.map((c) => (
+                  <ClipCard key={c.id} clip={c} onCut={() => onCutToClip?.(c)} />
+                ))}
+              </div>
+            )}
+
             {/* Edit summary chip */}
             {m.summary && (
               <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', gap: 5,
@@ -1096,11 +1225,14 @@ function AIChatPanelBase({ projectId, initialHistory, totalS, onEditApplied, onS
         {QUICK.map((q, i) => (
           <button key={i} onClick={() => send(q.prompt)}
             disabled={loading}
-            style={{ ...ty.pill, background: 'transparent', border: `1px solid ${C.b2}`,
+            style={{ ...ty.pill,
+              background: (q as { highlight?: boolean }).highlight ? `${C.accent}14` : 'transparent',
+              border: `1px solid ${(q as { highlight?: boolean }).highlight ? C.accent + '44' : C.b2}`,
+              color: (q as { highlight?: boolean }).highlight ? C.accent : undefined,
               borderRadius: 9999, padding: '4px 8px', cursor: loading ? 'not-allowed' : 'pointer',
               transition: 'all 120ms', opacity: loading ? 0.5 : 1 }}
             onMouseEnter={e => { if (!loading) { e.currentTarget.style.color = '#A1A1A1'; e.currentTarget.style.borderColor = C.b3; } }}
-            onMouseLeave={e => { e.currentTarget.style.color = C.muted; e.currentTarget.style.borderColor = C.b2; }}
+            onMouseLeave={e => { e.currentTarget.style.color = (q as { highlight?: boolean }).highlight ? C.accent : C.muted; e.currentTarget.style.borderColor = (q as { highlight?: boolean }).highlight ? C.accent + '44' : C.b2; }}
           >{q.label}</button>
         ))}
       </div>
@@ -1457,7 +1589,7 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
         return (
           <div key={tr.id} style={{ height:tr.h+3, position:'relative',
             borderBottom:`1px solid ${C.b}`,
-            background: tr.id==='text' ?'rgba(124,58,237,0.04)'
+            background: tr.id==='text' ?'rgba(255,255,255,0.04)'
                       : tr.id==='video'?'rgba(55,65,81,0.08)'
                       : tr.id.startsWith('aud')?'rgba(5,150,105,0.04)'
                       : 'rgba(8,145,178,0.04)' }}>
@@ -1632,7 +1764,7 @@ function TimelinePanel({ playheadS, setPlayheadS, playing, setPlaying, totalS, t
               <span style={{ fontSize:11, color:tr.color, flexShrink:0, lineHeight:1 }}>{tr.icon}</span>
               <span style={{ fontSize:10, fontWeight:700, color:'#4a4a4a',
                 textTransform:'uppercase', letterSpacing:'0.07em',
-                fontFamily:"'Inter Tight',sans-serif",
+                fontFamily:"'Inter',system-ui,-apple-system,sans-serif",
                 whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{tr.label}</span>
             </div>
           ))}
@@ -1788,6 +1920,27 @@ export function EditorShell({
     // Clear highlight after 3s
     setTimeout(() => setHighlightIds([]), 3000);
   }, []);
+
+  /* Clipping engine: keep only the chosen range on the timeline, as its own
+     short programme. "Undo" in the chat (or the editor undo) brings the full
+     video back. The surviving video clip is re-scoped to the window. */
+  const handleCutToClip = useCallback((clip: ClipSuggestion) => {
+    setLiveClips(prev => {
+      const source = prev.length ? prev : clips;
+      const next: EditorClip[] = source
+        .filter(c => c.type === 'video' || c.type === 'audio')
+        .map(c => ({
+          ...c,
+          startS: Math.max(c.startS, clip.startS),
+          endS:   Math.min(c.endS, clip.endS),
+        }))
+        .filter(c => c.endS - c.startS > 0.05);
+      return next;
+    });
+    setStyledDur(clip.endS - clip.startS);
+    setPhS(0);
+    setHighlightIds([]);
+  }, [clips]);
 
   const [tab,    setTab   ] = useState('Text');
   /** Pressing play at the very end restarts, rather than sitting there stuck. */
@@ -1948,12 +2101,20 @@ export function EditorShell({
               totalS={totalS}
               onEditApplied={handleEditApplied}
               onStyleApplied={handleStyleApplied}
+              onCutToClip={handleCutToClip}
             />
           </div>
         </FadeUp>
       </div>
 
-      <ExportModal open={expOpen} onClose={()=>setExpOpen(false)} />
+      <ExportModal
+        open={expOpen}
+        onClose={() => setExpOpen(false)}
+        sequence={sequence}
+        sourceUrl={videoUrl}
+        sourceId={projectId || 'main'}
+        projectName={projectName}
+      />
       <DebugHud projectId={projectId} />
     </div>
   );

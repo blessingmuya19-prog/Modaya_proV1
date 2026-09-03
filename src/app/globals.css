@@ -1,5 +1,39 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap');
 @import "tailwindcss";
+
+/* ─────────────────────────────────────────────
+   TYPE SYSTEM — three tiers
+   · Satoshi Bold  → logo + major headlines (display)
+   · Inter         → UI + body text (default)
+   · JetBrains Mono→ technical / timestamps / processing
+
+   Satoshi & the sans/mono faces load from CDN
+   (Fontshare / Google Fonts). Satoshi is free for
+   commercial use. The @font-face below lets a
+   self-hosted copy in /public/fonts take precedence
+   (see public/fonts/README.md) — otherwise the CDN
+   copy is used.
+───────────────────────────────────────────── */
+@font-face {
+  font-family: 'Satoshi';
+  src: local('Satoshi-Bold'),
+       url('/fonts/Satoshi-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Satoshi';
+  src: local('Satoshi-Black'),
+       url('/fonts/Satoshi-Black.woff2') format('woff2');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Font stacks: --font-display (Satoshi), --font-sans/tight/body (Inter), --font-mono (JetBrains Mono). */
+
 
 @theme {
   --color-bg-primary:       #050505;
@@ -11,18 +45,20 @@
   --color-text-primary:     #FFFFFF;
   --color-text-secondary:   #A1A1A1;
   --color-text-muted:       #666666;
-  --color-accent:           #4F8CFF;
-  --color-accent-hover:     #6EA3FF;
-  --color-accent-dark:      #3d7ee0;
-  --font-tight: 'Inter Tight', Inter, system-ui, sans-serif;
-  --font-sans:  'Inter', sans-serif;
+  --color-accent:           #FAFAFA;
+  --color-accent-hover:     #FFFFFF;
+  --color-accent-dark:      #A1A1AA;
+  --font-display: 'Satoshi', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-tight: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-sans:  'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono:  'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
   --radius-card:  16px;
   --radius-video: 16px;
   --radius-btn:   10px;
   --shadow-card:      0 4px 24px rgba(0,0,0,0.4);
   --shadow-video:     0 8px 48px rgba(0,0,0,0.6);
-  --shadow-accent:    0 0 20px rgba(79,140,255,0.15), 0 0 40px rgba(79,140,255,0.05);
-  --shadow-accent-sm: 0 0 10px rgba(79,140,255,0.2);
+  --shadow-accent:    0 0 20px rgba(255,255,255,0.12), 0 0 40px rgba(255,255,255,0.04);
+  --shadow-accent-sm: 0 0 10px rgba(255,255,255,0.15);
   --ease-premium: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -88,8 +124,8 @@
   50%       { transform: scaleY(1);    }
 }
 @keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 20px rgba(79,140,255,0.2),  0 4px 16px rgba(0,0,0,0.4); }
-  50%       { box-shadow: 0 0 50px rgba(79,140,255,0.45), 0 8px 24px rgba(0,0,0,0.5); }
+  0%, 100% { box-shadow: 0 0 20px rgba(255,255,255,0.2),  0 4px 16px rgba(0,0,0,0.4); }
+  50%       { box-shadow: 0 0 50px rgba(255,255,255,0.45), 0 8px 24px rgba(0,0,0,0.5); }
 }
 /* Editor entry — staggered fade-up per zone */
 @keyframes editor-fade-up {
@@ -152,7 +188,7 @@ body {
 }
 
 ::selection {
-  background: rgba(79,140,255,0.2);
+  background: rgba(255,255,255,0.2);
   color: var(--color-text-primary);
 }
 
@@ -189,7 +225,7 @@ body {
 
 /* Animated gradient text */
 .text-gradient-animated {
-  background: linear-gradient(135deg, #ffffff 0%, #4F8CFF 40%, #ffffff 80%);
+  background: linear-gradient(135deg, #ffffff 0%, #A1A1AA 50%, #ffffff 100%);
   background-size: 250% 250%;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -220,12 +256,25 @@ body {
 }
 .timeline-clip:hover { filter: brightness(1.25); }
 
-/* Shimmer skeleton */
+/* Shimmer skeleton (dark surfaces: pro editor / media) */
 .shimmer {
   background: linear-gradient(90deg, #111111 0%, #181818 50%, #111111 100%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
+/* Shimmer skeleton (dark charcoal SaaS surfaces) */
+.shimmer-light {
+  background: linear-gradient(90deg, #0A0A0B 0%, #1C1C21 50%, #0A0A0B 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Dark SaaS surface scope (marketing/landing page). Scopes the scrollbar
+   and base text to the dark chrome without touching the pro editor vars. */
+.dark-surface { background-color: #000000; color: #FAFAFA; }
+.dark-surface ::-webkit-scrollbar-track { background: #000000; }
+.dark-surface ::-webkit-scrollbar-thumb { background: #3F3F46; border-radius: 3px; }
+.dark-surface ::-webkit-scrollbar-thumb:hover { background: #3F3F46; }
 
 /* ─────────────────────────────────────────────
    REDUCED MOTION
@@ -475,13 +524,16 @@ body {
 
 /* ─────────────────────────────────────────────
    TYPOGRAPHY SYSTEM — Modaya AI-native
-   Primary: Inter Tight (all UI)
-   Secondary: Inter (long-form body only)
+   · Satoshi Bold  → logo + major headlines (display)
+   · Inter         → UI + body text (default)
+   · JetBrains Mono→ technical / timestamps / processing
 ───────────────────────────────────────────── */
 :root {
   /* Fonts */
-  --font-tight: 'Inter Tight', Inter, system-ui, sans-serif;
-  --font-body:  'Inter', sans-serif;
+  --font-display: 'Satoshi', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-tight: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-body:  'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono:  'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
 
   /* Text colours */
   --text-primary:     #F5F7FA;
@@ -489,7 +541,7 @@ body {
   --text-muted:       #626B78;
   --text-dim:         #3A4149;
   --text-active:      #FFFFFF;
-  --text-accent:      #4F8CFF;
+  --text-accent:      #FAFAFA;
   --text-placeholder: #6F7784;
 
   /* Tracking */
@@ -507,14 +559,27 @@ body {
   --lh-timeline: 1.1;
 }
 
-/* Base reset — Inter Tight for ALL elements */
+/* Base reset — Inter for ALL elements (UI + body default) */
 *, *::before, *::after {
   font-family: var(--font-tight);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Only long-form body copy uses Inter */
+/* Display tier — Satoshi Bold for logo + major headlines */
+.font-display,
+.h-display, .h1-display, .h2-display {
+  font-family: var(--font-display);
+}
+
+/* Mono tier — technical details / timestamps / processing */
+.font-mono, .mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Body copy stays on Inter */
 p.body-copy, .body-copy, textarea.body-input {
   font-family: var(--font-body);
 }
@@ -552,8 +617,12 @@ p.body-copy, .body-copy, textarea.body-input {
 .text-active    { color: var(--text-active); }
 .text-accent    { color: var(--text-accent); }
 
-/* Tabular nums for timecodes */
-.tabular { font-variant-numeric: tabular-nums; }
+/* Tabular nums for timecodes / numeric readouts (mono) */
+.tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
 
 /* AI panel hierarchy */
 .ai-section-label {
@@ -598,14 +667,14 @@ p.body-copy, .body-copy, textarea.body-input {
   font-size: 10px; font-weight: 500;
   letter-spacing: var(--tracking-timeline);
   line-height: var(--lh-timeline);
-  font-family: var(--font-tight);
+  font-family: var(--font-mono);
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
 .timeline-timecode {
   font-size: 11px; font-weight: 500;
   letter-spacing: var(--tracking-timeline);
-  font-family: var(--font-tight);
+  font-family: var(--font-mono);
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }

@@ -12,7 +12,8 @@
  */
 import {
   Sequence, SequenceClip,
-  videoClipAt, overlaysAt, sourceTimeFor, resolveGap, nextBoundary,
+  videoClipsAt, baseClipAt, cutawayClipAt, overlaysAt,
+  sourceTimeFor, resolveGap, nextBoundary,
   fitRect, filterFor,
 } from './sequence';
 
@@ -33,7 +34,7 @@ const SEEK_EPSILON = 0.04;   // ~1 frame at 25fps
    render in a substitute face while a webfont loads — or fail to change at
    all because the requested font was never available. */
 const FONT_STACKS: Record<string, string> = {
-  sans:        "'Inter Tight', Inter, system-ui, -apple-system, sans-serif",
+  sans:        "'Inter',system-ui,-apple-system,sans-serif",
   serif:       "Georgia, 'Times New Roman', Times, serif",
   mono:        "ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
   display:     "Impact, Haettenschweiler, 'Arial Black', sans-serif",
@@ -66,6 +67,10 @@ export class PreviewEngine {
   /** Two elements per source: one on screen, one pre-rolling the next clip. */
   private pool: HTMLVideoElement[] = [];
   private active = 0;
+  /** One extra element for a B-roll cutaway, drawn on top and muted. */
+  private overlayEl: HTMLVideoElement | null = null;
+  /** The cutaway currently painted (so we only re-point the element when it changes). */
+  private cutawayClip: SequenceClip | null = null;
 
   private _time     = 0;
   private _playing  = false;
@@ -95,13 +100,17 @@ export class PreviewEngine {
     for (const v of this.pool) {
       if (!v.parentNode) host.appendChild(v);
     }
+    if (this.overlayEl && !this.overlayEl.parentNode) host.appendChild(this.overlayEl);
   }
 
-  setSequence(seq: Sequence) {
+  /**
+   * Set the programme. `cap` is the longest edge in pixels the canvas is
+   * rendered at. Preview keeps it small (1280) for speed; export passes the
+   * target resolution (e.g. 1920/1080) and never upscales beyond the source.
+   */
+  setSequence(seq: Sequence, cap = 1280) {
     this.seq = seq;
     if (this.canvas) {
-      // Render at the sequence resolution, capped so preview stays cheap
-      const cap   = 1280;
       const scale = Math.min(1, cap / Math.max(seq.width, seq.height));
       this.canvas.width  = Math.max(2, Math.round(seq.width  * scale));
       this.canvas.height = Math.max(2, Math.round(seq.height * scale));
@@ -127,6 +136,15 @@ export class PreviewEngine {
       v.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px';
       return v;
     });
+    if (!this.overlayEl) {
+      const ov = document.createElement('video');
+      ov.playsInline = true;
+      ov.preload     = 'auto';
+      ov.crossOrigin = 'anonymous';
+      ov.muted       = true;      // a cutaway never carries audio
+      ov.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px';
+      this.overlayEl = ov;
+    }
   }
 
   private el(i = this.active): HTMLVideoElement {
@@ -194,7 +212,7 @@ export class PreviewEngine {
     this._time = clamped;
     this.syncSource(false);
 
-    const clip = videoClipAt(this.seq, clamped);
+    const clip = baseClipAt(this.seq, clamped);
     const v    = this.el();
     if (clip && v.src) {
       const want = sourceTimeFor(clip, clamped);
@@ -211,7 +229,7 @@ export class PreviewEngine {
    *  next clip on the spare element so the cut doesn't stall. */
   private syncSource(force: boolean) {
     if (!this.seq) return;
-    const clip = videoClipAt(this.seq, this._time);
+    const clip = baseClipAt(this.seq, this._time);
     if (!clip) return;
 
     const url = this.sources.get(clip.sourceId);
@@ -235,7 +253,7 @@ export class PreviewEngine {
     // Pre-roll whatever comes after this clip
     const edge = nextBoundary(this.seq, this._time);
     if (edge != null && edge - this._time < 2) {
-      const upcoming = videoClipAt(this.seq, edge + 0.001);
+      const upcoming = baseClipAt(this.seq, edge + 0.001);
       if (upcoming && upcoming.id !== clip.id) {
         const nextUrl = this.sources.get(upcoming.sourceId);
         const spare   = this.other();
@@ -256,7 +274,7 @@ export class PreviewEngine {
   private loop = () => {
     if (this.destroyed || !this._playing || !this.seq) return;
 
-    const clip = videoClipAt(this.seq, this._time);
+    const clip = baseClipAt(this.seq, this._time);
     const v    = this.el();
 
     if (clip) {
@@ -286,7 +304,7 @@ export class PreviewEngine {
   private advancePastClip(clip: SequenceClip) {
     if (!this.seq) return;
     const t    = clip.timelineOut + 0.001;
-    const next = videoClipAt(this.seq, t);
+    const next = baseClipAt(this.seq, t);
 
     if (!next) {
       const gap = resolveGap(this.seq, t);
@@ -316,11 +334,38 @@ export class PreviewEngine {
     this.emitTime();
   }
 
+  /* ─────────── B-roll cutaway ─────────── */
+
+  /** Point the overlay element at the cutaway on screen, if any. It is muted
+   *  and only scrubbed/played silently; the base element owns the clock. */
+  private syncCutaway() {
+    if (!this.seq) return;
+    const ov = this.overlayEl;
+    if (!ov) return;
+    const cut = cutawayClipAt(this.seq, this._time);
+    this.cutawayClip = cut;
+
+    if (!cut) {
+      if (!ov.paused) { try { ov.pause(); } catch {} }
+      return;
+    }
+    const url = this.sources.get(cut.sourceId);
+    if (url && ov.src !== url) { ov.src = url; try { ov.load(); } catch {} }
+    ov.muted = true;
+    const want = sourceTimeFor(cut, this._time);
+    if (Math.abs(ov.currentTime - want) > 0.12) {
+      try { ov.currentTime = want; } catch {}
+    }
+    if (ov.paused && this._playing) { void ov.play().catch(() => {}); }
+  }
+
   /* ─────────── compositor ─────────── */
 
   renderFrame() {
     const ctx = this.ctx, canvas = this.canvas, seq = this.seq;
     if (!ctx || !canvas || !seq) return;
+
+    this.syncCutaway();
 
     const W = canvas.width, H = canvas.height;
 
@@ -330,9 +375,13 @@ export class PreviewEngine {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, W, H);
 
-    const clip = videoClipAt(seq, this._time);
-    if (clip) {
-      const v = this.el();
+    // Draw every video clip on screen, lowest z first — so a B-roll cutaway
+    // (higher z, muted) paints over the base talk track while the base keeps
+    // owning the audio clock.
+    const clips = videoClipsAt(seq, this._time);
+    for (const clip of clips) {
+      const v = clip === this.cutawayClip ? this.overlayEl : this.el();
+      if (!v) continue;
       const w = v.videoWidth, h = v.videoHeight;
       if (w && h && v.readyState >= 2) {
         const r = fitRect(w, h, W, H, clip.transform);
@@ -434,6 +483,27 @@ export class PreviewEngine {
     return c?.captureStream ? c.captureStream(fps) : null;
   }
 
+  /**
+   * Tap the media elements' audio for export. The source nodes are connected
+   * ONLY to the supplied destination (a MediaStreamAudioDestinationNode),
+   * never to the speakers — so a real-time export records the audio without
+   * playing it out loud. Each element may only ever be wrapped once; this is
+   * used on an export-only engine with its own fresh video pool. Returns an
+   * unwire function.
+   */
+  wireAudio(ctx: AudioContext, dest: MediaStreamAudioDestinationNode): () => void {
+    // Only the base (talk-track) elements are wired. The cutaway element is
+    // deliberately left out: B-roll is shown silent over the base audio.
+    const nodes = this.pool.map(v => {
+      const src = ctx.createMediaElementSource(v);
+      src.connect(dest);
+      return src;
+    });
+    this.pool.forEach(v => { v.muted = false; });
+    if (this.overlayEl) this.overlayEl.muted = true;
+    return () => { nodes.forEach(n => { try { n.disconnect(); } catch {} }); };
+  }
+
   destroy() {
     this.destroyed = true;
     cancelAnimationFrame(this.raf);
@@ -444,6 +514,14 @@ export class PreviewEngine {
       v.parentNode?.removeChild(v);
     });
     this.pool = [];
+    if (this.overlayEl) {
+      try { this.overlayEl.pause(); } catch {}
+      this.overlayEl.removeAttribute('src');
+      try { this.overlayEl.load(); } catch {}
+      this.overlayEl.parentNode?.removeChild(this.overlayEl);
+      this.overlayEl = null;
+      this.cutawayClip = null;
+    }
     this.timeListeners.clear();
     this.stateListeners.clear();
   }

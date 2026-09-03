@@ -1,6 +1,5 @@
 'use client';
 import React, { useState, useRef, useCallback } from 'react';
-import { ProcessingScreen } from '@/components/processing/ProcessingScreen';
 import { Logo } from '@/components/ui/Logo';
 import { ArrowLeft, ArrowRight, Upload, X, Zap, Scissors, Flame, Captions, Sparkles, Smartphone, Check, Play, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
@@ -8,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { setMedia, analyseFile, MediaEntry } from '@/lib/videoStore';
 import { capturePoster, savePoster } from '@/lib/thumbnailStore';
 import { saveMediaFile } from '@/lib/mediaDb';
+import { backupFootageToCloud } from '@/lib/mediaCloud';
 
 const PRESETS = [
   { Icon: Zap,        label: 'Make it faster',  fill: 'Make this video faster and remove all unnecessary pauses and dead air.' },
@@ -64,13 +64,16 @@ export default function UploadPage() {
       try { data = await res.json(); } catch { /* non-JSON response */ }
 
       if (res.ok && data.projectId) {
-        // Success — store blob URL and move to processing screen
+        // Success — store blob URL and bytes, then hand off to Studio where the
+        // REAL analysis runs (audio/energy measurement, speech-to-text, moment
+        // detection) with honest, per-stage progress. There is no fake
+        // processing interstitial — we never pretend work finished before it did.
         const objUrl = previewUrl ?? URL.createObjectURL(file);
         setMedia(data.projectId, { ...meta, objectUrl: objUrl });
         if (thumbnail) savePoster(data.projectId, thumbnail);
         // Keep the actual bytes so the project still plays after a refresh or
         // when it's reopened from the dashboard in a new session.
-        void saveMediaFile(data.projectId, file, {
+        await saveMediaFile(data.projectId, file, {
           mimeType:    meta.mimeType,
           mediaType:   meta.mediaType,
           aspectRatio: meta.aspectRatio,
@@ -78,9 +81,13 @@ export default function UploadPage() {
           height:      meta.height,
           durationS:   meta.durationS,
           filename:    meta.filename,
-        });
+        }).catch(() => {});
+        // Durable server copy so the project reopens on any device (no-op on
+        // read-only serverless hosts, where IndexedDB remains the store).
+        backupFootageToCloud(data.projectId, file, { filename: meta.filename });
         setProjectId(data.projectId);
         setStage('processing');
+        router.replace(`/studio/${data.projectId}`);
       } else if (res.status === 401) {
         setUploadError('You\'re not signed in. Please sign in and try again.');
         setUploading(false);
@@ -119,7 +126,15 @@ export default function UploadPage() {
   const formatBytes = (b: number) => b < 1024*1024 ? `${(b/1024).toFixed(0)} KB` : `${(b/(1024*1024)).toFixed(1)} MB`;
 
   if (stage === 'processing') {
-    return <ProcessingScreen filename={file?.name} onComplete={() => router.push(`/editor/${projectId ?? 'proj-1'}`)} />;
+    // No fake "processing" interstitial here: the real analysis runs in Studio
+    // (real audio/energy measurement, speech-to-text, moment detection) with its
+    // own honest progress steps. Hand off immediately and let it do the work.
+    if (projectId) router.replace(`/studio/${projectId}`);
+    return (
+      <div style={{ minHeight: '100vh', background: '#050505', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#FAFAFA', animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
+      </div>
+    );
   }
 
   return (
@@ -148,10 +163,10 @@ export default function UploadPage() {
               <React.Fragment key={i}>
                 {i > 0 && <div style={{ width: 20, height: 1, background: '#1e1e1e' }} />}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <div style={{ width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, background: isDone ? '#4F8CFF' : isActive ? 'transparent' : 'transparent', border: isDone ? 'none' : isActive ? '1.5px solid #4F8CFF' : '1px solid #1e1e1e', color: isDone ? '#fff' : isActive ? '#4F8CFF' : '#333' }}>
+                  <div style={{ width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, background: isDone ? '#FAFAFA' : isActive ? 'transparent' : 'transparent', border: isDone ? 'none' : isActive ? '1.5px solid #FAFAFA' : '1px solid #1e1e1e', color: isDone ? '#fff' : isActive ? '#FAFAFA' : '#333' }}>
                     {isDone ? <Check size={10} strokeWidth={3} /> : i + 1}
                   </div>
-                  <span style={{ fontSize: 12, color: isActive ? '#FFFFFF' : isDone ? '#4F8CFF' : '#333' }}>{label}</span>
+                  <span style={{ fontSize: 12, color: isActive ? '#FFFFFF' : isDone ? '#FAFAFA' : '#333' }}>{label}</span>
                 </div>
               </React.Fragment>
             );
@@ -166,7 +181,7 @@ export default function UploadPage() {
           {/* ── STAGE: UPLOAD ── */}
           {stage === 'upload' && (
             <div style={{ animation: 'slide-up 0.5s cubic-bezier(0.22,1,0.36,1) both' }}>
-              <h1 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(24px,4vw,36px)', letterSpacing: '-0.04em', color: '#FFFFFF', margin: '0 0 8px', textAlign: 'center' }}>
+              <h1 style={{ fontFamily: "'Inter',system-ui,-apple-system,sans-serif", fontWeight: 700, fontSize: 'clamp(24px,4vw,36px)', letterSpacing: '-0.04em', color: '#FFFFFF', margin: '0 0 8px', textAlign: 'center' }}>
                 Drop your footage
               </h1>
               <p style={{ fontSize: 15, fontWeight: 400, letterSpacing: '-0.01em', color: '#A5ADBA', textAlign: 'center', margin: '0 0 36px', lineHeight: 1.6 }}>
@@ -181,22 +196,22 @@ export default function UploadPage() {
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={handleDrop}
                 style={{
-                  border: `1.5px dashed ${isDragging ? 'rgba(79,140,255,0.7)' : 'rgba(255,255,255,0.08)'}`,
+                  border: `1.5px dashed ${isDragging ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.08)'}`,
                   borderRadius: 18, padding: '64px 32px', cursor: 'pointer',
-                  background: isDragging ? 'rgba(79,140,255,0.05)' : 'rgba(255,255,255,0.02)',
+                  background: isDragging ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.02)',
                   backdropFilter: 'blur(20px)', textAlign: 'center',
-                  boxShadow: isDragging ? '0 0 40px rgba(79,140,255,0.1)' : 'inset 0 1px 0 rgba(255,255,255,0.04)',
+                  boxShadow: isDragging ? '0 0 40px rgba(255,255,255,0.1)' : 'inset 0 1px 0 rgba(255,255,255,0.04)',
                   transition: 'all 250ms ease',
                 }}
               >
-                <div style={{ width: 56, height: 56, borderRadius: '50%', background: isDragging ? 'rgba(79,140,255,0.12)' : 'rgba(255,255,255,0.04)', border: `1px solid ${isDragging ? 'rgba(79,140,255,0.3)' : 'rgba(255,255,255,0.08)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', transition: 'all 250ms' }}>
-                  <Upload size={22} color={isDragging ? '#4F8CFF' : 'rgba(255,255,255,0.5)'} strokeWidth={1.75} />
+                <div style={{ width: 56, height: 56, borderRadius: '50%', background: isDragging ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)', border: `1px solid ${isDragging ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.08)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', transition: 'all 250ms' }}>
+                  <Upload size={22} color={isDragging ? '#FAFAFA' : 'rgba(255,255,255,0.5)'} strokeWidth={1.75} />
                 </div>
-                <p style={{ fontSize: 16, fontWeight: 600, color: isDragging ? '#4F8CFF' : '#FFFFFF', margin: '0 0 8px', transition: 'color 200ms' }}>
+                <p style={{ fontSize: 16, fontWeight: 600, color: isDragging ? '#FAFAFA' : '#FFFFFF', margin: '0 0 8px', transition: 'color 200ms' }}>
                   {isDragging ? 'Drop it here' : 'Drop your video here'}
                 </p>
                 <p style={{ fontSize: 14, color: '#737D8D', margin: '0 0 16px' }}>
-                  or <span style={{ color: '#4F8CFF' }}>browse files</span>
+                  or <span style={{ color: '#FAFAFA' }}>browse files</span>
                 </p>
                 <p style={{ fontSize: 12, color: '#252525', margin: 0, letterSpacing: '0.05em' }}>MP4 · MOV · WebM · up to 3 hours</p>
               </div>
@@ -210,7 +225,7 @@ export default function UploadPage() {
           {/* ── STAGE: PROMPT ── */}
           {stage === 'prompt' && file && (
             <div style={{ animation: 'slide-up 0.45s cubic-bezier(0.22,1,0.36,1) both' }}>
-              <h1 style={{ fontFamily: "'Inter Tight',sans-serif", fontWeight: 700, fontSize: 'clamp(22px,3.5vw,32px)', letterSpacing: '-0.04em', color: '#FFFFFF', margin: '0 0 8px', textAlign: 'center' }}>
+              <h1 style={{ fontFamily: "'Inter',system-ui,-apple-system,sans-serif", fontWeight: 700, fontSize: 'clamp(22px,3.5vw,32px)', letterSpacing: '-0.04em', color: '#FFFFFF', margin: '0 0 8px', textAlign: 'center' }}>
                 What should we do with it?
               </h1>
               <p style={{ fontSize: 15, fontWeight: 400, letterSpacing: '-0.01em', color: '#A5ADBA', textAlign: 'center', margin: '0 0 28px' }}>
@@ -220,17 +235,17 @@ export default function UploadPage() {
               {/* File chip */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#0c0c0c', border: '1px solid #1a1a1a', borderRadius: 10, padding: '10px 14px', marginBottom: 16 }}>
                 <div style={{ width: 32, height: 32, borderRadius: 8, background: '#111', border: '1px solid #1e1e1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <Play size={12} color="#4F8CFF" fill="#4F8CFF" style={{ marginLeft: 1 }} />
+                  <Play size={12} color="#FAFAFA" fill="#FAFAFA" style={{ marginLeft: 1 }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 13, fontWeight: 500, letterSpacing: '-0.01em', fontFamily: "'Inter Tight', Inter, system-ui, sans-serif", color: '#A5ADBA', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
-                  <p style={{ fontSize: 11, fontWeight: 400, letterSpacing: '-0.01em', fontFamily: "'Inter Tight', Inter, system-ui, sans-serif", color: '#737D8D', margin: 0 }}>{formatBytes(file.size)}</p>
+                  <p style={{ fontSize: 13, fontWeight: 500, letterSpacing: '-0.01em', fontFamily: "'Inter',system-ui,-apple-system,sans-serif", color: '#A5ADBA', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
+                  <p style={{ fontSize: 11, fontWeight: 400, letterSpacing: '-0.01em', fontFamily: "'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace", color: '#737D8D', margin: 0 }}>{formatBytes(file.size)}</p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5,
-                  background: 'rgba(79,140,255,0.08)', border: '1px solid rgba(79,140,255,0.2)',
+                  background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)',
                   borderRadius: 9999, padding: '2px 8px' }}>
-                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#4F8CFF' }} />
-                  <span style={{ fontSize: 10, color: '#4F8CFF', fontWeight: 600 }}>Ready</span>
+                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#FAFAFA' }} />
+                  <span style={{ fontSize: 10, color: '#FAFAFA', fontWeight: 600 }}>Ready</span>
                 </div>
                 <button onClick={() => { setFile(null); setStage('upload'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#737D8D', display: 'flex', padding: 0 }}>
                   <X size={14} />
@@ -246,7 +261,7 @@ export default function UploadPage() {
                   onChange={e => setPrompt(e.target.value)}
                   placeholder="Describe your edit... e.g. Make this faster, remove pauses, add captions and keep the strongest moments."
                   rows={4}
-                  style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', padding: '16px 18px 12px', fontSize: 14, color: '#FFFFFF', fontFamily: "'Inter Tight', Inter, system-ui, sans-serif", resize: 'none', lineHeight: 1.5, letterSpacing: '-0.01em', boxSizing: 'border-box' }}
+                  style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', padding: '16px 18px 12px', fontSize: 14, color: '#FFFFFF', fontFamily: "'Inter',system-ui,-apple-system,sans-serif", resize: 'none', lineHeight: 1.5, letterSpacing: '-0.01em', boxSizing: 'border-box' }}
                 />
                 {/* Controls bar */}
                 <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '10px 14px', borderTop: '1px solid #141414', background: '#050505' }} className="prompt-controls">
@@ -255,21 +270,21 @@ export default function UploadPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6,
                       padding: '4px 10px', borderRadius: 7, background: '#0e0e0e',
                       border: '1px solid #1e1e1e' }}>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: '#4F8CFF',
+                      <span style={{ fontSize: 10, fontWeight: 600, color: '#FAFAFA',
                         letterSpacing: '0.04em', textTransform: 'uppercase',
-                        fontFamily: "'Inter Tight', sans-serif" }}>
+                        fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
                         Auto-detected
                       </span>
                       <span style={{ width: 1, height: 10, background: '#2a2a2a' }} />
                       <span style={{ fontSize: 11, fontWeight: 500, color: '#A5ADBA',
-                        fontFamily: "'Inter Tight', sans-serif" }}>
+                        fontFamily: "'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace", fontVariantNumeric: 'tabular-nums' }}>
                         {detectedMeta.aspectRatio}
                       </span>
                       {detectedMeta.width > 0 && (
                         <>
                           <span style={{ width: 1, height: 10, background: '#2a2a2a' }} />
                           <span style={{ fontSize: 11, color: '#737D8D',
-                            fontFamily: "'Inter Tight', sans-serif" }}>
+                            fontFamily: "'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace" }}>
                             {detectedMeta.width}×{detectedMeta.height}
                           </span>
                         </>
@@ -278,7 +293,7 @@ export default function UploadPage() {
                         <>
                           <span style={{ width: 1, height: 10, background: '#2a2a2a' }} />
                           <span style={{ fontSize: 11, color: '#737D8D',
-                            fontFamily: "'Inter Tight', sans-serif" }}>
+                            fontFamily: "'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace" }}>
                             {Math.floor(detectedMeta.durationS / 60)}:{String(Math.floor(detectedMeta.durationS % 60)).padStart(2,'0')}
                           </span>
                         </>
@@ -286,14 +301,14 @@ export default function UploadPage() {
                     </div>
                   )}
                   {/* Captions toggle */}
-                  <button onClick={() => setCaptions(!captions)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', fontSize: 11, fontWeight: 500, borderRadius: 8, border: `1px solid ${captions ? 'rgba(79,140,255,0.25)' : '#1a1a1a'}`, background: captions ? 'rgba(79,140,255,0.08)' : 'transparent', color: captions ? '#4F8CFF' : '#3a3a3a', cursor: 'pointer', transition: 'all 150ms' }}>
+                  <button onClick={() => setCaptions(!captions)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', fontSize: 11, fontWeight: 500, borderRadius: 8, border: `1px solid ${captions ? 'rgba(255,255,255,0.25)' : '#1a1a1a'}`, background: captions ? 'rgba(255,255,255,0.08)' : 'transparent', color: captions ? '#FAFAFA' : '#3a3a3a', cursor: 'pointer', transition: 'all 150ms' }}>
                     <Captions size={11} /> Captions
                   </button>
                   {/* Submit */}
                   <div style={{ marginLeft: 'auto' }} className="ml-auto">
                     <button
                       onClick={uploadAndProcess} disabled={uploading || !prompt.trim()}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 20px', fontSize: 13, fontWeight: 600, color: '#FFFFFF', background: prompt.trim() && !uploading ? 'linear-gradient(135deg,#4F8CFF,#326FEA)' : '#111', border: 'none', borderRadius: 9, cursor: prompt.trim() && !uploading ? 'pointer' : 'not-allowed', boxShadow: prompt.trim() && !uploading ? '0 4px 16px rgba(79,140,255,0.28)' : 'none', transition: 'all 200ms' }}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 20px', fontSize: 13, fontWeight: 600, color: prompt.trim() && !uploading ? '#09090B' : '#FFFFFF', background: prompt.trim() && !uploading ? 'linear-gradient(180deg,#FFFFFF,#E4E4E7)' : '#1C1C21', border: 'none', borderRadius: 10, cursor: prompt.trim() && !uploading ? 'pointer' : 'not-allowed', boxShadow: prompt.trim() && !uploading ? '0 1px 2px rgba(0,0,0,0.45)' : 'none', transition: 'all 200ms' }}
                     >
                       {uploading ? 'Uploading…' : 'Edit video'} <ArrowRight size={13} />
                     </button>
@@ -314,11 +329,11 @@ export default function UploadPage() {
                 }}>
                   <AlertCircle size={16} style={{ color: '#f87171', flexShrink: 0, marginTop: 1 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontFamily: "'Inter Tight', sans-serif", fontSize: 13, fontWeight: 600,
+                    <p style={{ fontFamily: "'Inter',system-ui,-apple-system,sans-serif", fontSize: 13, fontWeight: 600,
                       color: '#f87171', margin: '0 0 2px', letterSpacing: '-0.01em' }}>
                       Upload failed
                     </p>
-                    <p style={{ fontFamily: "'Inter Tight', sans-serif", fontSize: 12, fontWeight: 400,
+                    <p style={{ fontFamily: "'Inter',system-ui,-apple-system,sans-serif", fontSize: 12, fontWeight: 400,
                       color: '#fca5a5', margin: 0, lineHeight: 1.5 }}>
                       {uploadError}
                     </p>
@@ -341,7 +356,7 @@ export default function UploadPage() {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
                 {PRESETS.map((p, i) => (
                   <button key={i} onClick={() => setPrompt(p.fill)}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 13px', fontSize: 12, color: prompt === p.fill ? '#4F8CFF' : '#444', background: prompt === p.fill ? 'rgba(79,140,255,0.08)' : 'transparent', border: `1px solid ${prompt === p.fill ? 'rgba(79,140,255,0.22)' : '#1a1a1a'}`, borderRadius: 9999, cursor: 'pointer', transition: 'all 200ms' }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 13px', fontSize: 12, color: prompt === p.fill ? '#FAFAFA' : '#444', background: prompt === p.fill ? 'rgba(255,255,255,0.08)' : 'transparent', border: `1px solid ${prompt === p.fill ? 'rgba(255,255,255,0.22)' : '#1a1a1a'}`, borderRadius: 9999, cursor: 'pointer', transition: 'all 200ms' }}
                     onMouseEnter={e => { if (prompt !== p.fill) { e.currentTarget.style.color = '#FFFFFF'; e.currentTarget.style.borderColor = '#2e2e2e'; } }}
                     onMouseLeave={e => { if (prompt !== p.fill) { e.currentTarget.style.color = '#444'; e.currentTarget.style.borderColor = '#1a1a1a'; } }}
                   >

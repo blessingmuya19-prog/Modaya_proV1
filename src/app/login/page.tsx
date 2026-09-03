@@ -6,12 +6,12 @@ import { Logo } from '@/components/ui/Logo';
 import { apiLogin } from '@/lib/useAuth';
 import { Eye, EyeOff, ArrowRight } from 'lucide-react';
 
-const F = "'Inter Tight', Inter, system-ui, sans-serif";
+const F = "'Inter',system-ui,-apple-system,sans-serif";
 const C = {
   bg: '#050505', surface: '#070707', s2: '#0a0a0a', s3: '#0e0e0e',
   b: '#111', b2: '#141414', b3: '#1a1a1a',
   text: '#F5F7FA', sec: '#A5ADBA', muted: '#737D8D', dim: '#4D5664',
-  accent: '#4F8CFF', accentH: '#6EA3FF', err: '#f87171',
+  accent: '#FAFAFA', accentH: '#D4D4D8', err: '#f87171',
 };
 
 // ── Inner component that calls useSearchParams() ──────────────────────────────
@@ -57,8 +57,8 @@ function LoginForm() {
         </p>
 
         {/* Demo notice */}
-        <div style={{ padding: '10px 14px', background: 'rgba(79,140,255,0.06)',
-          border: '1px solid rgba(79,140,255,0.18)', borderRadius: 8, marginBottom: 20 }}>
+        <div style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.06)',
+          border: '1px solid rgba(255,255,255,0.18)', borderRadius: 8, marginBottom: 20 }}>
           <p style={{ fontFamily: F, fontSize: 12, color: C.muted, margin: 0, lineHeight: 1.5 }}>
             <span style={{ color: C.accent, fontWeight: 600 }}>Demo mode:</span>{' '}
             This is a hosted demo — accounts reset between sessions.
@@ -164,7 +164,7 @@ export default function LoginPage() {
     <Suspense fallback={
       <div style={{ minHeight: '100vh', background: '#050505', display: 'flex',
         alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid #4F8CFF',
+        <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid #FAFAFA',
           borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
         <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       </div>

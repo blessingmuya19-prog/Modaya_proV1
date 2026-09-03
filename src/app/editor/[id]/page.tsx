@@ -3,12 +3,13 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { EditorShell, EditorClip, EditorAIMsg } from '@/components/editor/EditorShell';
 import { useToast } from '@/components/ui/Toast';
-import { getMedia, setMedia } from '@/lib/videoStore';
+import { getMedia, setMedia, analyseFile } from '@/lib/videoStore';
 import { extractFrames, setProjectFrames, capturePoster, savePoster, loadPoster } from '@/lib/thumbnailStore';
-import { loadMediaFile, loadFrames, saveFrames } from '@/lib/mediaDb';
+import { loadFrames, saveFrames, saveMediaFile } from '@/lib/mediaDb';
+import { getProjectMedia } from '@/lib/mediaCloud';
 
-const F = "'Inter Tight', Inter, system-ui, sans-serif";
-const C = { bg: '#050505', muted: '#737D8D', accent: '#4F8CFF' };
+const F = "'Inter',system-ui,-apple-system,sans-serif";
+const C = { bg: '#050505', muted: '#737D8D', accent: '#FAFAFA' };
 
 interface ProjectData {
   id:          string;
@@ -35,19 +36,38 @@ async function prepareMedia(id: string, serverThumb?: string) {
   let media = getMedia(id);
 
   if (!media?.objectUrl) {
-    const stored = await loadMediaFile(id);
+    const stored = await getProjectMedia(id);
     if (stored) {
+      // Server copy carries bytes but not probed metadata; re-derive it so
+      // frame extraction and the timeline have real duration/dimensions.
+      let meta = { width: stored.width, height: stored.height,
+        aspectRatio: stored.aspectRatio, durationS: stored.durationS };
+      if (!stored.durationS) {
+        const file = new File([stored.blob], stored.filename, { type: stored.mimeType });
+        const probed = await analyseFile(file).catch(() => null);
+        if (probed) meta = { width: probed.width, height: probed.height,
+          aspectRatio: probed.aspectRatio, durationS: probed.durationS };
+      }
       media = {
         objectUrl:   URL.createObjectURL(stored.blob),
         mimeType:    stored.mimeType,
         mediaType:   stored.mediaType,
-        aspectRatio: stored.aspectRatio,
-        width:       stored.width,
-        height:      stored.height,
-        durationS:   stored.durationS,
+        aspectRatio: meta.aspectRatio,
+        width:       meta.width,
+        height:      meta.height,
+        durationS:   meta.durationS,
         filename:    stored.filename,
       };
       setMedia(id, media);          // notifies the editor shell to pick it up
+      // Persist the corrected metadata so later loads (EditorShell analysis,
+      // refresh) see real duration even when bytes came from the server copy.
+      if (stored.durationS !== meta.durationS) {
+        void saveMediaFile(id, stored.blob, {
+          mimeType: stored.mimeType, mediaType: stored.mediaType,
+          aspectRatio: meta.aspectRatio, width: meta.width, height: meta.height,
+          durationS: meta.durationS, filename: stored.filename,
+        }).catch(() => {});
+      }
     }
   }
   if (!media?.objectUrl) return;

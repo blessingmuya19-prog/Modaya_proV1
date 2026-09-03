@@ -31,7 +31,7 @@ export function AIPromptBox({ onEdit }: { onEdit: (prompt: string, opts: Record<
         style={{
           width: '100%', background: 'transparent', border: 'none', outline: 'none',
           padding: '20px 20px 12px', fontSize: 14, color: '#FFFFFF',
-          fontFamily: "'Inter', sans-serif", resize: 'none', lineHeight: 1.6,
+          fontFamily: "'Inter',system-ui,-apple-system,sans-serif", resize: 'none', lineHeight: 1.6,
         }}
       />
 
@@ -50,9 +50,9 @@ export function AIPromptBox({ onEdit }: { onEdit: (prompt: string, opts: Record<
         <button onClick={() => setCaptions(!captions)} style={{
           display: 'flex', alignItems: 'center', gap: 5,
           padding: '5px 10px', borderRadius: 7, fontSize: 12, cursor: 'pointer',
-          border: `1px solid ${captions ? 'rgba(79,140,255,0.3)' : '#242424'}`,
-          background: captions ? 'rgba(79,140,255,0.1)' : 'transparent',
-          color: captions ? '#4F8CFF' : '#666', transition: 'all 150ms',
+          border: `1px solid ${captions ? 'rgba(255,255,255,0.3)' : '#242424'}`,
+          background: captions ? 'rgba(255,255,255,0.1)' : 'transparent',
+          color: captions ? '#FAFAFA' : '#666', transition: 'all 150ms',
         }}>
           <AlignLeft size={12} /> Captions
         </button>
@@ -88,11 +88,11 @@ export function AIPromptBox({ onEdit }: { onEdit: (prompt: string, opts: Record<
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
               padding: '0 20px', height: 42, fontSize: 14, fontWeight: 600,
-              background: '#4F8CFF', color: '#050505', border: 'none', borderRadius: 10,
+              background: '#FAFAFA', color: '#050505', border: 'none', borderRadius: 10,
               cursor: 'pointer', transition: 'all 150ms ease',
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#6EA3FF'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#4F8CFF'; e.currentTarget.style.transform = ''; }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#D4D4D8'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#FAFAFA'; e.currentTarget.style.transform = ''; }}
           >
             Edit video <ArrowRight size={14} />
           </button>

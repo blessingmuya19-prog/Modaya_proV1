@@ -30,39 +30,39 @@ export function Timeline() {
   const LABEL_W = 56;
 
   return (
-    <div style={{ borderTop: '1px solid #242424', background: '#0A0A0A', flexShrink: 0, height: 140 }}>
+    <div style={{ borderTop: '1px solid #27272A', background: '#131316', flexShrink: 0, height: 140 }}>
       {/* Header */}
-      <div style={{ height: 32, borderBottom: '1px solid #1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px' }}>
+      <div style={{ height: 32, borderBottom: '1px solid #27272A', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 10, color: '#737D8D', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Timeline</span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: '#737D8D' }}>
-            <span style={{ width: 8, height: 8, borderRadius: 2, background: 'rgba(79,140,255,0.5)', border: '1px solid rgba(79,140,255,0.4)', display: 'inline-block' }} />
+          <span style={{ fontSize: 10, color: '#A1A1AA', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Timeline</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: '#A1A1AA' }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.4)', display: 'inline-block' }} />
             AI cuts
           </span>
         </div>
-        <span style={{ fontSize: 10, color: '#737D8D' }}>3:32 total</span>
+        <span style={{ fontSize: 10, color: '#A1A1AA' }}>3:32 total</span>
       </div>
 
       {/* Body */}
       <div style={{ position: 'relative', padding: '8px 8px 8px', height: 108, overflow: 'hidden' }}>
         {/* Playhead */}
-        <div style={{ position: 'absolute', top: 0, bottom: 0, width: 1, background: '#4F8CFF', zIndex: 30, pointerEvents: 'none', left: `calc(${LABEL_W}px + ${playhead}% * (100% - ${LABEL_W}px) / 100)` }}>
-          <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 8, height: 8, background: '#4F8CFF', rotate: '45deg' }} />
+        <div style={{ position: 'absolute', top: 0, bottom: 0, width: 1, background: '#D4D4D8', zIndex: 30, pointerEvents: 'none', left: `calc(${LABEL_W}px + ${playhead}% * (100% - ${LABEL_W}px) / 100)` }}>
+          <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 8, height: 8, background: '#D4D4D8', rotate: '45deg' }} />
         </div>
 
         {/* Tracks */}
         <div style={{ paddingLeft: LABEL_W, display: 'flex', flexDirection: 'column', gap: 6 }}>
           {[
-            { label: 'Video',    clips: videoClips,   h: 22, baseBg: '#1a1a1a', baseBorder: '#242424', aiBg: 'rgba(79,140,255,0.12)', aiBorder: 'rgba(79,140,255,0.4)' },
-            { label: 'Audio',    clips: audioClips,   h: 16, baseBg: '#0A0A0A', baseBorder: '#1a1a2a', aiBg: '', aiBorder: '' },
+            { label: 'Video',    clips: videoClips,   h: 22, baseBg: '#27272A', baseBorder: '#27272A', aiBg: 'rgba(255,255,255,0.12)', aiBorder: 'rgba(255,255,255,0.4)' },
+            { label: 'Audio',    clips: audioClips,   h: 16, baseBg: '#FAFAFA', baseBorder: '#1a1a2a', aiBg: '', aiBorder: '' },
             { label: 'Captions', clips: captionClips, h: 11, baseBg: '#141421', baseBorder: '#1a1a2a', aiBg: '', aiBorder: '' },
           ].map((track, ti) => (
             <div key={ti} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <div style={{ position: 'absolute', left: -LABEL_W, width: LABEL_W - 4, textAlign: 'right', fontSize: 9, color: '#737D8D' }}>
+              <div style={{ position: 'absolute', left: -LABEL_W, width: LABEL_W - 4, textAlign: 'right', fontSize: 9, color: '#A1A1AA' }}>
                 {track.label}
               </div>
               <div
-                style={{ flex: 1, height: track.h, position: 'relative', background: '#0A0A0A', cursor: 'pointer', borderRadius: 3 }}
+                style={{ flex: 1, height: track.h, position: 'relative', background: '#1C1C21', cursor: 'pointer', borderRadius: 3 }}
                 onClick={e => {
                   const rect = e.currentTarget.getBoundingClientRect();
                   setPlayhead(((e.clientX - rect.left) / rect.width) * 100);
@@ -99,19 +99,19 @@ export function Timeline() {
             onMouseEnter={() => setHoveredCut(cut.id)}
             onMouseLeave={() => setHoveredCut(null)}
           >
-            <div style={{ width: 2, height: 56, background: 'rgba(79,140,255,0.6)', cursor: 'pointer' }} />
+            <div style={{ width: 2, height: 56, background: 'rgba(255,255,255,0.6)', cursor: 'pointer' }} />
             <div style={{ position: 'absolute', top: -4, left: -4, width: 10, height: 10, background: 'rgba(200,255,61,0.85)', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontSize: 5, color: '#050505', fontWeight: 900 }}>AI</span>
+              <span style={{ fontSize: 5, color: '#000000', fontWeight: 900 }}>AI</span>
             </div>
             {hoveredCut === cut.id && (
               <div style={{
                 position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', marginBottom: 8,
-                background: '#181818', border: '1px solid #242424', borderRadius: 8,
-                padding: '8px 10px', width: 160, boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
+                background: '#1C1C21', border: '1px solid #27272A', borderRadius: 8,
+                padding: '8px 10px', width: 160, boxShadow: '0 4px 24px rgba(0,0,0,0.45)',
                 pointerEvents: 'none', animation: 'fade-in 0.15s ease',
               }}>
-                <p style={{ fontSize: 11, fontWeight: 600, color: '#FFFFFF', margin: '0 0 3px' }}>AI removed {cut.duration}s</p>
-                <p style={{ fontSize: 10, color: '#737D8D', margin: 0 }}>&ldquo;{cut.reason}&rdquo;</p>
+                <p style={{ fontSize: 11, fontWeight: 600, color: '#FAFAFA', margin: '0 0 3px' }}>AI removed {cut.duration}s</p>
+                <p style={{ fontSize: 10, color: '#A1A1AA', margin: 0 }}>&ldquo;{cut.reason}&rdquo;</p>
               </div>
             )}
           </div>
@@ -130,12 +130,12 @@ export function Timeline() {
             {hoveredKeep === keep.id && (
               <div style={{
                 position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', marginBottom: 8,
-                background: '#181818', border: '1px solid #242424', borderRadius: 8,
-                padding: '8px 10px', width: 160, boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
+                background: '#1C1C21', border: '1px solid #27272A', borderRadius: 8,
+                padding: '8px 10px', width: 160, boxShadow: '0 4px 24px rgba(0,0,0,0.45)',
                 pointerEvents: 'none', animation: 'fade-in 0.15s ease',
               }}>
-                <p style={{ fontSize: 11, fontWeight: 600, color: '#4F8CFF', margin: '0 0 3px' }}>AI kept this section</p>
-                <p style={{ fontSize: 10, color: '#737D8D', margin: 0 }}>&ldquo;{keep.reason}&rdquo;</p>
+                <p style={{ fontSize: 11, fontWeight: 600, color: '#D4D4D8', margin: '0 0 3px' }}>AI kept this section</p>
+                <p style={{ fontSize: 10, color: '#A1A1AA', margin: 0 }}>&ldquo;{keep.reason}&rdquo;</p>
               </div>
             )}
           </div>
