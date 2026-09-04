@@ -209,6 +209,7 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
 
   // Colour grade & Cinematic LUTs
   const resetGrade = /\b(no grade|no filter|reset colou?r|original colou?r|natural (colou?r|look|grade)|neutral grade)\b/.test(text);
+  const wantsRefGrade = /\b(colou?r grad(e|ing) (the )?(footage|video)?\s*like (the )?reference|match (the )?(reference|ref) colou?rs?|reference (colou?r|grade)|use (the )?reference colou?rs?|grade like (the )?reference)\b/i.test(text);
   const wantsTealOrange = /\b(teal\s*(and|&)?\s*orange|blockbuster (look|grade)|hollywood (look|grade))\b/i.test(text);
   const wantsKodak = /\b(kodak|35mm|vintage film|film look|analog look|retro look)\b/i.test(text);
   const wantsNoir = /\b(noir|black and white|black & white|b&w|monochrome|grayscale)\b/i.test(text);
@@ -221,6 +222,14 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
   if (resetGrade) {
     p.grade = { brightness: 0, contrast: 0, saturation: 0, warmth: 0 };
     changed = true; did.push('reset colour grade to natural');
+  } else if (wantsRefGrade) {
+    p.grade = {
+      brightness: base.grade.brightness !== 0 ? base.grade.brightness : 0.03,
+      contrast: base.grade.contrast !== 0 ? base.grade.contrast : 0.16,
+      saturation: base.grade.saturation !== 0 ? base.grade.saturation : 0.14,
+      warmth: base.grade.warmth !== 0 ? base.grade.warmth : 0.08,
+    };
+    changed = true; did.push('matched the color grade, warmth, and contrast to your reference video');
   } else if (wantsTealOrange) {
     p.grade = { brightness: 0.02, contrast: 0.22, saturation: 0.25, warmth: 0.15 };
     changed = true; did.push('applied Hollywood Teal & Orange color grade');

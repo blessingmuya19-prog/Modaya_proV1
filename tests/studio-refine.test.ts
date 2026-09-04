@@ -186,6 +186,11 @@ describe('refineProfile', () => {
     expect(to.profile.grade.warmth).toBeGreaterThan(0);
     expect(to.profile.grade.contrast).toBeGreaterThan(0);
 
+    const refGrade = refineProfile(profile({ grade: { brightness: 0.05, contrast: 0.2, saturation: 0.15, warmth: 0.12 } }), 'color grade the footage like reference video');
+    expect(refGrade.changed).toBe(true);
+    expect(refGrade.profile.grade.warmth).toBeGreaterThan(0);
+    expect(refGrade.reply).toMatch(/reference/i);
+
     const kodak = refineProfile(profile(), 'give it a 35mm film look');
     expect(kodak.changed).toBe(true);
     expect(kodak.profile.grade.warmth).toBeGreaterThan(0);
