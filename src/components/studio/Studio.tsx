@@ -16,7 +16,8 @@ import Link from 'next/link';
 import {
   ArrowLeft, Film, Upload, Wand2, Download, RefreshCw, Sparkles, Send,
   CheckCircle2, Loader2, Plus, Copy, Check, User, Bot, RotateCcw,
-  Layers, Play, Pause, Palette, Scissors, SunMedium, Type, Zap, X, ZoomIn
+  Layers, Play, Pause, Palette, Scissors, SunMedium, Type, Zap, X, ZoomIn,
+  ChevronDown
 } from 'lucide-react';
 import { LogoMark } from '../ui/Logo';
 import { getMedia, setMedia, subscribeMedia, analyseFile, type MediaEntry } from '@/lib/videoStore';
@@ -338,13 +339,47 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
+  /* ── Chat scrolling ──
+     The message list is its own scroll region; the page never scrolls for it.
+     `chatStickRef` tracks whether the user is looking at the newest messages,
+     so auto-scroll only runs while pinned — reading old history is never
+     interrupted by a new reply. A "Jump to latest" pill appears otherwise. */
+  const chatStickRef = useRef(true);
+  const [showJumpLatest, setShowJumpLatest] = useState(false);
+
+  const scrollChatToBottom = useCallback((smooth: boolean) => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+  }, []);
+
+  const onChatScroll = useCallback(() => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 90;
+    chatStickRef.current = nearBottom;
+    setShowJumpLatest(prev => (prev === !nearBottom ? prev : !nearBottom));
+  }, []);
+
+  /* A new message (or the thinking indicator) arrived → stay pinned to the
+     newest message when the user is at the bottom. */
   useEffect(() => {
-    chatScrollRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chats, chatBusy]);
+    if (!chatStickRef.current) return;
+    scrollChatToBottom(true);
+  }, [chats, chatBusy, scrollChatToBottom]);
 
   // ── result surface: compare / edit-map / versions / reference ──
   /** 'compare' (reference vs result) or 'iterate' (video + chat + edit map). */
   const [resultView, setResultView] = useState<'compare' | 'iterate'>('iterate');
+
+  /* Returning to the iterate view re-mounts the chat column — snap to the
+     newest message instead of leaving the user stranded at the top. */
+  useEffect(() => {
+    if (resultView !== 'iterate') return;
+    chatStickRef.current = true;
+    setShowJumpLatest(false);
+    scrollChatToBottom(false);
+  }, [resultView, scrollChatToBottom]);
   /** In the iterate view: playback mode — just the edit, just the reference,
    *  or both side by side. */
   const [iterView, setIterView] = useState<'mine' | 'ref' | 'side'>('mine');
@@ -966,6 +1001,9 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
   const sendRefinement = (customText?: string) => {
     const text = (customText ?? input).trim();
     if (!text || chatBusy) return;
+    /* Sending always returns your view to the newest message. */
+    chatStickRef.current = true;
+    setShowJumpLatest(false);
     const userMsg: StudioChatMsg = {
       id: `usr-${Date.now()}`,
       role: 'user',
@@ -1127,7 +1165,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: C.bg, color: C.text, fontFamily: F, display: 'flex', flexDirection: 'column' }}>
+    <div className="studio-result-shell" style={{ height: '100vh', overflow: 'hidden', background: C.bg, color: C.text, fontFamily: F, display: 'flex', flexDirection: 'column' }}>
       <header style={{ height: 54, display: 'flex', alignItems: 'center', gap: 12, padding: '0 18px', borderBottom: `1px solid ${C.b}` }}>
         <Link href="/dashboard" style={{ color: C.muted, display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none', fontSize: 13 }}><ArrowLeft size={15} /> Projects</Link>
         <span style={{ fontWeight: 600, fontSize: 15, letterSpacing: '-0.02em' }}>{projectName}</span>
@@ -1191,7 +1229,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         </div>
       ) : (
         /* ─────────── iterate screen: video + chat, edit map below ─────────── */
-        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 360px', gap: 0, minHeight: 0 }} className="studio-iterate-grid">
+        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 360px', gap: 0, minHeight: 0, overflow: 'hidden' }} className="studio-iterate-grid">
           {/* Left: video + edit map */}
           <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, padding: '18px 20px', gap: 12, overflowY: 'auto' }}>
             {/* Your edit / Reference / Side by side toggle (reference only) */}
@@ -1284,13 +1322,18 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           </div>
 
           {/* Right: Modern Lovable-style AI Copilot */}
-          <div style={{
-            borderLeft: `1px solid ${C.b}`,
-            display: 'flex',
-            flexDirection: 'column',
-            minHeight: 0,
-            background: 'linear-gradient(180deg, #0C0D11 0%, #08080A 100%)',
-          }}>
+          <div
+            className="studio-chat-col"
+            style={{
+              borderLeft: `1px solid ${C.b}`,
+              display: 'flex',
+              flexDirection: 'column',
+              minHeight: 0,
+              minWidth: 0,
+              overflow: 'hidden',
+              background: 'linear-gradient(180deg, #0C0D11 0%, #08080A 100%)',
+            }}
+          >
             {/* Copilot Header */}
             <div style={{
               padding: '14px 18px',
@@ -1391,9 +1434,12 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
 
             {/* Messages Scroll Area */}
             <div
+              ref={chatScrollRef}
+              onScroll={onChatScroll}
               className="custom-scrollbar"
               style={{
                 flex: 1,
+                minHeight: 0,
                 overflowY: 'auto',
                 padding: '16px 16px',
                 display: 'flex',
@@ -1663,7 +1709,26 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
                   </div>
                 </div>
               )}
-              <div ref={chatScrollRef} />
+
+              {/* Jump to latest — appears only after scrolling back up */}
+              {showJumpLatest && chats.length > 0 && (
+                <button
+                  onClick={() => { chatStickRef.current = true; setShowJumpLatest(false); scrollChatToBottom(true); }}
+                  style={{
+                    position: 'sticky', bottom: 8, alignSelf: 'flex-end', zIndex: 5,
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '5px 11px', borderRadius: 999,
+                    background: 'rgba(99,102,241,0.16)', border: '1px solid rgba(99,102,241,0.4)',
+                    color: '#C7D2FE', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                    fontFamily: F, boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+                    backdropFilter: 'blur(8px)', transition: 'background 120ms, border-color 120ms',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.28)'; e.currentTarget.style.borderColor = '#818CF8'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.16)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)'; }}
+                >
+                  <ChevronDown size={12} /> Latest
+                </button>
+              )}
             </div>
 
             {/* Lovable-Style Floating Input Bar */}
@@ -1843,7 +1908,14 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 999px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); }
-        @media (max-width: 860px) { .studio-iterate-grid { grid-template-columns: 1fr !important; } }
+        @media (max-width: 860px) {
+          /* Stacked mobile layout: let the page scroll so the copilot is
+             reachable below the video, but keep the message list scrollable
+             inside a bounded panel so the input bar stays pinned to it. */
+          .studio-result-shell { height: auto !important; min-height: 100vh !important; overflow: visible !important; }
+          .studio-iterate-grid { grid-template-columns: 1fr !important; grid-template-rows: auto auto !important; }
+          .studio-chat-col { height: min(76vh, 760px) !important; }
+        }
       `}</style>
     </div>
   );
