@@ -190,10 +190,11 @@ export function buildStyleProfile(opts: {
   sourceName: string;
   durationS:  number;
   frames:     FrameSample[];
+  sourceFrames?: FrameSample[];
   audio?:     AudioEnvelope | null;
   sensitivity?: number;
 }): StyleProfile {
-  const { sourceName, durationS, frames, audio } = opts;
+  const { sourceName, durationS, frames, sourceFrames, audio } = opts;
 
   const cuts   = detectCuts(frames, opts.sensitivity ?? 1);
   const shots  = shotLengths(cuts, durationS);
@@ -214,6 +215,39 @@ export function buildStyleProfile(opts: {
     f.hist.forEach((p, i) => { s += p * Math.abs(i / (f.hist.length - 1) - 0.5) * 2; });
     return s;
   }));
+
+  let targetBrightness = clamp(1.02 + luma * 0.25, 0.98, 1.25);
+  let targetContrast   = clamp(1.22 + spread * 0.55, 1.18, 1.50);
+  let targetSaturation = clamp(1.25 + sat * 0.85,    1.22, 1.60);
+  let targetWarmth     = clamp(warm * 2.0 + (sat > 0.3 ? 0.12 : 0.06), -0.6, 0.6);
+
+  // If source footage frames are provided, adapt the grade to bridge the gap between source and reference
+  if (sourceFrames && sourceFrames.length > 0) {
+    const srcLuma = avg(sourceFrames.map(f => f.luma));
+    const srcSat  = avg(sourceFrames.map(f => f.sat));
+    const srcWarm = avg(sourceFrames.map(f => f.warmth));
+    const srcSpread = avg(sourceFrames.map(f => {
+      let s = 0;
+      f.hist.forEach((p, i) => { s += p * Math.abs(i / (f.hist.length - 1) - 0.5) * 2; });
+      return s;
+    }));
+
+    // If source footage has flatter contrast than reference, boost contrast
+    const contrastGap = Math.max(0, spread - srcSpread);
+    targetContrast = clamp(targetContrast + contrastGap * 0.8, 1.20, 1.55);
+
+    // If source footage is desaturated/log, boost saturation to match reference
+    const satGap = Math.max(0, sat - srcSat);
+    targetSaturation = clamp(targetSaturation + satGap * 1.1, 1.22, 1.65);
+
+    // Warmth adaptation
+    const warmGap = warm - srcWarm;
+    targetWarmth = clamp(targetWarmth + warmGap * 0.75, -0.6, 0.6);
+
+    // Exposure balancing
+    const lumaGap = luma - srcLuma;
+    if (lumaGap > 0.1) targetBrightness = clamp(targetBrightness + 0.05, 1.0, 1.30);
+  }
 
   // Motion inside shots drives how much the style pushes in
   let motion = 0;
@@ -244,11 +278,10 @@ export function buildStyleProfile(opts: {
     shotVariance: meanS > 0 ? Number((sd / meanS).toFixed(2)) : 0,
     pace:         paceOf(cutsPerMin),
     grade: {
-      // Boldly map the reference's look to the target footage to match punchy contrast, warmth, and saturation
-      brightness: Number(clamp(1.02 + luma * 0.25, 0.98, 1.25).toFixed(3)),
-      contrast:   Number(clamp(1.20 + spread * 0.55, 1.18, 1.50).toFixed(3)),
-      saturation: Number(clamp(1.22 + sat * 0.85,    1.20, 1.60).toFixed(3)),
-      warmth:     Number(clamp(warm * 2.0 + (sat > 0.3 ? 0.12 : 0.06), -0.6, 0.6).toFixed(3)),
+      brightness: Number(targetBrightness.toFixed(3)),
+      contrast:   Number(targetContrast.toFixed(3)),
+      saturation: Number(targetSaturation.toFixed(3)),
+      warmth:     Number(targetWarmth.toFixed(3)),
     },
     punchInRate: Number(clamp(motion / 0.06, 0, 0.85).toFixed(2)),
     punchInMax:  Number((1 + clamp(motion / 0.05, 0, 1) * 0.18).toFixed(3)),

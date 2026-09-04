@@ -248,14 +248,18 @@ function sliceAudio(env: AudioEnvelope | null, startS: number, lenS: number): Au
 }
 
 /** Full reference analysis: file in, style profile out. Pass `range` to learn
- *  the style from only one section of the reference ("use 00:12–01:04"). */
+ *  the style from only one section of the reference ("use 00:12–01:04").
+ *  Optional `sourceBlob` allows adaptive color matching directly against the target footage. */
 export async function analyseReference(
   file: File | Blob,
   meta: { name: string; durationS: number },
   onProgress?: (p: AnalysisProgress) => void,
   range?: { startS: number; endS: number },
+  sourceBlob?: Blob | File,
+  sourceDurationS?: number,
 ): Promise<{ profile: StyleProfile; audio: AudioEnvelope | null } | null> {
   const url = URL.createObjectURL(file);
+  let sourceUrl: string | null = null;
   try {
     const winStart = range ? Math.max(0, Math.min(range.startS, meta.durationS)) : 0;
     const winEnd   = range ? Math.max(winStart + 1, Math.min(range.endS, meta.durationS)) : meta.durationS;
@@ -264,8 +268,18 @@ export async function analyseReference(
 
     onProgress?.({ stage: 'frames', progress: 0.05, message: range ? 'Watching that section of the reference…' : 'Watching the reference…' });
     const frames = await sampleFrames(url, winLen, 1, 36,
-      p => onProgress?.({ stage: 'frames', progress: 0.05 + p * 0.6, message: 'Watching the reference…' }),
+      p => onProgress?.({ stage: 'frames', progress: 0.05 + p * 0.5, message: 'Watching the reference…' }),
       sampleRange);
+
+    let sourceFrames: FrameSample[] = [];
+    if (sourceBlob && sourceDurationS && sourceDurationS > 0) {
+      try {
+        sourceUrl = URL.createObjectURL(sourceBlob);
+        sourceFrames = await sampleFrames(sourceUrl, sourceDurationS, 1, 6);
+      } catch {
+        sourceFrames = [];
+      }
+    }
 
     onProgress?.({ stage: 'audio', progress: 0.7, message: 'Listening for the beat…' });
     const fullAudio = await analyseAudio(file);
@@ -277,6 +291,7 @@ export async function analyseReference(
           sourceName: meta.name,
           durationS:  winLen,
           frames,
+          sourceFrames,
           audio,
         })
       : {
@@ -288,7 +303,7 @@ export async function analyseReference(
           shotMedianS: 3.0,
           shotVariance: 0.5,
           pace: 'fast' as const,
-          grade: { brightness: 0.04, contrast: 0.24, saturation: 0.28, warmth: 0.16 },
+          grade: { brightness: 0.08, contrast: 0.38, saturation: 0.45, warmth: 0.24 },
           punchInRate: 0.35,
           punchInMax: 1.15,
           captions: { present: true, position: 'lower' as const, emphasis: 0.75 },
@@ -301,5 +316,6 @@ export async function analyseReference(
     return { profile, audio };
   } finally {
     URL.revokeObjectURL(url);
+    if (sourceUrl) URL.revokeObjectURL(sourceUrl);
   }
 }

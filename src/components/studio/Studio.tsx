@@ -543,6 +543,8 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         env = await analyseAudio(blob).catch(() => null);
       });
 
+      const durationS = footage.durationS || entry?.durationS || 60;
+
       // 2 — learn the reference (or just the chosen section), if provided
       if (withRef && refFile) {
         await tick('learn-reference', async () => {
@@ -553,16 +555,21 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
             ? { startS: Math.max(0, Math.min(range.startS, fullDur)),
                 endS:   Math.max(0, Math.min(range.endS, fullDur)) }
             : undefined;
-          const res = await analyseReference(refFile, { name: refFile.name, durationS: fullDur },
-            () => {}, win && win.endS > win.startS + 0.5 ? win : undefined).catch(() => null);
+          const res = await analyseReference(
+            refFile,
+            { name: refFile.name, durationS: fullDur },
+            () => {},
+            win && win.endS > win.startS + 0.5 ? win : undefined,
+            blob,
+            durationS,
+          ).catch(() => null);
           profile = res?.profile ?? null;
         });
       }
 
-      const durationS = footage.durationS || entry?.durationS || 60;
       const interest = interestCurve(env, durationS);
       const defaultRefGrade = withRef
-        ? { brightness: 0.04, contrast: 0.28, saturation: 0.35, warmth: 0.20 }
+        ? { brightness: 0.08, contrast: 0.38, saturation: 0.45, warmth: 0.24 }
         : { brightness: 0, contrast: 0, saturation: 0, warmth: 0 };
       const baseProfile: StyleProfile = profile ?? {
         ...defaultPunchyProfile(durationS),
