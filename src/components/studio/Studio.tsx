@@ -779,11 +779,11 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
    * regenerated — the same brain as the first pass, so the change is real and
    * previewed immediately. No model call is needed for the common intents.
    */
-  const sendRefinement = () => {
-    const text = input.trim();
+  const sendRefinement = (customText?: string) => {
+    const text = (customText ?? input).trim();
     if (!text || chatBusy) return;
     setChats(c => [...c, { role: 'user', text }]);
-    setInput('');
+    if (!customText) setInput('');
     setChatBusy(true);
     try {
       const current = profileRef.current ?? ctxRef.current?.baseProfile;
@@ -1063,7 +1063,43 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
               ))}
               {chatBusy && <div style={{ color: C.muted, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}><Loader2 size={12} className="spin" /> Modaya is adjusting…</div>}
             </div>
-            <div style={{ padding: 12, borderTop: `1px solid ${C.b}` }}>
+            <div style={{ padding: 12, borderTop: `1px solid ${C.b}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* Quick suggestion chips */}
+              <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2, scrollbarWidth: 'none' }}>
+                {[
+                  { label: '🎨 Match Ref Color', prompt: 'Color grade like reference' },
+                  { label: '✨ Vibrant & Bright', prompt: 'Make it vibrant and bright' },
+                  { label: "✂️ Don't Cut Anything", prompt: "Don't cut anything" },
+                  { label: '📝 Bold Captions', prompt: 'Add bold captions' },
+                  { label: '⚡ Fast Pacing', prompt: 'Make pacing fast' },
+                ].map(chip => (
+                  <button
+                    key={chip.label}
+                    onClick={() => sendRefinement(chip.prompt)}
+                    disabled={chatBusy}
+                    style={{
+                      background: C.s3,
+                      border: `1px solid ${C.b3}`,
+                      borderRadius: 999,
+                      padding: '4px 10px',
+                      fontSize: 11.5,
+                      fontWeight: 500,
+                      color: C.sec,
+                      cursor: chatBusy ? 'default' : 'pointer',
+                      whiteSpace: 'nowrap',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      transition: 'all 120ms',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = C.accent; e.currentTarget.style.color = C.text; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = C.b3; e.currentTarget.style.color = C.sec; }}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, background: C.s2, border: `1px solid ${C.b3}`, borderRadius: 12, padding: '8px 10px' }}>
                 <textarea
                   value={input} onChange={e => setInput(e.target.value)}
@@ -1075,9 +1111,6 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
                   <Send size={15} />
                 </button>
               </div>
-              <p style={{ color: C.dim, fontSize: 11, margin: '8px 2px 0', lineHeight: 1.5 }}>
-                “Color grade like reference.” · “Make it vibrant & bright.” · “Don’t cut anything.”
-              </p>
             </div>
           </div>
         </div>

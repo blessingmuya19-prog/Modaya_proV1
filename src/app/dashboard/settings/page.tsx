@@ -320,8 +320,8 @@ export default function SettingsPage() {
       </Section>
 
       {/* ── AI provider ── */}
-      <Section title="AI editor"
-        description="Connect a free AI provider so the editor understands requests in your own words. Without one it still works, using measurement-based rules.">
+      <Section title="AI Studio"
+        description="Connect a free AI provider so Modaya Studio understands requests in your own words. Without one it still works, using measurement-based rules.">
 
         {aiStatus && !aiStatus.configured && aiStatus.diagnostics?.onVercel && (
           <div style={{ marginBottom: 16, padding: '12px 14px',

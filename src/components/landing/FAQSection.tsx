@@ -6,7 +6,7 @@ const faqs = [
   { q: 'Does Modaya generate AI video?', a: 'No. Modaya edits your existing footage. It does not generate synthetic video, images, or AI avatars. Every frame in your export came from your original recording.' },
   { q: 'What file formats are supported?', a: 'MP4, MOV, and WebM are fully supported. Files can be uploaded from your computer or linked from cloud storage.' },
   { q: 'How does the AI know what to cut?', a: 'Modaya transcribes your audio, detects speakers, analyzes pacing, identifies filler words and long pauses, and uses your editing prompt as creative direction. Every AI decision is shown to you with a reason.' },
-  { q: 'Can I adjust what the AI did?', a: "Yes. The editor shows every AI cut with its reasoning. You can accept, reject, or refine any cut. You can also use the AI panel to apply additional edits or describe changes in natural language." },
+  { q: 'Can I adjust what the AI did?', a: "Yes. Modaya Studio lets you iterate naturally through conversation. You can request any change in plain English, preview the results instantly, and switch between versions." },
   { q: 'How long does processing take?', a: "Most videos under 30 minutes process in under 2 minutes. Longer footage takes a few minutes more. You'll see real-time progress during analysis." },
   { q: 'What export options are available?', a: 'Export in 1080p or 4K, MP4 format, in any aspect ratio: 16:9, 9:16, or 1:1. Pro plans include higher quality settings.' },
 ];
