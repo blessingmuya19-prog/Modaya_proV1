@@ -9,7 +9,7 @@
  */
 import React, { useEffect, useRef } from 'react';
 import { PreviewEngine } from '@/lib/render/engine';
-import { Sequence } from '@/lib/render/sequence';
+import { Sequence, filterFor } from '@/lib/render/sequence';
 
 interface Props {
   sequence:  Sequence;
@@ -41,6 +41,11 @@ export default function PreviewCanvas({
   onTimeRef.current  = onTime;
   onEndRef.current   = onEnded;
   onPauseRef.current = onPaused;
+
+  const activeClip = sequence?.clips?.find(c => c.kind === 'video' && playheadS >= c.timelineIn && playheadS < c.timelineOut)
+    ?? sequence?.clips?.find(c => c.kind === 'video');
+  const activeFilter = activeClip ? filterFor(activeClip.effects) : 'none';
+  const filterStyle = (activeFilter && activeFilter !== 'none') ? activeFilter : undefined;
 
   // Create once
   useEffect(() => {
@@ -123,7 +128,13 @@ export default function PreviewCanvas({
       <canvas
         ref={canvasRef}
         data-modaya-canvas
-        style={{ width: '100%', height: '100%', display: 'block', objectFit: 'contain' }}
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'block',
+          objectFit: 'contain',
+          filter: filterStyle,
+        }}
       />
     </div>
   );

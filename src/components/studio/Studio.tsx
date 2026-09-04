@@ -561,7 +561,13 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
 
       const durationS = footage.durationS || entry?.durationS || 60;
       const interest = interestCurve(env, durationS);
-      const baseProfile: StyleProfile = profile ?? defaultPunchyProfile(durationS);
+      const defaultRefGrade = withRef
+        ? { brightness: 0.04, contrast: 0.28, saturation: 0.35, warmth: 0.20 }
+        : { brightness: 0, contrast: 0, saturation: 0, warmth: 0 };
+      const baseProfile: StyleProfile = profile ?? {
+        ...defaultPunchyProfile(durationS),
+        grade: defaultRefGrade,
+      };
 
       // Captions are the real spoken words — transcribe when a speech service
       // is configured (the call is a no-op without a key and captions fall

@@ -196,6 +196,15 @@ describe('refineProfile', () => {
     expect(directGrade.profile.grade.contrast).toBeGreaterThan(0);
     expect(directGrade.profile.grade.saturation).toBeGreaterThan(0);
 
+    const stillNotGraded = refineProfile(profile(), 'its still not color graded');
+    expect(stillNotGraded.changed).toBe(true);
+    expect(stillNotGraded.profile.grade.contrast).toBeGreaterThan(0);
+    expect(stillNotGraded.profile.grade.saturation).toBeGreaterThan(0);
+
+    const noGradeAdded = refineProfile(profile(), 'no color grade was added');
+    expect(noGradeAdded.changed).toBe(true);
+    expect(noGradeAdded.profile.grade.contrast).toBeGreaterThan(0);
+
     const gradeFootage = refineProfile(profile(), 'color grade the footage');
     expect(gradeFootage.changed).toBe(true);
     expect(gradeFootage.profile.grade.contrast).toBeGreaterThan(0);

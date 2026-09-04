@@ -399,10 +399,10 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
     : Number((1 + (grade.brightness || 0) * 0.4).toFixed(3));
   const effContrast = grade.contrast >= 0.7
     ? Number(grade.contrast.toFixed(3))
-    : Number((1 + (grade.contrast || 0) * 0.6).toFixed(3));
+    : Number((1 + (grade.contrast || 0) * 0.8).toFixed(3));
   const effSaturation = grade.saturation >= 0.7
     ? Number(grade.saturation.toFixed(3))
-    : Number((1 + (grade.saturation || 0) * 0.6).toFixed(3));
+    : Number((1 + (grade.saturation || 0) * 0.85).toFixed(3));
   const effWarmth = grade.warmth || 0;
 
   const effects: Effects = {
@@ -411,9 +411,9 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
     contrast:   effContrast,
     saturation: effSaturation,
     colorGrade: {
-      temperature: Math.round(effWarmth * 60),
+      temperature: Math.round(effWarmth * 80),
       tint: 0,
-      vibrance: Math.round((effSaturation - 1) * 60),
+      vibrance: Math.round((effSaturation - 1) * 70),
       exposure: effBrightness - 1,
       contrast: effContrast,
       highlights: 0,
