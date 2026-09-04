@@ -265,6 +265,10 @@ export async function analyseReference(
       p => onProgress?.({ stage: 'frames', progress: 0.05 + p * 0.6, message: 'Watching the reference…' }),
       sampleRange);
 
+    onProgress?.({ stage: 'audio', progress: 0.7, message: 'Listening for the beat…' });
+    const fullAudio = await analyseAudio(file);
+    const audio = range ? sliceAudio(fullAudio, winStart, winLen) : fullAudio;
+
     onProgress?.({ stage: 'profiling', progress: 0.9, message: 'Working out the style…' });
     const profile = frames.length >= 2
       ? buildStyleProfile({
