@@ -259,7 +259,11 @@ export function parseStyle(raw: unknown): TextStyle | undefined {
 const REMOVAL_WORDS =
   /\b(remove|delete|get rid|take (it|them|that|the .+) off|take off|erase|clear|drop|hide|no more)\b/i;
 
-export function groundOperations(ops: Operation[], message: string): Operation[] {
+export function groundOperations(
+  ops: Operation[],
+  message: string,
+  ctx?: GroundContext,
+): Operation[] {
   const said = message ?? '';
   const spot: TextPosition | undefined =
       /\b(b[ou]tt?[ou]m|lower|below|beneath)\b/i.test(said) ? 'lower'
@@ -274,7 +278,34 @@ export function groundOperations(ops: Operation[], message: string): Operation[]
   const everything = /\b(all|both|every|everything)\b/i.test(said);
   const asksRemoval = REMOVAL_WORDS.test(said);
 
-  return ops.map((op): Operation => {
+  /* Anchor points the browser measured — the AI only ever supplies the
+     approximate area of focus; these lock it into place. */
+  const anchors = groundAnchors(ctx);
+  const styleForText = ctx?.style;
+  /* The Audio-Sync rule: when the learned reference is beat-synced or
+     high-energy, onsets outrank organic boundaries. */
+  const beatSync = /\bbeat ?sync(ed)?\b|high[- ]energy/.test(styleForText ?? '');
+
+  /* Style locking is a MUST, not a hint: when the reference style names
+     captions and the plan forgot the add_captions op, it gets injected here
+     with the reference's placement and flags — a model drift never costs the
+     user their caption DNA. */
+  let ordered = ops;
+  if (styleForText && /\b(captions?|subtitles?|subs)\b/.test(styleForText.toLowerCase())) {
+    const locked = lockTextToStyle(styleForText);
+    if ((locked.position || Object.keys(locked.style).length) &&
+        !ordered.some(o => o.op === 'add_captions') &&
+        /\b(captions?|subtitles?|subs)\b/i.test(said)) {
+      ordered = [{
+        op: 'add_captions',
+        position: locked.position ?? 'lower',
+        everyS: 3,
+        style: locked.style,
+      }, ...ordered];
+    }
+  }
+
+  return ordered.map((op): Operation => {
     if (op.op === 'remove_text') {
       /* "no, top right" is a correction of the last instruction. Reading it
          as a deletion loses work the person cannot get back. */
@@ -292,8 +323,199 @@ export function groundOperations(ops: Operation[], message: string): Operation[]
       return { ...op, position: spot ?? op.position, align: side ?? op.align };
     if (op.op === 'add_text' && (spot || side))
       return { ...op, position: spot ?? op.position, align: side ?? op.align };
+
+    /* ── Range grounding: the model gives the area of focus; the measured
+       boundaries are the truth. Loose windows snap to the nearest silence
+       boundary, word/sentence edge or beat onset; a removal also absorbs any
+       silence span it overlaps, so "cut around 0:40" never leaves dead air
+       residue. Already-aligned ranges (the rules engine passes exact
+       measurements) are left untouched. ── */
+    if ((op.op === 'keep_ranges' || op.op === 'remove_ranges') && anchors.length) {
+      const ranges = op.ranges.map(([s, e]) => {
+        /* Removals absorb silences FIRST — snapping first would shrink a
+           removal into the gap between two silences and lose the overlap. */
+        if (op.op === 'remove_ranges')
+          return snapToAnchors(
+            ...absorbSilences([s, e], ctx?.silences ?? []),
+            anchors, ctx?.durationS, beatSync);
+        return snapToAnchors(s, e, anchors, ctx?.durationS, beatSync);
+      });
+      if (ranges.some((r, i) => r[0] !== op.ranges[i][0] || r[1] !== op.ranges[i][1]))
+        return { ...op, ranges } as Operation;
+      return op;
+    }
+
+    /* ── Style locking: when a reference style is learned, its caption DNA is
+       law. Bold-bottom captions stay bold-bottom even if the model drifted. ── */
+    if ((op.op === 'add_captions' || op.op === 'style_text') && styleForText) {
+      const locked = lockTextToStyle(styleForText);
+      if (op.op === 'add_captions')
+        return {
+          ...op,
+          position: locked.position ?? op.position,
+          align: locked.align ?? op.align,
+          style: { ...(op.style ?? {}), ...locked.style },
+        };
+      return { ...op, style: { ...(op.style ?? {}), ...locked.style } };
+    }
+
     return op;
   });
+}
+
+/* ── Grounding engine ───────────────────────────────────────────────────────── */
+
+export interface GroundContext {
+  durationS?: number;
+  /** Silent spans measured in the browser. */
+  silences?: [number, number][];
+  transcript?: { segments: { startS: number; endS: number; text: string }[] } | null;
+  /** Beat onsets measured in the browser. */
+  onsets?: number[];
+  /** Picture shot changes measured in the browser. */
+  cuts?: number[];
+  /** Learned reference style, e.g. "warm grade; ~12 cuts per minute;
+   *  bold captions along the bottom; beat sync". */
+  style?: string;
+}
+
+interface Anchor { t: number; class: 'silence' | 'word' | 'beat' | 'shot' }
+
+/** How far a loose model timestamp may travel, per anchor class. Beats and
+ *  shot changes are musical/visual punctuation — slightly stricter so a
+ *  window never drifts off-grid. */
+const SNAP_MAX: Record<Anchor['class'], number> = {
+  silence: 1.5,
+  word:    1.5,
+  beat:    1.2,
+  shot:    1.2,
+};
+/** Within this, a timestamp is already on a boundary — leave it alone. Only
+ *  rounding noise gets this grace: the point of grounding is that an
+ *  APPROXIMATE model timestamp moves onto the measured boundary. */
+const SNAP_EPSILON = 0.05;
+
+/** Every physical boundary the browser measured: silence edges, word/sentence
+ *  edges, beat onsets, picture shot changes. Deduplicated; ties break
+ *  silence > word > beat > shot because the first push wins the bucket. */
+function groundAnchors(ctx?: GroundContext): Anchor[] {
+  if (!ctx) return [];
+  const seen = new Set<number>();
+  const out: Anchor[] = [];
+  const push = (t: number, cls: Anchor['class']) => {
+    if (!Number.isFinite(t) || t < 0) return;
+    const k = Math.round(t * 10);       // 0.1s buckets — near-identical anchors collapse
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push({ t, class: cls });
+  };
+  for (const [s, e] of ctx.silences ?? []) { push(s, 'silence'); push(e, 'silence'); }
+  for (const sg of ctx.transcript?.segments ?? []) { push(sg.startS, 'word'); push(sg.endS, 'word'); }
+  for (const o of (ctx.onsets ?? []).slice(0, 240)) push(o, 'beat');
+  for (const c of (ctx.cuts ?? []).slice(0, 240)) push(c, 'shot');
+  return out;
+}
+
+/** Nearest anchor of the given classes within its tolerance, or undefined. */
+function nearestAnchor(t: number, anchors: Anchor[]): number | undefined {
+  let best: number | undefined;
+  let bestD = Infinity;
+  for (const a of anchors) {
+    const d = Math.abs(a.t - t);
+    if (d > SNAP_MAX[a.class]) continue;
+    /* Already on a boundary: never move it. */
+    if (d <= SNAP_EPSILON) return t;
+    if (d < bestD) { best = a.t; bestD = d; }
+  }
+  return best;
+}
+
+/** Snap one boundary to the nearest measured anchor within its tolerance.
+ *  Nearest wins (ties fall to silence > word > beat > shot by insertion
+ *  order). Under the Audio-Sync rule — a beat-synced or high-energy
+ *  reference — onsets and shot changes are prioritised: if any are within
+ *  reach they win outright, and organic boundaries only fill in when no
+ *  onset is close enough. */
+function snapPoint(t: number, anchors: Anchor[], beatSync = false): number {
+  if (beatSync) {
+    const grid = anchors.filter(a => a.class === 'beat' || a.class === 'shot');
+    const hit = nearestAnchor(t, grid.length ? grid : anchors);
+    return hit ?? nearestAnchor(t, anchors) ?? t;
+  }
+  return nearestAnchor(t, anchors) ?? t;
+}
+
+/** Snap a loose [s, e] to measured boundaries; never collapse a usable span. */
+function snapToAnchors(
+  s: number, e: number, anchors: Anchor[], durationS?: number, beatSync = false,
+): [number, number] {
+  const ns = snapPoint(s, anchors, beatSync);
+  const ne = snapPoint(e, anchors, beatSync);
+  if (ne - ns < 0.5) return [s, e];                 // too tight: keep the model's span
+  const lo = durationS !== undefined ? Math.max(0, Math.min(ns, durationS)) : Math.max(0, ns);
+  const hi = durationS !== undefined ? Math.max(0, Math.min(ne, durationS)) : Math.max(0, ne);
+  return [Number(lo.toFixed(3)), Number(hi.toFixed(3))];
+}
+
+/** A removal absorbs every measured silence it touches — no dead-air residue. */
+function absorbSilences([s, e]: [number, number], silences: [number, number][]): [number, number] {
+  let ns = s, ne = e;
+  for (const [ss, se] of silences) {
+    if (ss < ne && se > ns) { ns = Math.min(ns, ss); ne = Math.max(ne, se); }
+  }
+  return [Number(ns.toFixed(3)), Number(ne.toFixed(3))];
+}
+
+/**
+ * The top loudness peaks of an RMS envelope, as timestamps — the measured
+ * boundaries the pacing rule counts on. Strict local maxima, ranked by
+ * strength, then spaced so no two picked peaks sit inside the same window.
+ */
+export function loudnessPeaks(
+  energy: number[], durationS: number, count = 60, minGapS = 0.6,
+): number[] {
+  if (!energy.length || durationS <= 0) return [];
+  const hop = durationS / energy.length;
+  const candidates: { t: number; v: number }[] = [];
+  for (let i = 1; i < energy.length - 1; i++) {
+    const v = energy[i];
+    if (v <= energy[i - 1] || v <= energy[i + 1]) continue;   // local maxima only
+    candidates.push({ t: i * hop, v });
+  }
+  candidates.sort((a, b) => b.v - a.v);
+  const picked: number[] = [];
+  for (const p of candidates) {
+    if (picked.some(t => Math.abs(t - p.t) < minGapS)) continue;
+    picked.push(p.t);
+    if (picked.length >= count) break;
+  }
+  return picked.sort((a, b) => a - b).map(t => Number(t.toFixed(3)));
+}
+
+/** Read the reference style string like a dictionary and lock the captions to
+ *  it — placement comes from the same words "bottom"/"middle"/"top", the style
+ *  flags from bold/box/font/size/colour words. */
+function lockTextToStyle(style: string): {
+  position?: TextPosition; align?: TextAlign; style: TextStyle;
+} {
+  const s = style.toLowerCase();
+  const position = /\b(bottom|lower)\b/.test(s) ? 'lower' as const
+    : /\b(middle|centre|center)\b/.test(s)      ? 'centre' as const
+    : /\b(top|upper)\b/.test(s)                 ? 'top' as const
+    : undefined;
+  const align = /\bleft\b/.test(s) ? 'left' as const
+    : /\bright\b/.test(s)           ? 'right' as const
+    : /\bcent(er|re)\b/.test(s)     ? 'centre' as const
+    : undefined;
+  const styleOut = parseStyle({
+    font: s.match(/\b(serif|mono|display|handwritten|sans)\b/)?.[1],
+    size: s.match(/\b(small|medium|large|big)\b/)?.[1]?.replace(/big/, 'large'),
+    colour: s.match(/\b(white|black|yellow|red|green|blue|orange|pink|purple|grey|gray|#[0-9a-f]{3,6})\b/)?.[1],
+    background: s.match(/\b(box|shadow|none)\b/)?.[1],
+    ...(/\bbold\b/.test(s) ? { bold: true } : {}),
+    ...(/\buppercase|caps\b/.test(s) ? { uppercase: true } : {}),
+  });
+  return { position, align, style: styleOut ?? {} };
 }
 
 export function validateOperations(raw: unknown, ctx: OperationContext): Operation[] {

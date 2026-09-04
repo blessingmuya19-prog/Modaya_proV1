@@ -868,6 +868,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
               clips: [{ id: 'src-v', trackId: 'video', label: 'Footage', startS: 0, endS: durationS, type: 'video' }],
               silences: ctxRef.current!.silences,
               energy: interest,
+              onsets: ctxRef.current!.onsets,
               audio: ctxRef.current!.audio,
               transcript: transcript.length ? transcriptPayload(transcript) : undefined,
               visual: visualRef.current ?? undefined,
@@ -1257,6 +1258,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           clips: view.clips,
           silences: ctxRef.current.silences,
           energy: ctxRef.current.interest,
+          onsets: ctxRef.current.onsets,
           audio: ctxRef.current.audio,
           transcript: ctxRef.current.transcript.length
             ? transcriptPayload(ctxRef.current.transcript)

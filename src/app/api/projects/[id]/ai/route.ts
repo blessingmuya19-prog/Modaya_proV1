@@ -15,7 +15,7 @@ import { describeLoudness } from '@/lib/ai/highlights';
 import { transcriptForPrompt, fillerRanges, sanitiseSegments, Transcript } from '@/lib/ai/transcript';
 import { chatDetailed, explainFailure, extractJson, detectProvider, FailureReason } from '@/lib/ai/llm';
 import { summariseVisual, keyframeTimes, motionBetween, type VisualScan } from '@/lib/ai/visualScan';
-import { groundOperations, validateOperations, applyOperations, parseStyle, parsePlacement, Operation, TimelineClip } from '@/lib/ai/operations';
+import { groundOperations, validateOperations, applyOperations, parseStyle, parsePlacement, loudnessPeaks, Operation, TimelineClip } from '@/lib/ai/operations';
 import { findClipsByMeasurement, sanitiseClips, mergeClips, parseClipRequest, ClipSuggestion } from '@/lib/ai/clips';
 
 // ── Intent detection ──────────────────────────────────────────────────────────
@@ -271,6 +271,10 @@ function applyEdit(
   ctx: {
     silences: [number, number][]; energy: number[]; modelNote?: string;
     transcript?: Transcript | null;
+    /** Beat onsets measured in the browser. */
+    onsets?: number[];
+    /** Learned reference style — caption placement/flags are locked to it. */
+    style?: string;
     /** What the person actually typed — needed to read a position, a font or
      *  the words they want on screen without an AI model to interpret them. */
     message?: string;
@@ -283,7 +287,15 @@ function applyEdit(
 ): EditResult {
 
   const run = (ops: Operation[]) =>
-    applyOperations(clips as TimelineClip[], groundOperations(ops, ctx.message ?? ''),
+    applyOperations(clips as TimelineClip[],
+      groundOperations(ops, ctx.message ?? '', {
+        durationS,
+        silences: ctx.silences,
+        transcript: ctx.transcript ?? null,
+        onsets: ctx.onsets,
+        cuts: ctx.visual?.cuts ?? [],
+        style: ctx.style,
+      }),
       { durationS, silences: ctx.silences, transcript: ctx.transcript ?? null,
         previousClips: (ctx.previousClips ?? []) as TimelineClip[] });
 
@@ -599,17 +611,32 @@ const SYSTEM = `You are the editing brain of Modaya, an AI video editor.
 You receive the state of a timeline and a request from the user, and you reply
 with a short spoken response plus the operations needed to carry it out.
 
-THINK BEFORE YOU ANSWER — this is not a parroting task:
-1. Understand the scene: read the TRANSCRIPT, the PICTURE measurements, and any
-   FRAMES attached. Decide what is really going on (what is said, where the
-   energy is, what the footage is doing) before choosing an edit.
-2. Break the request into steps. People routinely ask for several things at
-   once ("like the reference but shorter, with bold captions"). Each distinct
-   ask is its own operation, listed in the order they must run (structural
-   changes first, then text, then looks).
-3. Then, and only then, emit operations. Every operation must be justified by
-   the request and grounded in the data you were given — never invent timestamps,
-   words, or things you cannot see.
+THINK BEFORE YOU ANSWER — plan in THREE sequential phases, in this order,
+BEFORE emitting a single operation:
+PHASE 1 — STRUCTURE: read the TRANSCRIPT, LOUDNESS, ONSETS, SILENT SPANS and
+PICTURE measurements. Decide where the edit happens. When REFERENCE STYLE
+LEARNED gives a cut rate, convert it to a count (cuts per minute × footage
+minutes) and pick exactly that many high-scoring boundaries — the strongest
+spread LOUDNESS peaks, or PICTURE shot changes when the visual block gives
+them — and place every keep_ranges/remove_ranges start and end on one of
+them. Never cut at even intervals or round seconds.
+PHASE 2 — TEXT: decide what words go on screen and where (captions from the
+transcript, an overlay from the user's exact wording, or none) and when each
+text operation runs. It always runs AFTER the structural cuts, on the final
+footage.
+PHASE 3 — AESTHETIC: take the exact grading values and caption flags from
+REFERENCE STYLE LEARNED (brightness/contrast/saturation, font, size, colour,
+background, bold, uppercase) — never invent, round, or relax them — and put
+them in the grade operation and the text style objects.
+Then, and only then, emit operations, in the same order: structural
+(remove/keep/trim), then text, then looks. Every operation must be justified
+by the request and grounded in the data you were given — never invent
+timestamps, words, or things you cannot see.
+
+You give the APPROXIMATE area of focus, not fake precision: the edit engine
+snaps every range to the measured silence boundaries, word onsets, beat
+onsets and shot changes before it runs. A timestamp within a second or two of
+the true boundary is correct; an invented timestamp is not.
 
 Reply with JSON only, in exactly this shape:
 {
@@ -706,6 +733,37 @@ Rules:
   its style"), read the REFERENCE STYLE LEARNED block and apply the grade and
   caption style it describes — never invent one. If it is absent, say so.
 
+PACING RULE — mapping reference pace onto THIS footage, only when REFERENCE
+STYLE LEARNED states a cut rate ("~12 cuts per minute", "fast cuts", "short
+shots"):
+- expectedCuts = cutsPerMinute × (VIDEO DURATION in seconds ÷ 60).
+- Mark exactly that many boundaries: take the highest-scoring LOUDNESS peaks
+  (the ONSETS list ranks them) or the PICTURE shot changes, spread across the
+  whole video rather than clustered, and emit keep_ranges / remove_ranges so
+  their starts and ends land on those timestamps. Roughly-stated ranges are
+  fine — the edit engine snaps to the measured silence edges and onsets —
+  but the COUNT and the CHOICE of boundaries are yours.
+- Never pad with extra cuts, and never fall back to even spacing or round
+  numbers to reach the count.
+
+AUDIO-SYNC RULE — when REFERENCE STYLE LEARNED (or the request) says
+"beat sync" or "high energy":
+- Every keep_ranges/remove_ranges start and end must land on an ONSETS
+  timestamp (or a LOUDNESS peak when the onsets list is empty).
+- Adjacent kept ranges may share a boundary; never leave a sliver of silence
+  between kept sections.
+
+STYLE LOCKING — when REFERENCE STYLE LEARNED describes captions (e.g. "bold
+captions along the bottom"):
+- You MUST emit add_captions. Set position from the reference's own words
+  (bottom/lower → "lower", top → "top", middle → "centre") and copy EVERY
+  flag it names (bold, size, colour, background, font, uppercase) into the
+  style object verbatim. Then style_text may follow for anything extra.
+- The reference wins over vague user wording. Never let "just some captions"
+  downgrade a bold-bottom reference to a plain centre caption.
+- If the plan needs no caption work at all, do not invent a caption op to
+  satisfy this rule.
+
 Choosing the "best", "strongest" or "highlight" part:
 - Use the LOUDNESS block. It is measured from the real audio of this file.
 - Never default to the opening of the video. The start is not the highlight
@@ -751,6 +809,7 @@ async function planWithLlm(opts: {
   clips:     Clip[];
   silences:  [number, number][];
   energy:    number[];
+  onsets:    number[];
   audio:     'pending' | 'ready' | 'failed';
   transcript: Transcript | null;
   style?:    string;
@@ -776,11 +835,16 @@ async function planWithLlm(opts: {
     ? opts.silences.slice(0, 60).map(([s, e]) => `[${s.toFixed(2)},${e.toFixed(2)}]`).join(' ')
     : '(none measured)';
 
+  const onsetsSummary = opts.onsets.length
+    ? opts.onsets.slice(0, 120).map(t => t.toFixed(2)).join(' ')
+    : '(none measured)';
+
   const context = [
     `VIDEO DURATION: ${opts.durationS.toFixed(1)}s`,
     `TIMELINE:\n${clipSummary}`,
     `SILENT SPANS: ${silenceSummary}`,
     `LOUDNESS:\n${describeLoudness(opts.energy, opts.durationS, opts.audio)}`,
+    `ONSETS (beat onsets / loudness peaks, seconds): ${onsetsSummary}`,
     `TRANSCRIPT:\n${transcriptForPrompt(opts.transcript)}`,
     opts.visual ? `PICTURE (measured from the pixels, not guessed):\n${summariseVisual(opts.visual)}` : null,
     opts.frames?.length
@@ -900,6 +964,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const energy: number[] = Array.isArray(body.energy)
     ? body.energy.filter((n: unknown) => typeof n === 'number').slice(0, 7200)
     : [];
+  /* Beat onsets the browser measured. When the audio analyser did not run,
+     the loudness peaks of the envelope stand in — the pacing and audio-sync
+     rules need SOME measured musical grid, and these are the same peaks. */
+  const onsets: number[] = Array.isArray(body.onsets)
+    ? body.onsets
+        .filter((n: unknown) => typeof n === 'number' && isFinite(n) && n >= 0)
+        .slice(0, 400)
+    : loudnessPeaks(energy, durationS, 60);
 
   /**
    * What the browser saw. Measurements are cheap and always trustworthy, so
@@ -1003,7 +1075,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (provider.ready) {
     const attempt = await planWithLlm({
-      message, durationS, clips, silences, energy, audio, transcript, style, visual, frames,
+      message, durationS, clips, silences, energy, onsets, audio, transcript, style, visual, frames,
       history: (Array.isArray(body.history) && body.history.length
         ? body.history.slice(-8)
         : (project?.aiHistory ?? []))
@@ -1024,7 +1096,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       : '';
 
     if (plan) {
-      const grounded = groundOperations(plan.operations, message);
+      const grounded = groundOperations(plan.operations, message, {
+        durationS, silences, transcript, onsets, style,
+        cuts: visual?.cuts ?? [],
+      });
       const rewritten = grounded.some((g, i) => g.op !== plan.operations[i]?.op);
 
       const outcome = applyOperations(clips as TimelineClip[], grounded,
@@ -1083,7 +1158,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         'pick the highlights, or add captions. No provider key reached this deployment ' +
         `(${buildTag()}) — if you have just added one, it only takes effect on a build made afterwards.`;
     const stepCtx = {
-      silences, energy, modelNote, transcript, message, visual,
+      silences, energy, onsets, style, modelNote, transcript, message, visual,
       previousClips: project?.previousClips ?? [],
     };
     /* Compound request ("cut the pauses and add captions") gets the same
