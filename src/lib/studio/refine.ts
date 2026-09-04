@@ -206,14 +206,47 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
     changed = true;
     did.push('trimmed dead air pauses and tightened clip boundaries');
   }
-  }
 
-  // Colour grade
+  // Colour grade & Cinematic LUTs
   const resetGrade = /\b(no grade|no filter|reset colou?r|original colou?r|natural (colou?r|look|grade)|neutral grade)\b/.test(text);
+  const wantsTealOrange = /\b(teal\s*(and|&)?\s*orange|blockbuster (look|grade)|hollywood (look|grade))\b/i.test(text);
+  const wantsKodak = /\b(kodak|35mm|vintage film|film look|analog look|retro look)\b/i.test(text);
+  const wantsNoir = /\b(noir|black and white|black & white|b&w|monochrome|grayscale)\b/i.test(text);
+  const wantsCyberpunk = /\b(cyberpunk|neon|cyber)\b/i.test(text);
+  const wantsGoldenHour = /\b(golden hour|sunset (look|glow|grade)|warm glow|amber)\b/i.test(text);
+  const wantsFuji = /\b(fuji|velvia|vivid green)\b/i.test(text);
+  const wantsBleachBypass = /\b(bleach bypass|gritty grade|silver contrast)\b/i.test(text);
+  const wantsMoody = /\b(moody|darker|dim down|cinematic shadows)\b/i.test(text);
+
   if (resetGrade) {
     p.grade = { brightness: 0, contrast: 0, saturation: 0, warmth: 0 };
     changed = true; did.push('reset colour grade to natural');
+  } else if (wantsTealOrange) {
+    p.grade = { brightness: 0.02, contrast: 0.22, saturation: 0.25, warmth: 0.15 };
+    changed = true; did.push('applied Hollywood Teal & Orange color grade');
+  } else if (wantsKodak) {
+    p.grade = { brightness: 0.01, contrast: 0.12, saturation: -0.05, warmth: 0.22 };
+    changed = true; did.push('applied Kodak Portra 35mm film grade');
+  } else if (wantsNoir) {
+    p.grade = { brightness: 0.02, contrast: 0.35, saturation: -1.0, warmth: 0 };
+    changed = true; did.push('applied high-contrast Cinematic Noir black & white grade');
+  } else if (wantsCyberpunk) {
+    p.grade = { brightness: 0.03, contrast: 0.30, saturation: 0.45, warmth: -0.25 };
+    changed = true; did.push('applied Cyber Neon color grade');
+  } else if (wantsGoldenHour) {
+    p.grade = { brightness: 0.04, contrast: 0.10, saturation: 0.30, warmth: 0.45 };
+    changed = true; did.push('applied Golden Hour warm sunset color grade');
+  } else if (wantsFuji) {
+    p.grade = { brightness: 0.02, contrast: 0.25, saturation: 0.38, warmth: -0.08 };
+    changed = true; did.push('applied Fujifilm Velvia vivid color grade');
+  } else if (wantsBleachBypass) {
+    p.grade = { brightness: -0.02, contrast: 0.45, saturation: -0.40, warmth: -0.05 };
+    changed = true; did.push('applied high-impact Bleach Bypass color grade');
+  } else if (wantsMoody) {
+    p.grade = { brightness: -0.08, contrast: 0.25, saturation: 0.05, warmth: -0.05 };
+    changed = true; did.push('applied moody cinematic shadow grading');
   }
+
   if (/\b(more|warmer|warm up)\b.*\b(colou?r|grade|warm|tone)\b/.test(text) || /\bwarmer\b/.test(text)) {
     p.grade = { ...p.grade, warmth: clamp(p.grade.warmth + 0.12, -1, 1), saturation: clamp(p.grade.saturation + 0.05, -1, 1) };
     changed = true; did.push('warmed the grade');
@@ -255,8 +288,16 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
   const asksWhatChanged = /\b(what did you (do|change)|what changed|show me (the )?changes|explain (the )?edit|why did you cut)\b/i.test(text);
   const asksHowToExport = /\b(how (do|can) i (export|download|save|render)|where is export|how to export)\b/i.test(text);
   const asksHelp = /\b(help|how (does this work|do i use this)|what can you do|what commands)\b/i.test(text);
+  const asksColorGrade = /\b(can (you|it) colou?r grade|colou?r grad(e|ing)|how to colou?r grade|what colou?rs?|grading)\b/i.test(text);
 
   if (!changed) {
+    if (asksColorGrade) {
+      return {
+        profile: base,
+        changed: false,
+        reply: "Yes! Modaya features automatic reference-matching color grading and cinematic LUT presets. You can ask me for: “teal and orange”, “kodak 35mm film look”, “black and white noir”, “golden hour sunset”, “warmer tones”, “cooler tones”, “more vivid colors”, or “reset color grade”.",
+      };
+    }
     if (asksWhatChanged) {
       return {
         profile: base,

@@ -179,4 +179,25 @@ describe('refineProfile', () => {
     expect(r.profile.captions.present).toBe(true);
     expect(r.profile.punchInRate).toBeGreaterThan(0.2);
   });
+
+  it('applies cinematic LUT presets like Teal & Orange, Kodak 35mm, and Noir', () => {
+    const to = refineProfile(profile(), 'apply teal and orange grade');
+    expect(to.changed).toBe(true);
+    expect(to.profile.grade.warmth).toBeGreaterThan(0);
+    expect(to.profile.grade.contrast).toBeGreaterThan(0);
+
+    const kodak = refineProfile(profile(), 'give it a 35mm film look');
+    expect(kodak.changed).toBe(true);
+    expect(kodak.profile.grade.warmth).toBeGreaterThan(0);
+
+    const noir = refineProfile(profile(), 'make it black and white noir');
+    expect(noir.changed).toBe(true);
+    expect(noir.profile.grade.saturation).toBe(-1);
+  });
+
+  it('answers "can it color grade" with informative guidance', () => {
+    const r = refineProfile(profile(), 'can you color grade');
+    expect(r.changed).toBe(false);
+    expect(r.reply).toMatch(/color grad|teal and orange|kodak/i);
+  });
 });
