@@ -27,6 +27,7 @@ import { saveMediaFile, saveBrollLibrary, saveBrollFile, loadBrollLibrary, delet
 import { getProjectMedia, uploadProjectMedia, getReferenceBlob, getBrollLibrary, backupBrollToCloud, trimCloudBroll } from '@/lib/mediaCloud';
 import { analyseAudio, analyseReference, interestCurve } from '@/lib/ai/analyseReference';
 import type { StyleProfile } from '@/lib/ai/styleProfile';
+import { applyVibe, clampVibe, DEFAULT_VIBE, type VibeParams } from '@/lib/ai/vibe';
 import { composeStudioPlan, type StudioPlan, type PlannedShot, type TranscriptLine } from '@/lib/studio/editPlan';
 import {
   toAiView, applyAiResult, syncProfileAfterAi, transcriptPayload,
@@ -348,6 +349,11 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
   const [refName, setRefName] = useState<string | null>(null);
   const [match, setMatch] = useState(0);
   const [headline, setHeadline] = useState('');
+  /* Director's taste: aggression (cut pressure) + literalism (caption
+     coverage). state drives the UI, the ref is what callbacks read so no
+     dependency arrays shift. */
+  const [vibe, setVibe] = useState<VibeParams>(DEFAULT_VIBE);
+  const vibeRef = useRef<VibeParams>({ ...DEFAULT_VIBE });
   const [error, setError] = useState<string | null>(null);
 
   const [plan, setPlan] = useState<StudioPlan | null>(null);
@@ -596,6 +602,18 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
   const matchCoverage = useCallback((detail: ReferenceMatchDetail): string[] =>
     detail.axes.map(a => MATCH_AXIS_LABELS[a.label] ?? a.label), []);
 
+  /** Moving a vibe slider re-cuts in place: same profile + seed, adjusted
+   *  brief — no version is minted until the user asks for one. */
+  useEffect(() => {
+    if (phase !== 'result' || !ctxRef.current || !profileRef.current) return;
+    const built = applyPlan(profileRef.current, seedRef.current);
+    if (built) setHeadline(resultHeadline({
+      hasReference: ctxRef.current?.hasRef ?? false, match: built.match,
+      durationS: built.plan.durationS, coverage: built.coverage,
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vibe, phase]);
+
   /** Compose the EditPlan from the current profile and push it to the preview.
    *  Shared by the first run, Regenerate and every chat refinement. Returns
    *  the plan plus the grounded reference-match score. */
@@ -612,8 +630,13 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
       profile.sourceName = ctx.sourceName || projectName;
     }
 
+    /* The director's brief is a layer on top of the measured reference:
+       aggression rescales the cut rhythm, literalism rescales caption
+       emphasis — then the composer runs on the adjusted profile. */
+    const vibeApplied = applyVibe(profile, vibeRef.current);
+    const effProfile = vibeApplied.profile;
     const plan = composeStudioPlan({
-      profile, sourceDurationS: ctx.durationS,
+      profile: effProfile, sourceDurationS: ctx.durationS,
       interest: ctx.interest, onsets: ctx.onsets,
       transcript: ctx.transcript.length ? ctx.transcript : undefined,
       // Uploaded cutaway library, when one exists — the plan then reads its
@@ -640,7 +663,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     setStyleLayer(layer);
     setTotalS(plan.durationS);
 
-    const detail = matchPlan(plan, ctx.baseProfile, profile);
+    const detail = matchPlan(plan, ctx.baseProfile, effProfile);
     setMatch(detail.score);
     return { plan, match: detail.score, coverage: matchCoverage(detail) };
   }, [projectId, matchPlan, matchCoverage]);
@@ -915,6 +938,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
                 ? framesRef.current.slice(0, 6).map(f => f.dataUrl)
                 : undefined,
               style: withRef && profile ? styleForAi(profile) : undefined,
+              vibe: vibeRef.current,
               assets: brollItems.slice(0, 60).map(b => ({
                 name: b.name, mimeType: b.mimeType, durationS: b.durationS,
               })),
@@ -1303,6 +1327,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
             ? framesRef.current.slice(0, 6).map(f => f.dataUrl)
             : undefined,
           style: ctxRef.current.hasRef ? styleForAi(ctxRef.current.baseProfile) : undefined,
+          vibe: vibeRef.current,
           assets: brollItems.slice(0, 60).map(b => ({
             name: b.name, mimeType: b.mimeType, durationS: b.durationS,
           })),
@@ -1662,6 +1687,26 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           ))}
         </div>
       )}
+
+      {/* ── Creative brief: the director's taste as two sliders ── */}
+      <div style={{ display: 'flex', gap: 22, justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', padding: '10px 16px 0' }}>
+        {([
+          ['Aggression', 'aggression', 'smooth cinematic cuts → aggressive jump-cuts', C.accent],
+          ['Captions', 'literalism', 'only key concepts → every spoken line', C.green],
+        ] as const).map(([label, key, hint, col]) => (
+          <label key={key} style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', fontFamily: F, fontSize: 11, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            <span style={{ color: col, fontWeight: 700 }}>{label} · {Math.round(vibe[key] * 100)}</span>
+            <input type="range" min={0} max={1} step={0.05} value={vibe[key]}
+              onChange={e => {
+                const next = clampVibe({ ...vibe, [key]: Number(e.target.value) });
+                vibeRef.current = next;
+                setVibe(next);
+              }}
+              style={{ width: 180, accentColor: col }} aria-label={hint} title={hint} />
+            <span style={{ color: C.dim, textTransform: 'none', letterSpacing: 0 }}>{hint.split('→')[0]}</span>
+          </label>
+        ))}
+      </div>
 
       {resultView === 'compare' && refUrl ? (
         /* ─────────── comparison screen ─────────── */

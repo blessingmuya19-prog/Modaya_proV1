@@ -17,6 +17,9 @@ import { chatDetailed, explainFailure, extractJson, detectProvider, FailureReaso
 import { summariseVisual, keyframeTimes, motionBetween, type VisualScan } from '@/lib/ai/visualScan';
 import { groundOperations, validateOperations, applyOperations, parseStyle, parsePlacement, loudnessPeaks, Operation, TimelineClip } from '@/lib/ai/operations';
 import { describeAssets, type AssetInfo } from '@/lib/ai/assetTags';
+import { buildReferenceAnalysis, referenceAnalysisText } from '@/lib/ai/referenceAnalysis';
+import { semanticPickText } from '@/lib/ai/assetRouter';
+import { clampVibe, vibePromptLine, type VibeParams } from '@/lib/ai/vibe';
 import { findClipsByMeasurement, sanitiseClips, mergeClips, parseClipRequest, ClipSuggestion } from '@/lib/ai/clips';
 
 // ── Intent detection ──────────────────────────────────────────────────────────
@@ -639,6 +642,25 @@ snaps every range to the measured silence boundaries, word onsets, beat
 onsets and shot changes before it runs. A timestamp within a second or two of
 the true boundary is correct; an invented timestamp is not.
 
+FEW-SHOT — this is exactly what a reference decomposes into on one master
+timeline (the REFERENCE ANALYSIS block is already computed for you in this
+shape; never invent events that are not in it):
+{"reference_analysis":{"global_pacing":"high_retention_rapid","average_cut_duration_seconds":1.8},
+ "timeline_events":[
+  {"timestamp":3.12,"event_type":"emphasis_hook","track":"narrative",
+   "visual_action":"scale_zoom_115","asset_archetype_required":"text_highlight_font",
+   "audio_archetype_required":"low_frequency_thud_sfx",
+   "contextual_reason":"Speaker introduced the primary thesis with high vocal amplitude."},
+  {"timestamp":8.0,"event_type":"shot_change","track":"visual",
+   "reason":"The picture changed completely here."},
+  {"timestamp":8.42,"event_type":"sfx_trigger","track":"sonic",
+   "reason":"Loud hit off-voice — a transition SFX lands exactly here."}]}
+When you reason about the reference ("like the reference", "explain the style"),
+use this event vocabulary (emphasis_hook, vocal_beat, shot_change, motion_burst,
+overlay_on, sfx_trigger, duck_point) and the WHY from the analysis block —
+never a generic "it has fast cuts" when the block says the speaker's voice
+peaks at 3.12s and a shot change lands at 8.0s.
+
 Reply with JSON only, in exactly this shape:
 {
   "reply": "one or two sentences, conversational, first person, no markdown",
@@ -832,6 +854,8 @@ async function planWithLlm(opts: {
   style?:    string;
   /** The user's asset kit — names/types the model may refer to. */
   assets?:   AssetInfo[];
+  /** Director's taste sliders (0..1 each): cut pressure + caption literalism. */
+  vibe?:     VibeParams;
   history:   { role: 'user' | 'ai'; text: string }[];
   /** Shot changes, movement and brightness measured in the browser. */
   visual?:   VisualScan | null;
@@ -873,7 +897,26 @@ async function planWithLlm(opts: {
         'Describe only what is in them. If you are unsure, say so.'
       : null,
     opts.style ? `REFERENCE STYLE LEARNED:\n${opts.style}` : null,
+    /* The 4-track deconstruction — retrieved from measured signals, not
+       model guesses. This is the structured RAG the few-shot teaches. */
+    referenceAnalysisText(buildReferenceAnalysis({
+      durationS: opts.durationS,
+      transcript: opts.transcript,
+      energy: opts.energy,
+      onsets: opts.onsets,
+      visual: opts.visual ?? null,
+      cutsPerMin: Number(/~?(\d+(?:\.\d+)?)\s+cuts per minute/.exec(opts.style ?? '')?.[1] ?? 0),
+      beatSynced: /\bbeat ?sync(ed)?\b/.test(opts.style ?? ''),
+      captions: {
+        present: /\bcaptions?\b/.test(opts.style ?? ''),
+        position: /\b(middle|centre|center)\b/.test(opts.style ?? '') ? 'centre' as const : 'lower' as const,
+        animated: /\b(animated|pop-?in|word ?by ?word)\b/.test(opts.style ?? ''),
+      },
+    })),
     describeAssets(opts.assets ?? []),
+    semanticPickText(opts.assets ?? [], opts.message)
+      ? `SEMANTIC PICKS FOR THIS REQUEST:\n${semanticPickText(opts.assets ?? [], opts.message)}` : null,
+    opts.vibe ? vibePromptLine(opts.vibe) : null,
   ].filter(Boolean).join('\n\n');
 
   const recent = opts.history.slice(-6).map(m => ({
@@ -986,6 +1029,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         .filter((a: unknown): a is AssetInfo => Boolean(a) && typeof (a as AssetInfo).name === 'string')
         .slice(0, 60)
     : [];
+  /* Director's taste — the two vibe sliders travel as prompt variables and,
+     in the deterministic composer, as plan adjustments. */
+  const vibe: VibeParams = clampVibe(body.vibe);
   const audio: 'pending' | 'ready' | 'failed' =
     body.audio === 'pending' || body.audio === 'failed' ? body.audio : 'ready';
   const energy: number[] = Array.isArray(body.energy)
@@ -1102,7 +1148,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (provider.ready) {
     const attempt = await planWithLlm({
-      message, durationS, clips, silences, energy, onsets, audio, transcript, style, assets, visual, frames,
+      message, durationS, clips, silences, energy, onsets, audio, transcript, style, assets, vibe, visual, frames,
       history: (Array.isArray(body.history) && body.history.length
         ? body.history.slice(-8)
         : (project?.aiHistory ?? []))
