@@ -64,8 +64,11 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
     }
   }
 
-  // "Don't cut anything" / "Keep the whole video" / "Uncut" / "No cuts"
-  const wantsUncut = /\b(sont|dont|don.?t|do not|did not|never|stop|no)\s+(cut|trim|slice|remove|drop|edit)\b/i.test(text)
+  // "Don't cut anything" / "Stop adding cuts" / "Only add what user asks for" / "Uncut" / "No cuts"
+  const wantsNoUnsolicitedCuts = /\b(stop (this thing of )?(adding|making|putting) (cuts?|edits?)|only (add|do|apply|include) what (i|the user|user) ask(s)?( for)?|don.?t add (cuts?|extra edits?)|no (extra|random|unsolicited) (cuts?|edits?)|leave (my )?(cuts?|footage|video) alone|stop cutting|stop editing cuts|only (apply|do|change) (the )?(colou?r|grade|captions?|subtitles?|ratio|format))\b/i.test(text);
+
+  const wantsUncut = wantsNoUnsolicitedCuts
+    || /\b(sont|dont|don.?t|do not|did not|never|stop|no)\s+(cut|trim|slice|remove|drop|edit)\b/i.test(text)
     || /\b(did not ask for (a |the )?cut|didn.?t ask for (a |the )?cut)\b/i.test(text)
     || /\b(keep|leave|preserve|use)\s+(all|the whole|every|everything|entire|full|original)\s*(video|footage|thing|clip)?\b/i.test(text)
     || /\b(uncut|full length|full video|raw footage|raw video|whole video|entire footage|no cuts?|all footage|keep all)\b/i.test(text);
@@ -74,8 +77,12 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
     p.uncut = true;
     p.energy = 0;
     p.cutsPerMin = 0;
+    p.punchInRate = 0;
+    p.punchInMax = 1;
     changed = true;
-    did.push('restored 100% of your footage with no cuts or trims');
+    did.push(wantsNoUnsolicitedCuts
+      ? 'stopped adding cuts and extra edits — keeping only what you ask for on full footage'
+      : 'restored 100% of your footage with no cuts or trims');
   }
 
   // Aspect ratio / Video format
@@ -167,7 +174,6 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
     did.push('positioned captions in the lower third');
   } else if (moreCaps) {
     p.captions = { present: true, position: p.captions?.position ?? 'lower', emphasis: clamp((p.captions?.emphasis ?? 0.4) + 0.25, 0, 1) };
-    if (setPacing(p, 1.05)) { /* denser shots → captions land more often */ }
     changed = true;
     did.push('generated and brought captions onto the timeline');
   }

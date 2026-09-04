@@ -1724,17 +1724,19 @@ function previewBox(ratio?: string): React.CSSProperties {
   return { width: 'min(86vw, 400px)', aspectRatio: '9 / 16', maxHeight: '70vh' };
 }
 
-/* A default punchy short-form profile used when no reference is given: Modaya
-   still makes an energetic cut rather than a passive trim. */
+/* A default profile used when no reference is given: keeps footage intact with original
+   framing so the AI only applies what the user explicitly asks for. */
 function defaultPunchyProfile(durationS: number): StyleProfile {
   return {
     sourceName: 'modaya-default', durationS,
-    cuts: [], cutsPerMin: 22, shotMeanS: 2.7, shotMedianS: 2.4, shotVariance: 0.6,
-    pace: 'fast',
-    grade: { brightness: 0, contrast: 0.06, saturation: 0.08, warmth: 0 },
-    punchInRate: 0.35, punchInMax: 0.12,
-    captions: { present: true, position: 'lower', emphasis: 0.4 },
-    beatSynced: false, bpm: null, energy: 0.7,
+    cuts: [], cutsPerMin: 0, shotMeanS: durationS, shotMedianS: durationS, shotVariance: 0,
+    pace: 'relaxed',
+    grade: { brightness: 0, contrast: 0, saturation: 0, warmth: 0 },
+    punchInRate: 0, punchInMax: 1,
+    captions: { present: false, position: 'lower', emphasis: 0.5 },
+    beatSynced: false, bpm: null, energy: 0.2,
+    uncut: true,
+    targetRatio: 'original',
   };
 }
 

@@ -365,7 +365,7 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
   const seed = opts.seed ?? hashString(profile.sourceName);
   const rand = rng(seed + 7);
 
-  const isUncut = profile.uncut || opts.mode === 'uncut';
+  const isUncut = profile.uncut || opts.mode === 'uncut' || profile.cutsPerMin === 0;
 
   // Aspect ratio resolution:
   // 1. Explicit targetRatio in profile ('16:9' | '9:16' | '1:1')
@@ -419,7 +419,7 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
 
   if (mode === 'uncut') {
     // Keep 100% of footage sequentially with no segments cut out
-    const punchIn = profile.punchInRate > 0.4 && rand() < profile.punchInRate;
+    const punchIn = !profile.uncut && profile.punchInRate > 0.4 && rand() < profile.punchInRate;
     const scale = punchIn ? 1 + (profile.punchInMax - 1) * 0.5 : 1;
     video.push({
       id: 'shot-0', trackId: 'video', label: 'Full Video (Uncut)',

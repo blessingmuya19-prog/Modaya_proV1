@@ -96,6 +96,16 @@ describe('refineProfile', () => {
     const r3 = refineProfile(profile(), 'keep all the footage without trimming');
     expect(r3.changed).toBe(true);
     expect(r3.profile.uncut).toBe(true);
+
+    const r4 = refineProfile(profile(), 'stop this thing of adding cuts and other edits it should only add what user asks for');
+    expect(r4.changed).toBe(true);
+    expect(r4.profile.uncut).toBe(true);
+    expect(r4.profile.punchInRate).toBe(0);
+    expect(r4.reply).toMatch(/stopped adding cuts|what you ask for/i);
+
+    const r5 = refineProfile(profile(), 'only add what user asks for');
+    expect(r5.changed).toBe(true);
+    expect(r5.profile.uncut).toBe(true);
   });
 
   it('handles aspect ratio requests', () => {
