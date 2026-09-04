@@ -165,6 +165,23 @@ describe('refineProfile', () => {
     expect(lower.profile.captions.position).toBe('lower');
   });
 
+  it('understands captions typos the same way the Pro Editor AI does', () => {
+    // "buttom" (not "bottom") is how this came in as "captions on the buttom".
+    for (const msg of [
+      'But captions on the buttom',
+      'put the captions down',
+      'captions at the bottom',
+    ]) {
+      const r = refineProfile(
+        profile({ captions: { present: true, position: 'centre', emphasis: 0.8 } }),
+        msg,
+      );
+      expect(r.changed).toBe(true);
+      expect(r.profile.captions.present).toBe(true);
+      expect(r.profile.captions.position).toBe('lower');
+    }
+  });
+
   it('answers "what did you change" with contextual summary', () => {
     const r = refineProfile(profile(), 'what did you change');
     expect(r.changed).toBe(false);

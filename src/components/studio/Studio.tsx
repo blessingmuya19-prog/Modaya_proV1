@@ -531,9 +531,6 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
       brollLibrary: brollRef.current.map((it, i) => ({ id: brollSourceId(i), durationS: it.durationS })),
       seed,
       sourceRatio,
-      // The source footage's name, so fallback caption cards never show the
-      // reference video's name.
-      sourceName: ctx.sourceName,
     });
     setPlan(plan);
     setFrame({ width: plan.frame.width, height: plan.frame.height });

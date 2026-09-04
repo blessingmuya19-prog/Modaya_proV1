@@ -89,9 +89,6 @@ export interface ComposeOpts {
   /** Uploaded B-roll library; when present, cutaways come from these clips
    *  instead of unused windows of the main footage. */
   brollLibrary?: BrollClip[];
-  /** Filename of the SOURCE footage. Used for fallback caption titles so a
-   *  caption card never shows the reference video's name. */
-  sourceName?: string;
   seed?: number;
 }
 
@@ -285,7 +282,6 @@ function captionClips(
   shots: Array<{ srcStart: number; outStart: number; outEnd: number }>,
   transcript: TranscriptLine[] | undefined,
   position: 'lower' | 'centre',
-  sourceName?: string,
 ): PlannedShot[] {
   const caps: PlannedShot[] = [];
   let n = 0;
@@ -328,13 +324,12 @@ function captionClips(
   }
 
   // Fallback: If no transcript exists but captions were explicitly requested,
-  // place dynamic title/highlight caption cards across shots so captions are
-  // always visible. A single long shot (uncut mode) gets cards tiled every
-  // few seconds instead of one card at the very start.
+  // place caption slots across the programme so captions are always visible.
+  // A single long shot (uncut mode) gets slots tiled every few seconds instead
+  // of one card at the very start. Labels are neutral — exactly what the Pro
+  // Editor's AI writes ("Caption") — so a reference or footage filename never
+  // appears burned into the video.
   if (caps.length === 0 && shots.length > 0) {
-    const cleanTitle = sourceName && sourceName !== 'modaya-default' && sourceName !== 'test'
-      ? sourceName.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ')
-      : 'Key Highlight';
     const CADENCE_S = 7;   // one caption card roughly every 7 seconds
 
     for (const shot of shots) {
@@ -345,7 +340,7 @@ function captionClips(
         const startS = shot.outStart + 0.3 + i * CADENCE_S;
         const endS = shot.outStart + Math.min(shotLen - 0.2, 3.2 + i * CADENCE_S);
         if (endS - startS <= 0.4) continue;
-        const label = caps.length === 0 ? `🔥 ${cleanTitle}` : `✨ Key Moment ${caps.length + 1}`;
+        const label = 'Caption';
         caps.push({
           id: `cap-${n++}`,
           trackId: position === 'centre' ? 'text' : 'subs',
@@ -591,10 +586,6 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
     ? captionClips(
         video.map(v => ({ srcStart: v.sourceIn, outStart: v.startS, outEnd: v.endS })),
         transcript, profile.captions.position,
-        /* The source footage's name — never the reference's. A reference
-           profile's sourceName is the reference file, and using it here made
-           caption fallbacks look like the reference video's name. */
-        opts.sourceName ?? profile.sourceName,
       )
     : [];
 

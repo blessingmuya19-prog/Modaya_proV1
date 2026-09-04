@@ -95,7 +95,8 @@ describe('composeStudioPlan — short mode', () => {
     expect(fallbackPlan.captions).toBeGreaterThan(0);
     const caps = fallbackPlan.clips.filter(c => c.type === 'text');
     expect(caps.length).toBeGreaterThan(0);
-    expect(caps[0].label).toContain('My Awesome Video');
+    // Neutral label — never the (reference or footage) filename.
+    expect(caps[0].label).toBe('Caption');
   });
 
   it('keeps every clip inside the output and main shots non-overlapping', () => {
@@ -165,29 +166,20 @@ describe('composeStudioPlan — full re-cut', () => {
     expect(last.endS).toBeGreaterThan(plan.durationS * 0.5);
   });
 
-  it('labels fallback caption cards with the footage name, never the reference name', () => {
-    // A learned reference profile carries the REFERENCE filename as its
-    // sourceName. Fallback captions must use the source footage instead.
+  it('never burns a filename into fallback caption cards, even with a reference profile', () => {
+    // The Pro Editor's AI writes a neutral "Caption" label; matching it means
+    // a reference or footage filename can never appear burned into the video.
     const withRef = profile({ uncut: true, sourceName: 'my-reference-video.mp4' });
     const plan = composeStudioPlan({
       profile: withRef, sourceDurationS: 120, sourceRatio: '16:9',
-      sourceName: 'my-footage.mp4',
       interest: Array.from({ length: 120 }, () => 0.5),
     });
     const caps = plan.clips.filter(c => c.type === 'text');
     expect(caps.length).toBeGreaterThan(0);
-    expect(caps[0].label).toContain('my footage');
-    expect(caps[0].label).not.toContain('reference');
-
-    // Without the footage name the profile name is the only signal left —
-    // but the default profile must never surface a reference filename either.
-    const plan2 = composeStudioPlan({
-      profile: profile({ uncut: true, sourceName: 'modaya-default' }),
-      sourceDurationS: 120, sourceRatio: '16:9',
-      interest: Array.from({ length: 120 }, () => 0.5),
-    });
-    const caps2 = plan2.clips.filter(c => c.type === 'text');
-    expect(caps2[0].label).toContain('Key Highlight');
+    for (const c of caps) {
+      expect(c.label).toBe('Caption');
+      expect(c.label.toLowerCase()).not.toContain('reference');
+    }
   });
 
   it('preserves source aspect ratio when provided', () => {

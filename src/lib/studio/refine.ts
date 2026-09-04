@@ -15,6 +15,9 @@
  */
 import type { StyleProfile, Pace } from '../ai/styleProfile';
 import { paceOf } from '../ai/styleProfile';
+/* The Pro Editor's AI parses positions with the same vocabulary — reuse it so
+   the Studio copilot and the editor place captions identically. */
+import { parsePosition } from '../ai/operations';
 
 export interface RefineResult {
   /** The adjusted profile (a copy — the input is never mutated). */
@@ -168,11 +171,14 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
     changed = true; did.push('removed all punch-ins and zooms');
   }
 
-  // Captions & Subtitles
-  const wantsCenterCaps = /\b(center|centre|middle)\b.*\b(captions?|subtitles?|text)\b/i.test(text)
-    || /\b(captions?|subtitles?)\b.*\b(center|centre|middle)\b/i.test(text);
-  const wantsLowerCaps = /\b(lower|bottom|down)\b.*\b(captions?|subtitles?|text)\b/i.test(text)
-    || /\b(captions?|subtitles?)\b.*\b(lower|bottom)\b/i.test(text);
+  // Captions & Subtitles — same vocabulary as the Pro Editor's AI
+  // (operations.parsePosition) so "captions on the buttom", "put it down",
+  // "lower third" etc. all land at the bottom instead of being ignored.
+  const mentionsCaps = /\b(captions?|subtitles?|text)\b/i.test(text);
+  const hasCapPlacement = /\b(top|upper|above|head|middle|center|centre|mid|b[ou]tt?[ou]m|lower|below|under|subtitle|beneath|down)\b/i.test(text);
+  const capPosition = hasCapPlacement ? parsePosition(text, 'centre') : null;
+  const wantsCenterCaps = hasCapPlacement && mentionsCaps && capPosition === 'centre';
+  const wantsLowerCaps = hasCapPlacement && mentionsCaps && capPosition === 'lower' && !wantsCenterCaps;
 
   const whereAreCaps = /\b(where.?s|where are|can.?t see|don.?t see|why no|why aren.?t there)\b.*\b(captions?|subtitles?|text)\b/i.test(text)
     || /\b(captions?|subtitles?)\b.*\b(where|missing|not showing|not visible|gone)\b/i.test(text);

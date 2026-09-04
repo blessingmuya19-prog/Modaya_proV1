@@ -170,7 +170,7 @@ export function parsePosition(raw: unknown, fallback: TextPosition = 'lower'): T
   if (POSITIONS.includes(v as TextPosition)) return v as TextPosition;
   if (/^(top|upper|above|head)/.test(v))            return 'top';
   if (/(middle|center|centre|mid)/.test(v))         return 'centre';
-  if (/(b[ou]tt?[ou]m|lower|below|under|subtitle|beneath)/.test(v)) return 'lower';
+  if (/(b[ou]tt?[ou]m|down|lower|below|under|subtitle|beneath)/.test(v)) return 'lower';
   return fallback;
 }
 
