@@ -18,6 +18,8 @@ import {
 } from './sequence';
 import { getTrackedPositionAt } from '@/lib/ai/motionTracker';
 import { getAutoReframeOffset } from './autoReframe';
+import { getInterpolatedZoom } from './smartZoom';
+import { transitionProgress, transitionAlpha, transitionTransform } from './transitions';
 import { extractTimedWords, getWordAnimationState } from './captionStyler';
 
 export interface EngineStats {
@@ -474,12 +476,24 @@ export class PreviewEngine {
     // Draw every video clip on screen, lowest z first — so a B-roll cutaway
     // (higher z, muted) paints over the base talk track while the base keeps
     // owning the audio clock.
+    /* Transitions: an incoming clip with a `transition` fades/whips in over
+       the tail of the previous clip (buildSequence overlaps them). The rest
+       of the drawing loop treats the leader specially. */
+    const transitions = clips
+      .filter(c => c.transition && c.trackId === 'video')
+      .map(c => ({
+        clip: c,
+        p: transitionProgress(this._time, c.timelineIn, c.transition!.durS),
+      }))
+      .filter(x => x.p > 0 && x.p < 1);
+
     for (const clip of clips) {
       const v = clip === this.cutawayClip ? this.overlayEl : this.el();
       if (!v) continue;
       const w = v.videoWidth, h = v.videoHeight;
       if (w && h && v.readyState >= 2) {
         let tr = clip.transform;
+        let alpha = clip.effects.opacity;
         if (seq.autoReframe?.enabled && seq.autoReframe.keyframes.length > 0) {
           const rf = getAutoReframeOffset(seq.autoReframe.keyframes, this._time);
           tr = {
@@ -490,6 +504,29 @@ export class PreviewEngine {
             scale: tr.scale * rf.scale,
           };
         }
+        /* Animated zoom: interpolate the shot's keyframes at the playhead —
+           the reference's punch-in DNA, moving, not pre-scaled. */
+        if (clip.zoom?.length) {
+          const z = getInterpolatedZoom(clip.zoom, this._time);
+          tr = { ...tr, scale: tr.scale * z.scale, offsetX: tr.offsetX + z.offsetX, offsetY: tr.offsetY + z.offsetY };
+        }
+        /* Transition blend — leader (incoming) or follower (the previous
+           clip, whose tail buildSequence extended into the leader's window). */
+        const lead = transitions.find(x => x.clip === clip);
+        const follow = !lead && transitions.length
+          ? transitions.find(x =>
+              clip.timelineOut > this._time &&
+              clip.timelineOut <= x.clip.timelineIn + x.clip.transition!.durS + 0.02)
+          : undefined;
+        if (lead) {
+          const m = transitionAlpha(lead.clip.transition!.kind, lead.p);
+          alpha *= m.lead;
+          tr = transitionTransform(lead.clip.transition!.kind, tr, lead.p, 'lead');
+        } else if (follow) {
+          const m = transitionAlpha(follow.clip.transition!.kind, follow.p);
+          alpha *= m.follow;
+          tr = transitionTransform(follow.clip.transition!.kind, tr, follow.p, 'follow');
+        }
         const r = fitRect(w, h, W, H, tr);
         const filterStr = filterFor(clip.effects);
         if (filterStr && filterStr !== 'none' && ctx.filter !== filterStr) {
@@ -497,11 +534,11 @@ export class PreviewEngine {
         } else if ((!filterStr || filterStr === 'none') && ctx.filter !== 'none') {
           ctx.filter = 'none';
         }
-        if (clip.effects.opacity < 1) {
-          ctx.globalAlpha = clip.effects.opacity;
+        if (alpha < 1) {
+          ctx.globalAlpha = alpha;
         }
         try { ctx.drawImage(v, r.x, r.y, r.w, r.h); this.stats.drawn++; } catch {}
-        if (clip.effects.opacity < 1) {
+        if (alpha < 1) {
           ctx.globalAlpha = 1;
         }
       }

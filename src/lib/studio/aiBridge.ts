@@ -211,7 +211,13 @@ export function applyAiResult(
         transform: { ...DEFAULT_TRANSFORM, fit: useCover ? 'cover' : 'contain', scale: 1 },
         effects,
       };
-      layerOut[out.id] = { sourceIn: out.sourceIn, transform: out.transform, effects };
+      layerOut[out.id] = {
+        sourceIn: out.sourceIn, transform: out.transform, effects,
+        /* Kinetic styling belongs to the shot, not the operation: keep the
+           zoom keyframes and transition attached through the AI round-trip. */
+        ...(styleLayer[out.id]?.zoom ? { zoom: styleLayer[out.id].zoom } : {}),
+        ...(styleLayer[out.id]?.transition ? { transition: styleLayer[out.id].transition } : {}),
+      };
       cursor += len;
       return out;
     });

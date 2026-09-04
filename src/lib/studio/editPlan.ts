@@ -23,6 +23,10 @@ import { paceOf } from '../ai/styleProfile';
 import {
   DEFAULT_TRANSFORM, DEFAULT_EFFECTS, type Transform, type Effects, type TextStyle,
 } from '../render/sequence';
+import {
+  zoomKeyframesForShot, transitionForJunction,
+  type ZoomKeyframe, type TransitionSpec,
+} from '../render/transitions';
 
 export interface TranscriptLine { startS: number; endS: number; text: string }
 
@@ -51,6 +55,12 @@ export interface PlannedShot {
   textPosition?: 'top' | 'centre' | 'lower';
   textAlign?: 'left' | 'centre' | 'right';
   textStyle?: TextStyle;
+  /** Animated zoom on this shot — times in output seconds; the renderer
+   *  interpolates scale from 1.0 to the peak at the emphasis moment. */
+  zoom?: ZoomKeyframe[];
+  /** Transition into this shot from the previous one ('whip' = the cut
+   *  moves; 'crossfade' = dissolve). */
+  transition?: TransitionSpec;
 }
 
 export interface StudioPlan {
@@ -583,6 +593,45 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
       });
       cursor += len; kept++;
     });
+  }
+
+  /* ── Kinetic layer: animated zooms at the measured emphasises, transitions
+     at the source jumps. A static pre-scale is NOT a zoom — the reference's
+     punch-in rate becomes a scale ramp on the shot that hosts a measured
+     onset (1.0 → target over ~0.45s, held on the moment, settled before the
+     cut). The rate is preserved exactly: every shot the reference would have
+     punched in either zooms (when there is a timing anchor) or keeps the
+     static push-in. Transitions happen only where the source actually jumps,
+     so a continuous talk track never gets a fake dissolve. ── */
+  video.forEach(shot => {
+    const len = shot.endS - shot.startS;
+    if ((shot.transform.scale ?? 1) <= 1.02) return;      // not a push-in shot
+    const srcEnd = shot.sourceIn + len;
+    const peakS = onsets.find(o => o >= shot.sourceIn && o <= srcEnd);
+    if (peakS === undefined) return;                      // no anchor: keep static
+    const keys = zoomKeyframesForShot(
+      shot.startS, shot.endS, peakS,
+      1 + (profile.punchInMax - 1) * 0.9,
+    );
+    if (keys.length) {
+      shot.zoom = keys;
+      shot.transform.scale = 1;                           // animated, no double scale
+    }
+  });
+  for (let i = 1; i < video.length; i++) {
+    const prev = video[i - 1], cur = video[i];
+    const prevSrcEnd = prev.sourceIn + (prev.endS - prev.startS);
+    const curLen = Math.max(0.4, cur.endS - cur.startS);
+    const sourceJump = Math.abs(cur.sourceIn - prevSrcEnd) > Math.max(0.6, curLen * 0.25);
+    if (!sourceJump) continue;
+    const t = transitionForJunction({
+      energy: profile.energy,
+      beatSynced: profile.beatSynced,
+      punchInRate: profile.punchInRate,
+      sourceJump,
+      decision: rand(),
+    });
+    if (t) cur.transition = t;
   }
 
   // B-roll: short, silent cutaways dropped over the middle of shots like a

@@ -21,6 +21,8 @@ import { DEFAULT_MORPH_CUT_CONFIG } from './jumpCutSmoother';
 import type { AutoReframeConfig } from './autoReframe';
 import { DEFAULT_AUTOREFRAME_CONFIG } from './autoReframe';
 import type { ColorGradeConfig } from './colorGrading';
+import type { ZoomKeyframe } from './smartZoom';
+import type { TransitionSpec } from './transitions';
 
 export type ClipKind = 'video' | 'audio' | 'text' | 'subtitle';
 
@@ -63,6 +65,10 @@ export interface SequenceClip {
   /** Higher wins when clips overlap on different tracks. */
   z:           number;
   muted:       boolean;
+  /** Animated zoom keyframes — output-timeline times. */
+  zoom?:       ZoomKeyframe[];
+  /** Transition into this clip from the previous same-track clip. */
+  transition?: TransitionSpec;
 }
 
 export interface Sequence {
@@ -95,6 +101,8 @@ export interface EditorClipLike {
   textAlign?:    TextAlign;
   textStyle?:    TextStyle;
   motionTrack?:  MotionTrackConfig;
+  zoom?:         ZoomKeyframe[];
+  transition?:   TransitionSpec;
 }
 
 /**
@@ -115,6 +123,10 @@ export interface StyleLayer {
     transform?: Partial<Transform>;
     effects?:   Partial<Effects>;
     motionTrack?: MotionTrackConfig;
+    /** Animated zoom keyframes (output-timeline times) — survive AI edits. */
+    zoom?:      ZoomKeyframe[];
+    /** Transition into this clip — survive AI edits. */
+    transition?: TransitionSpec;
   };
 }
 
@@ -149,8 +161,27 @@ export function buildSequence(
       effects:     { ...DEFAULT_EFFECTS,   ...(st?.effects   ?? {}) },
       z:           Z_BY_TRACK[c.trackId] ?? 5,
       muted:       c.type === 'text' || c.type === 'subtitle' || c.trackId === 'overlay',
+      zoom:        c.zoom ?? st?.zoom,
+      transition:  c.transition ?? st?.transition,
     };
   });
+
+  /* A transition overlaps the tail of the previous same-track clip so the
+     renderer can dissolve/whip between them: the outgoing clip plays a little
+     longer while the incoming starts. Duration is bounded so it never eats a
+     whole shot. */
+  for (let i = 1; i < seqClips.length; i++) {
+    const next = seqClips[i];
+    const spec = next.transition;
+    if (!spec || next.trackId !== 'video') continue;
+    const prev = seqClips.slice(0, i).reverse()
+      .find(c => c.trackId === 'video' && c.sourceId === next.sourceId);
+    if (!prev) continue;
+    const dur = Math.max(0.18, Math.min(0.6, spec.durS));
+    const originalOut = prev.timelineOut;
+    const extendTo = Math.min(next.timelineIn + dur, originalOut + dur, opts.durationS);
+    if (extendTo > originalOut + 0.05) prev.timelineOut = extendTo;
+  }
 
   // Nothing analysed yet — play the whole source as one clip so the preview
   // works from the moment the media is available.

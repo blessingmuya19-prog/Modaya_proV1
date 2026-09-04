@@ -207,6 +207,51 @@ describe('composeStudioPlan — short mode', () => {
     }
   });
 
+  it('turns push-ins into ANIMATED zooms at the measured onsets', () => {
+    const grid = Array.from({ length: 400 }, (_, i) => i * 0.5);
+    const p = composeStudioPlan({
+      profile: profile({ punchInRate: 1, punchInMax: 1.15, targetRatio: '9:16' }),
+      sourceDurationS: 300, interest: interestWithSpike(), onsets: grid,
+    });
+    const shots = p.clips.filter(c => c.trackId === 'video');
+    expect(shots.length).toBeGreaterThan(0);
+    /* every push-in became a moving zoom (scale keyframes), so no shot is
+       left sitting at a static pre-scale AND every shot stays in frame */
+    for (const s of shots) {
+      if ((s.transform.scale ?? 1) > 1.02) continue;      // no anchor fallback
+      expect(s.zoom).toBeTruthy();
+      expect(s.zoom![0]?.scale).toBe(1);
+      expect(Math.max(...s.zoom!.map(k => k.scale))).toBeGreaterThan(1.02);
+    }
+  });
+
+  it('adds whip transitions at source jumps for an energetic beat-synced reference', () => {
+    const p = composeStudioPlan({
+      profile: profile({ energy: 0.8, beatSynced: true, punchInRate: 0.4, targetRatio: '9:16' }),
+      sourceDurationS: 300, interest: interestWithSpike(),
+      onsets: Array.from({ length: 400 }, (_, i) => i * 0.5),
+    });
+    const shots = p.clips.filter(c => c.trackId === 'video');
+    const withTransition = shots.filter(s => s.transition);
+    expect(withTransition.length).toBeGreaterThan(0);
+    expect(withTransition.every(s => s.transition!.kind === 'whip' || s.transition!.kind === 'crossfade')).toBe(true);
+    /* transitions only appear between discontinuous source windows */
+    for (let i = 1; i < shots.length; i++) {
+      if (!shots[i].transition) continue;
+      const prevSrcEnd = shots[i - 1].sourceIn + (shots[i - 1].endS - shots[i - 1].startS);
+      expect(Math.abs(shots[i].sourceIn - prevSrcEnd)).toBeGreaterThan(0.5);
+    }
+  });
+
+  it('does not invent transitions across a continuous source', () => {
+    /* uncut single-shot has no junction at all */
+    const p = composeStudioPlan({
+      profile: profile({ uncut: true, energy: 0.8, beatSynced: true }),
+      sourceDurationS: 300, sourceRatio: '16:9',
+    });
+    expect(p.clips.every(c => !c.transition)).toBe(true);
+  });
+
   it('pushes in at exactly the reference rate — never a forced alternation', () => {
     const none = composeStudioPlan({
       profile: profile({ punchInRate: 0, targetRatio: '9:16' }),
