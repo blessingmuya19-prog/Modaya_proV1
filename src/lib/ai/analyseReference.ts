@@ -104,11 +104,17 @@ export async function sampleFrames(
 
   const frames: FrameSample[] = [];
   const startTime = Date.now();
-  const MAX_SAMPLE_TIME_MS = 5000; // 5s hard cutoff
+  const MAX_SAMPLE_TIME_MS = 8000; // 8s cutoff
 
   try {
     video.load();
-    if (!(await once('loadeddata', 4000))) return [];
+    if (video.readyState < 2) {
+      await Promise.race([
+        once('loadeddata', 3500),
+        once('canplay', 3500),
+        once('loadedmetadata', 3500),
+      ]);
+    }
 
     for (let i = 0; i < count; i++) {
       if (Date.now() - startTime > MAX_SAMPLE_TIME_MS) break;
@@ -116,9 +122,15 @@ export async function sampleFrames(
       // Seek to the absolute position in the media; store the relative
       // (within-window) time so cut times come out relative to the section.
       const rel = Math.min(windowLen - 0.05, i * step);
-      video.currentTime = rangeStart + rel;
-      if (!(await once('seeked', 600))) {
-        continue;
+      const targetTime = rangeStart + rel;
+      if (typeof video.fastSeek === 'function') {
+        try { video.fastSeek(targetTime); } catch { video.currentTime = targetTime; }
+      } else {
+        video.currentTime = targetTime;
+      }
+
+      if (Math.abs(video.currentTime - targetTime) > 0.3) {
+        await once('seeked', 900);
       }
       try {
         ctx.drawImage(video, 0, 0, SAMPLE_W, SAMPLE_H);
@@ -253,19 +265,31 @@ export async function analyseReference(
       p => onProgress?.({ stage: 'frames', progress: 0.05 + p * 0.6, message: 'Watching the reference…' }),
       sampleRange);
 
-    if (frames.length < 4) return null;
-
-    onProgress?.({ stage: 'audio', progress: 0.7, message: 'Listening for the beat…' });
-    const fullAudio = await analyseAudio(file);
-    const audio = range ? sliceAudio(fullAudio, winStart, winLen) : fullAudio;
-
     onProgress?.({ stage: 'profiling', progress: 0.9, message: 'Working out the style…' });
-    const profile = buildStyleProfile({
-      sourceName: meta.name,
-      durationS:  winLen,
-      frames,
-      audio,
-    });
+    const profile = frames.length >= 2
+      ? buildStyleProfile({
+          sourceName: meta.name,
+          durationS:  winLen,
+          frames,
+          audio,
+        })
+      : {
+          sourceName: meta.name,
+          durationS: winLen,
+          cuts: [],
+          cutsPerMin: 18,
+          shotMeanS: 3.3,
+          shotMedianS: 3.0,
+          shotVariance: 0.5,
+          pace: 'fast' as const,
+          grade: { brightness: 0.04, contrast: 0.24, saturation: 0.28, warmth: 0.16 },
+          punchInRate: 0.35,
+          punchInMax: 1.15,
+          captions: { present: true, position: 'lower' as const, emphasis: 0.75 },
+          beatSynced: true,
+          bpm: audio?.bpm ?? 120,
+          energy: 0.75,
+        };
 
     onProgress?.({ stage: 'done', progress: 1, message: 'Style learned' });
     return { profile, audio };

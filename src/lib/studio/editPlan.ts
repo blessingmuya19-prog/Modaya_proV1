@@ -393,18 +393,29 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
     ? 'uncut'
     : (opts.mode ?? (refShort || profile.sourceName === 'modaya-default' ? 'short' : 'full'));
 
-  const grade = profile.grade;
+  const grade = profile.grade ?? { brightness: 0, contrast: 0, saturation: 0, warmth: 0 };
+  const effBrightness = grade.brightness >= 0.7
+    ? Number(grade.brightness.toFixed(3))
+    : Number((1 + (grade.brightness || 0) * 0.4).toFixed(3));
+  const effContrast = grade.contrast >= 0.7
+    ? Number(grade.contrast.toFixed(3))
+    : Number((1 + (grade.contrast || 0) * 0.6).toFixed(3));
+  const effSaturation = grade.saturation >= 0.7
+    ? Number(grade.saturation.toFixed(3))
+    : Number((1 + (grade.saturation || 0) * 0.6).toFixed(3));
+  const effWarmth = grade.warmth || 0;
+
   const effects: Effects = {
     ...DEFAULT_EFFECTS,
-    brightness: 1 + (grade.brightness || 0) * 0.4,
-    contrast: 1 + (grade.contrast || 0) * 0.5,
-    saturation: 1 + (grade.saturation || 0) * 0.5,
+    brightness: effBrightness,
+    contrast:   effContrast,
+    saturation: effSaturation,
     colorGrade: {
-      temperature: Math.round((grade.warmth || 0) * 60),
+      temperature: Math.round(effWarmth * 60),
       tint: 0,
-      vibrance: Math.round((grade.saturation || 0) * 50),
-      exposure: grade.brightness || 0,
-      contrast: 1 + (grade.contrast || 0) * 0.5,
+      vibrance: Math.round((effSaturation - 1) * 60),
+      exposure: effBrightness - 1,
+      contrast: effContrast,
       highlights: 0,
       shadows: 0,
       intensity: 100,
