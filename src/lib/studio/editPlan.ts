@@ -89,6 +89,9 @@ export interface ComposeOpts {
   /** Uploaded B-roll library; when present, cutaways come from these clips
    *  instead of unused windows of the main footage. */
   brollLibrary?: BrollClip[];
+  /** Filename of the SOURCE footage. Used for fallback caption titles so a
+   *  caption card never shows the reference video's name. */
+  sourceName?: string;
   seed?: number;
 }
 
@@ -587,7 +590,11 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
   const caps = profile.captions.present
     ? captionClips(
         video.map(v => ({ srcStart: v.sourceIn, outStart: v.startS, outEnd: v.endS })),
-        transcript, profile.captions.position, profile.sourceName,
+        transcript, profile.captions.position,
+        /* The source footage's name — never the reference's. A reference
+           profile's sourceName is the reference file, and using it here made
+           caption fallbacks look like the reference video's name. */
+        opts.sourceName ?? profile.sourceName,
       )
     : [];
 

@@ -165,6 +165,31 @@ describe('composeStudioPlan — full re-cut', () => {
     expect(last.endS).toBeGreaterThan(plan.durationS * 0.5);
   });
 
+  it('labels fallback caption cards with the footage name, never the reference name', () => {
+    // A learned reference profile carries the REFERENCE filename as its
+    // sourceName. Fallback captions must use the source footage instead.
+    const withRef = profile({ uncut: true, sourceName: 'my-reference-video.mp4' });
+    const plan = composeStudioPlan({
+      profile: withRef, sourceDurationS: 120, sourceRatio: '16:9',
+      sourceName: 'my-footage.mp4',
+      interest: Array.from({ length: 120 }, () => 0.5),
+    });
+    const caps = plan.clips.filter(c => c.type === 'text');
+    expect(caps.length).toBeGreaterThan(0);
+    expect(caps[0].label).toContain('my footage');
+    expect(caps[0].label).not.toContain('reference');
+
+    // Without the footage name the profile name is the only signal left —
+    // but the default profile must never surface a reference filename either.
+    const plan2 = composeStudioPlan({
+      profile: profile({ uncut: true, sourceName: 'modaya-default' }),
+      sourceDurationS: 120, sourceRatio: '16:9',
+      interest: Array.from({ length: 120 }, () => 0.5),
+    });
+    const caps2 = plan2.clips.filter(c => c.type === 'text');
+    expect(caps2[0].label).toContain('Key Highlight');
+  });
+
   it('preserves source aspect ratio when provided', () => {
     const plan = composeStudioPlan({
       profile: profile(), sourceDurationS: 60, sourceRatio: '16:9',

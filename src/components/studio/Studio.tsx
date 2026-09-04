@@ -346,8 +346,6 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
      interrupted by a new reply. A "Jump to latest" pill appears otherwise. */
   const chatStickRef = useRef(true);
   const [showJumpLatest, setShowJumpLatest] = useState(false);
-  /** We already tried to transcribe for a chat "add captions" request. */
-  const captionTranscribedRef = useRef(false);
 
   const scrollChatToBottom = useCallback((smooth: boolean) => {
     const el = chatScrollRef.current;
@@ -533,6 +531,9 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
       brollLibrary: brollRef.current.map((it, i) => ({ id: brollSourceId(i), durationS: it.durationS })),
       seed,
       sourceRatio,
+      // The source footage's name, so fallback caption cards never show the
+      // reference video's name.
+      sourceName: ctx.sourceName,
     });
     setPlan(plan);
     setFrame({ width: plan.frame.width, height: plan.frame.height });
@@ -727,14 +728,23 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
       const defaultRefGrade = withRef
         ? { brightness: 0.08, contrast: 0.38, saturation: 0.45, warmth: 0.24 }
         : { brightness: 0, contrast: 0, saturation: 0, warmth: 0 };
-      const baseProfile: StyleProfile = profile ?? {
+      let baseProfile: StyleProfile = profile ?? {
         ...defaultPunchyProfile(durationS),
         grade: defaultRefGrade,
       };
+      /* The instruction typed on the drop screen is a real editing brief.
+         Run it through the same refinement brain so Version 1 already obeys
+         it (e.g. "add bold captions" must not land with captions disabled). */
+      const brief = initialNoteRef.current.trim();
+      if (brief) {
+        const refined = refineProfile(baseProfile, brief);
+        if (refined.changed) baseProfile = refined.profile;
+      }
 
       // Captions are the real spoken words — transcribe when a speech service
       // is configured (the call is a no-op without a key and captions fall
-      // back to none). Best-effort: a failed transcription never blocks.
+      // back to highlight cards). Best-effort: a failed transcription never
+      // blocks; the plan still shows spread caption cards.
       let transcript: TranscriptLine[] = [];
       if (baseProfile.captions.present) {
         await tick('captions', async () => {
@@ -753,7 +763,6 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         captionsWanted: baseProfile.captions.present,
         sourceName: footage.filename || entry?.filename,
       };
-      captionTranscribedRef.current = transcript.length > 0;
       profileRef.current = baseProfile;
       seedRef.current = 1;
 
@@ -893,7 +902,6 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           captionsWanted: last.recipe.profile.captions.present,
           sourceName: footage.filename || media.filename,
         };
-        captionTranscribedRef.current = false;
         profileRef.current = last.recipe.profile;
         seedRef.current = last.recipe.seed;
         setHasRef(last.recipe.hasRef);
@@ -1030,12 +1038,13 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
       }
       const { profile: next, changed, reply } = refineProfile(current, text);
       if (changed) {
-        /* Captions need the real spoken words. The first run only transcribed
-           when captions were already on, so a later "add captions" request has
-           no transcript yet — transcribe now (best-effort; the plan falls back
-           to caption cards spread across the footage if this fails). */
-        if (next.captions.present && !ctxRef.current.transcript.length && !captionTranscribedRef.current) {
-          captionTranscribedRef.current = true;
+        /* Captions need the real spoken words, and they must come from the
+           FOOTAGE — a plan built without a transcript falls back to generic
+           caption cards. Transcribe on every caption request (retrying costs
+           a decode, but a user who just added a key expects it to work), then
+           say plainly if no speech service / no audible speech was available
+           instead of pretending word-exact captions were generated. */
+        if (next.captions.present && !ctxRef.current.transcript.length) {
           const progress: StudioChatMsg = {
             id: `asr-${Date.now()}`,
             role: 'ai',
@@ -1063,10 +1072,17 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           }));
           void saveVersion(next, seed, text, built);
           const nextVerNum = (versions[versions.length - 1]?.number ?? 1) + 1;
+          /* When captions were asked for but no words could be transcribed,
+             say so — the plan falls back to highlight cards, and pretending
+             they are real captions is exactly how this got reported as
+             "there's no captions" before. */
+          const captionNote = next.captions.present && ctxRef.current.transcript.length === 0
+            ? " I couldn't transcribe the speech on your footage (no speech key or no intelligible audio), so I placed highlight captions instead — add a Groq key in Settings → AI for word-accurate captions."
+            : '';
           const aiMsg: StudioChatMsg = {
             id: `ai-${Date.now()}`,
             role: 'ai',
-            text: reply,
+            text: reply + captionNote,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             version: {
               number: nextVerNum,
