@@ -377,6 +377,47 @@ export function applyProfileEffectsToLayer(layer: StyleLayer, profile: StyleProf
   return out;
 }
 
+/* ── Word intents (shared with Studio so the ONE AI gets the same context
+       the Pro Editor prepared for it) ─────────────────────────────────────── */
+
+/** Which messages need the words before the AI can act. */
+export function needsTranscript(text: string): boolean {
+  return /caption|subtitle|filler|\bums?\b|\buhs?\b|transcri|what (did|do|does|is)\s+(they|he|she|it|the)|what.*(say|said|talk|about)|quote|word/i
+    .test(text);
+}
+
+/** Messages asking for standalone short clips (TikTok / Reels / shorts). */
+export function wantsClips(text: string): boolean {
+  return /\bclips?\b|\bshorts?\b|tiktok|reels?|viral|\b(?:give|find|make)(?: me)?\s*\d+\b/i
+    .test(text);
+}
+
+/** Messages that are only answerable by looking at the picture. */
+export function needsVision(text: string): boolean {
+  return /what (?:can |do )?you see|what.?s (?:in|happening|going on)|describe|look at|watch|see the|visual|colour|color|wearing|who is|what is (?:he|she|it|this|that)|jersey|logo|scene|shot|background/i
+    .test(text);
+}
+
+/** A short description of the learned reference style, sent as the AI's
+ *  `style` hint so the model knows what "the same style" means. */
+export function styleForAi(profile: StyleProfile): string {
+  const g = profile.grade;
+  const gradeBits: string[] = [];
+  if (g.warmth > 0.08) gradeBits.push('warm', `warmth ${g.warmth.toFixed(2)}`);
+  if (g.brightness > 0.05) gradeBits.push(`brightness +${(g.brightness * 100).toFixed(0)}%`);
+  if (g.contrast > 0.15) gradeBits.push(`contrast +${(g.contrast * 100).toFixed(0)}%`);
+  if (g.saturation > 0.2) gradeBits.push(`saturation +${(g.saturation * 100).toFixed(0)}%`);
+  const capture = profile.captions.present
+    ? `bold captions along the ${profile.captions.position === 'centre' ? 'middle' : 'bottom'}`
+    : 'no captions';
+  const pacing = profile.uncut
+    ? 'single uncut take'
+    : profile.cutsPerMin > 0
+      ? `~${profile.cutsPerMin.toFixed(0)} cuts per minute`
+      : 'cut to the rhythm';
+  return `${gradeBits.length ? gradeBits.join(', ') + ' grade' : 'neutral grade'}; ${pacing}; ${capture}`;
+}
+
 /** One AI look decision carried in the response's `applied` ops. */
 export interface AiLook {
   grade?: { brightness: number; contrast: number; saturation: number };

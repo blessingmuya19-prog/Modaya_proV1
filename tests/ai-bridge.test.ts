@@ -12,6 +12,7 @@ import { describe, it, expect } from 'vitest';
 import {
   toAiView, applyAiResult, syncProfileAfterAi, effectsForProfile,
   sourceToTimeline, timelineToSource, uncutStudioPlan, applyAiLook, parseAiLook,
+  needsTranscript, wantsClips, needsVision, styleForAi,
   type ShotMap,
 } from '@/lib/studio/aiBridge';
 import { DEFAULT_TRANSFORM, DEFAULT_EFFECTS, type StyleLayer } from '@/lib/render/sequence';
@@ -191,5 +192,54 @@ describe('one-AI first pass and look decisions', () => {
     expect(parseAiLook([{ op: 'remove_ranges', ranges: [] }]).changed).toBe(false);
     expect(parseAiLook([]).changed).toBe(false);
     expect(applyAiLook({}, profile, []).layer).toEqual({});
+  });
+
+  it('routes the same word intents the Pro Editor used', () => {
+    expect(needsTranscript('add captions')).toBe(true);
+    expect(needsTranscript('remove the ums')).toBe(true);
+    expect(needsTranscript('what did he say about money')).toBe(true);
+    expect(needsTranscript('make it vibrant')).toBe(false);
+
+    expect(wantsClips('find me 5 clips')).toBe(true);
+    expect(wantsClips('give me 3 viral shorts')).toBe(true);
+    expect(wantsClips('90 second tiktok')).toBe(true);
+    expect(wantsClips('cut the first 30 seconds')).toBe(false);
+
+    expect(needsVision('describe the video')).toBe(true);
+    expect(needsVision('what colour is the jersey?')).toBe(true);
+    expect(needsVision('what is happening in this scene')).toBe(true);
+    expect(needsVision('add bold captions')).toBe(false);
+  });
+
+  it('describes the learned reference style for the AI hint', () => {
+    const s = styleForAi({
+      ...profile,
+      grade: { brightness: 0.08, contrast: 0.38, saturation: 0.45, warmth: 0.24 },
+      captions: { present: true, position: 'lower', emphasis: 0.7 },
+      cutsPerMin: 12,
+    });
+    expect(s).toContain('warm');
+    expect(s).toContain('saturation +45%');
+    expect(s).toContain('12 cuts per minute');
+    expect(s).toContain('bold captions along the bottom');
+
+    const neutral = styleForAi({ ...profile, grade: { brightness: 0, contrast: 0, saturation: 0, warmth: 0 } });
+    expect(neutral).toContain('neutral grade');
+    expect(neutral).toContain('no captions');
+  });
+
+  it('cuts the chosen source window into its own programme (cut-to-clip)', () => {
+    const p = plan();
+    const window = [
+      { id: 'cut-1', trackId: 'video', label: 'The hook', type: 'video' as const,
+        startS: 7, endS: 9 },           // inside shot-2's source (6–10)
+    ];
+    const out = applyAiResult(p, styleLayer, profile, 10, window);
+    expect(out!.applied).toBe(true);
+    expect(out!.plan.durationS).toBe(2);
+    expect(out!.plan.clips.filter(c => c.type === 'video' && c.trackId === 'video'))
+      .toMatchObject([{ startS: 0, endS: 2, sourceIn: 7 }]);
+    /* The caption at source 1–2 falls outside the window — dropped. */
+    expect(out!.plan.clips.filter(c => c.type === 'text')).toHaveLength(0);
   });
 });

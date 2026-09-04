@@ -30,10 +30,13 @@ import type { StyleProfile } from '@/lib/ai/styleProfile';
 import { composeStudioPlan, type StudioPlan, type PlannedShot, type TranscriptLine } from '@/lib/studio/editPlan';
 import {
   toAiView, applyAiResult, syncProfileAfterAi, transcriptPayload,
-  applyAiLook, uncutStudioPlan, type AiClip,
+  applyAiLook, uncutStudioPlan, styleForAi, needsVision, needsTranscript, wantsClips,
+  type AiClip,
 } from '@/lib/studio/aiBridge';
 import { detectSilences } from '@/lib/ai/operations';
 import { transcribeMedia } from '@/lib/ai/transcribeClient';
+import { scanVideo, compactScan, type VisualScan, type Keyframe } from '@/lib/ai/visualScan';
+import type { ClipSuggestion } from '@/lib/ai/clips';
 import { DEFAULT_EFFECTS } from '@/lib/render/sequence';
 import { buildSequence, type Sequence, type StyleLayer } from '@/lib/render/sequence';
 import PreviewCanvas from './PreviewCanvas';
@@ -195,6 +198,11 @@ interface StudioChatMsg {
   };
   diffs?: { label: string; value: string }[];
   suggestions?: string[];
+  /** One-line edit summary shown as a chip (what actually happened). */
+  summary?: string;
+  savedS?: number;
+  /** Standalone short clips the AI suggested — one tap cuts to it. */
+  clips?: ClipSuggestion[];
 }
 
 function getDiffBadges(prev: StyleProfile, next: StyleProfile): { label: string; value: string }[] {
@@ -224,6 +232,7 @@ function getDiffBadges(prev: StyleProfile, next: StyleProfile): { label: string;
 
 function getSmartSuggestions(profile: StyleProfile, hasRef: boolean): string[] {
   const suggestions: string[] = [];
+  suggestions.push('Find me 3 viral clips');
   if (hasRef) {
     suggestions.push('Color grade like reference');
   }
@@ -403,10 +412,31 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     durationS: number; onsets: number[]; interest: number[]; transcript: TranscriptLine[];
     baseProfile: StyleProfile; hasRef: boolean; captionsWanted: boolean;
     sourceName?: string;
-    /** Grounding for the Pro AI route: measured pauses + audio state. */
+    /** Grounding for the AI route: measured pauses + audio state. */
     silences: [number, number][];
     audio: 'pending' | 'ready' | 'failed';
   } | null>(null);
+  /** What the browser measured from the pixels + frames a model can see.
+   *  Stored separately from ctx so the background scan can finish after the
+   *  first-pass context was already captured. */
+  const visualRef = useRef<VisualScan | null>(null);
+  const framesRef = useRef<Keyframe[]>([]);
+  /** Undo stack: an AI edit is reversible, exactly as the editor was. */
+  const undoRef = useRef<{
+    plan: StudioPlan; styleLayer: StyleLayer; profile: StyleProfile; seed: number;
+  }[]>([]);
+  const [undoable, setUndoable] = useState(false);
+  /** Whether a provider is configured — discovered once, gates auto-
+   *  transcription for clip hunting (measurement clips never need it). */
+  const aiReadyRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/settings/ai')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (!cancelled) aiReadyRef.current = !!d?.configured; })
+      .catch(() => { if (!cancelled) aiReadyRef.current = false; });
+    return () => { cancelled = true; };
+  }, []);
   /** The profile currently driving the edit (reference/default, then refined). */
   const profileRef = useRef<StyleProfile | null>(null);
   const seedRef = useRef(1);
@@ -838,6 +868,11 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
               energy: interest,
               audio: ctxRef.current!.audio,
               transcript: transcript.length ? transcriptPayload(transcript) : undefined,
+              visual: visualRef.current ?? undefined,
+              frames: needsVision(briefText)
+                ? framesRef.current.slice(0, 6).map(f => f.dataUrl)
+                : undefined,
+              style: withRef && profile ? styleForAi(profile) : undefined,
             }),
           });
           if (!res.ok) return null;
@@ -1000,6 +1035,27 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refMoment]);
 
+  /** Measure the picture once, in the background — shot changes, motion,
+   *  brightness + a few frames a vision model can actually look at. Never
+   *  blocks anything: without it the AI simply says it has not seen the video.
+   *  Waits until footage is actually in the store (first upload or rehydrate),
+   *  then scans that project once. */
+  const visualScannedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!projectId || visualScannedRef.current === projectId) return;
+    const stop = new AbortController();
+    (async () => {
+      const footage = await resolveFootage(projectId, getMedia(projectId)).catch(() => null);
+      if (!footage || stop.signal.aborted) return;
+      const seen = await scanVideo(footage.blob, { signal: stop.signal }).catch(() => null);
+      if (!seen || stop.signal.aborted) return;
+      visualScannedRef.current = projectId;
+      visualRef.current = compactScan(seen.scan);
+      framesRef.current = seen.keyframes;
+    })();
+    return () => stop.abort();
+  }, [projectId, media?.objectUrl, media?.durationS]);
+
   // Bootstrap once footage exists: if this project already has versions (the
   // user is reopening their project) rebuild the latest one straight into the
   // compare/iterate surface — same project, never reset, reference kept.
@@ -1122,9 +1178,9 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       suggestions: [
         'Color grade like reference',
-        'Make it vibrant and bright',
-        "Don't cut anything",
+        'Find me 3 viral clips',
         'Add bold captions',
+        'What is happening in this video?',
       ],
     }]);
   };
@@ -1164,10 +1220,12 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
       }
       const current = profileRef.current ?? ctxRef.current.baseProfile;
 
-      /* Captions need the real spoken words from the FOOTAGE. Transcribe on
-         demand (a plain tool step — the AI writes the words afterwards) so
-         the single AI can caption what was actually said. */
-      if (/caption|subtitle|transcri/i.test(text) && !ctxRef.current.transcript.length) {
+      /* Words first, when the request needs them: captions, filler removal,
+         "what was said" — and clip-hunting that wants meaning (with a model
+         configured; without one the measurement engine answers fine on its
+         own). Transcription is a plain tool step; the ONE AI writes the words. */
+      const needWords = needsTranscript(text) || (wantsClips(text) && aiReadyRef.current !== false);
+      if (needWords && !ctxRef.current.transcript.length) {
         const progress: StudioChatMsg = {
           id: `asr-${Date.now()}`,
           role: 'ai',
@@ -1186,7 +1244,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         setChats(c => c.filter(m => m.id !== progress.id));
       }
 
-      /* ── The one AI ── */
+      /* ── The one AI (with the eyes the Pro Editor used to prepare) ── */
       const view = toAiView(plan, styleLayer);
       const res = await fetch(`/api/projects/${projectId}/ai`, {
         method: 'POST',
@@ -1201,6 +1259,13 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           transcript: ctxRef.current.transcript.length
             ? transcriptPayload(ctxRef.current.transcript)
             : undefined,
+          /* Picture measurements always travel; frames only when the question
+             needs eyes (they are heavy). */
+          visual: visualRef.current ?? undefined,
+          frames: needsVision(text)
+            ? framesRef.current.slice(0, 6).map(f => f.dataUrl)
+            : undefined,
+          style: ctxRef.current.hasRef ? styleForAi(ctxRef.current.baseProfile) : undefined,
           history: chats.slice(-8).map(m => ({ role: m.role, text: m.text })),
         }),
       });
@@ -1217,8 +1282,18 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         : '';
       const look = applyAiLook(proOut?.styleLayer ?? styleLayer, current, edit.applied ?? []);
       const timelineChanged = proOut?.applied ?? false;
+      /* Clip-hunting answer: standalone short clips, one tap to cut to. */
+      const clipSuggestions: ClipSuggestion[] | undefined =
+        Array.isArray(edit.clips) ? (edit.clips as ClipSuggestion[]) : undefined;
+      const summary = String(edit.summary ?? '');
+      const savedS = Number(edit.savedS ?? 0);
 
       if (timelineChanged && proOut) {
+        /* Reversible: remember this exact state before the edit lands. */
+        undoRef.current = [...undoRef.current.slice(-19), {
+          plan, styleLayer, profile: current, seed: seedRef.current,
+        }];
+        setUndoable(true);
         const synced = syncProfileAfterAi(look.profile, proOut.plan);
         profileRef.current = synced;
         setPlan(proOut.plan);
@@ -1263,6 +1338,8 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
             stats: { durationS: proOut.plan.durationS, cuts: proOut.plan.cutCount, match: m },
           },
           diffs: diffBadges,
+          summary: summary !== 'No change' ? summary : undefined,
+          savedS: savedS || undefined,
           suggestions: getSmartSuggestions(synced, ctxRef.current!.hasRef),
         }]);
         return;
@@ -1271,6 +1348,10 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
       if (look.changed) {
         /* The AI applied a look without touching the clip list (grade /
            punch-in) — show it immediately and keep it in the version. */
+        undoRef.current = [...undoRef.current.slice(-19), {
+          plan, styleLayer, profile: current, seed: seedRef.current,
+        }];
+        setUndoable(true);
         const withEffects: PlannedShot[] = plan.clips.map(c =>
           c.type === 'video' && look.layer[c.id]?.effects
             ? { ...c, effects: { ...DEFAULT_EFFECTS, ...look.layer[c.id]!.effects! } }
@@ -1297,17 +1378,24 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
             stats: { durationS: nextPlan.durationS, cuts: nextPlan.cutCount, match },
           },
           diffs: diffBadges,
+          summary: summary !== 'No change' ? summary : undefined,
+          savedS: savedS || undefined,
           suggestions: getSmartSuggestions(synced, ctxRef.current!.hasRef),
         }]);
         return;
       }
 
-      /* The AI answered without changing anything — show its answer. */
+      /* The AI answered without changing anything. If it suggested standalone
+         clips, show them (one tap cuts to the chosen clip) — otherwise its
+         answer stands (questions, explanations, "nothing to change"). */
       setChats(c => [...c, {
         id: `ai-${Date.now()}`,
         role: 'ai',
         text: aiText || 'No change needed.',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        summary: clipSuggestions?.length ? undefined : (summary !== 'No change' ? summary : undefined),
+        savedS: clipSuggestions?.length ? undefined : (savedS || undefined),
+        clips: clipSuggestions,
         suggestions: getSmartSuggestions(current, ctxRef.current!.hasRef),
       }]);
     } catch {
@@ -1320,6 +1408,111 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     } finally {
       setChatBusy(false);
     }
+  };
+
+  /** Clipping engine result — keep only the chosen range, as its own short
+   *  programme. Mirrors the Pro Editor's one-tap cut: same AI suggested it,
+   *  same bridge applies it. */
+  const cutToClip = async (clip: ClipSuggestion) => {
+    if (!ctxRef.current || !plan || chatBusy) return;
+    setChatBusy(true);
+    try {
+      const current = profileRef.current ?? ctxRef.current.baseProfile;
+      const cutClips: AiClip[] = [{
+        id: `cut-${Date.now()}`, trackId: 'video', label: clip.title,
+        type: 'video', startS: clip.startS, endS: clip.endS,
+      }];
+      const out = applyAiResult(plan, styleLayer, current, ctxRef.current.durationS, cutClips);
+      if (out?.applied) {
+        undoRef.current = [...undoRef.current.slice(-19), {
+          plan, styleLayer, profile: current, seed: seedRef.current,
+        }];
+        setUndoable(true);
+        const synced = syncProfileAfterAi(current, out.plan);
+        profileRef.current = synced;
+        setPlan(out.plan);
+        setFrame({ width: out.plan.frame.width, height: out.plan.frame.height });
+        setClips(out.plan.clips.map(clipToEditor));
+        setStyleLayer(out.styleLayer);
+        setTotalS(out.plan.durationS);
+        const m = referenceMatch({
+          hasReference: ctxRef.current.hasRef,
+          editCutsPerMin: 0,
+          refCutsPerMin: ctxRef.current.baseProfile.cutsPerMin || 0,
+          beatSnapRate: 0,
+          refPunchInRate: ctxRef.current.baseProfile.punchInRate,
+          editPunchInRate: synced.punchInRate,
+          captionsWanted: ctxRef.current.captionsWanted,
+          captionsPresent: out.plan.captions > 0,
+        });
+        setMatch(m);
+        setHeadline(resultHeadline({
+          hasReference: ctxRef.current.hasRef, match: m, durationS: out.plan.durationS,
+        }));
+        const nextVerNum = (versions[versions.length - 1]?.number ?? 1) + 1;
+        void saveVersion(synced, ++seedRef.current, `Clip: ${clip.title}`,
+          { plan: out.plan, match: m },
+          { clips: out.plan.clips, durationS: out.plan.durationS, frame: out.plan.frame });
+        const stat = `Cut to “${clip.title}” (${fmtTime(clip.startS)}–${fmtTime(clip.endS)}) ${
+          clip.source === 'ai' ? '— AI pick' : clip.source === 'hybrid' ? '— AI + measured' : '— measured'}.`;
+        setChats(c => [...c, {
+          id: `ai-${Date.now()}`,
+          role: 'ai',
+          text: stat,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          version: {
+            number: nextVerNum,
+            label: `Clip: ${clip.title}`,
+            stats: { durationS: out.plan.durationS, cuts: out.plan.cutCount, match: m },
+          },
+          suggestions: getSmartSuggestions(synced, ctxRef.current!.hasRef),
+        }]);
+      } else {
+        setChats(c => [...c, {
+          id: `ai-${Date.now()}`,
+          role: 'ai',
+          text: "I couldn't cut to that clip — try again.",
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        }]);
+      }
+    } finally {
+      setChatBusy(false);
+    }
+  };
+
+  /** One step back: the AI edit (or the cut-to-clip) is reversed in place.
+   *  Nothing is destroyed — the version list still has every cut. */
+  const undoAi = () => {
+    const snap = undoRef.current[undoRef.current.length - 1];
+    if (!snap) return;
+    undoRef.current = undoRef.current.slice(0, -1);
+    setUndoable(undoRef.current.length > 0);
+    profileRef.current = snap.profile;
+    seedRef.current = snap.seed;
+    setPlan(snap.plan);
+    setFrame({ width: snap.plan.frame.width, height: snap.plan.frame.height });
+    setClips(snap.plan.clips.map(clipToEditor));
+    setStyleLayer(snap.styleLayer);
+    setTotalS(snap.plan.durationS);
+    const videoShots = snap.plan.clips.filter(c => c.type === 'video' && c.trackId === 'video');
+    const m = referenceMatch({
+      hasReference: ctxRef.current?.hasRef ?? false,
+      editCutsPerMin: (Math.max(1, snap.plan.cutCount || videoShots.length) / Math.max(1, snap.plan.durationS)) * 60,
+      refCutsPerMin: ctxRef.current?.baseProfile.cutsPerMin || 0,
+      beatSnapRate: ctxRef.current?.hasRef ? 0.7 : 0,
+      refPunchInRate: ctxRef.current?.baseProfile.punchInRate ?? 0,
+      editPunchInRate: snap.profile.punchInRate,
+      captionsWanted: ctxRef.current?.captionsWanted ?? false,
+      captionsPresent: snap.plan.captions > 0,
+    });
+    setMatch(m);
+    setChats(c => [...c, {
+      id: `ai-${Date.now()}`,
+      role: 'ai',
+      text: 'Undone — the timeline is back to how it was before that edit.',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      suggestions: getSmartSuggestions(snap.profile, ctxRef.current?.hasRef ?? false),
+    }]);
   };
 
   /** Regenerate: same creative direction, fresh cut from a new seed. Saved as
@@ -1638,6 +1831,29 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {undoable && (
+                  <button
+                    onClick={undoAi}
+                    disabled={chatBusy}
+                    title="Undo the last AI edit"
+                    style={{
+                      background: 'rgba(255,255,255,0.05)',
+                      border: `1px solid ${C.b3}`,
+                      borderRadius: 8,
+                      padding: '4px 8px',
+                      color: C.sec,
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      cursor: chatBusy ? 'default' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      opacity: chatBusy ? 0.5 : 1,
+                    }}
+                  >
+                    <RotateCcw size={12} color="#FBBF24" /> Undo
+                  </button>
+                )}
                 {currentVersion && (
                   <button
                     onClick={() => setVersionOpen(v => !v)}
@@ -1817,6 +2033,89 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
                                 ))}
                               </div>
                             )}
+                          </div>
+                        )}
+
+                        {/* Edit summary chip — what actually happened */}
+                        {m.summary && (
+                          <div style={{
+                            marginTop: 8,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            padding: '4px 9px',
+                            background: 'rgba(52,211,153,0.08)',
+                            border: '1px solid rgba(52,211,153,0.2)',
+                            borderRadius: 9999,
+                          }}>
+                            <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#34D399', flexShrink: 0 }} />
+                            <span style={{ fontSize: 11, fontWeight: 600, color: '#34D399' }}>
+                              {m.summary}{m.savedS ? ` · −${m.savedS}s` : ''}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Clipping engine results — one tap to isolate a clip */}
+                        {m.clips && m.clips.length > 0 && (
+                          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+                            {m.clips.map((c) => (
+                              <div key={c.id} style={{
+                                background: 'rgba(255,255,255,0.03)',
+                                border: '1px solid rgba(255,255,255,0.08)',
+                                borderRadius: 10,
+                                padding: '9px 11px',
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+                                  <span style={{
+                                    fontSize: 10.5,
+                                    color: '#A5B4FC',
+                                    background: 'rgba(99,102,241,0.12)',
+                                    border: '1px solid rgba(99,102,241,0.25)',
+                                    borderRadius: 5,
+                                    padding: '1px 6px',
+                                    fontWeight: 700,
+                                  }}>
+                                    {fmtTime(c.startS)}–{fmtTime(c.endS)}
+                                  </span>
+                                  <span style={{ flex: 1, fontSize: 10.5, color: C.dim }}>
+                                    <span style={{
+                                      width: 5, height: 5, borderRadius: '50%',
+                                      background: c.score >= 80 ? '#34D399' : c.score >= 55 ? '#FBBF24' : '#737D8D',
+                                      display: 'inline-block', marginRight: 4,
+                                    }} />
+                                    {c.score}
+                                  </span>
+                                  <span style={{ fontSize: 10, color: c.source === 'measurement' ? C.dim : '#A5B4FC', fontWeight: 600 }}>
+                                    {c.source === 'measurement' ? 'measured' : c.source === 'hybrid' ? 'AI + measured' : 'AI pick'}
+                                  </span>
+                                </div>
+                                <p style={{ fontSize: 12.5, color: '#F5F7FA', fontWeight: 600, margin: '0 0 3px', lineHeight: 1.35 }}>
+                                  {c.title}
+                                </p>
+                                {c.reason && (
+                                  <p style={{ fontSize: 11.5, color: C.muted, margin: '0 0 8px', lineHeight: 1.4 }}>{c.reason}</p>
+                                )}
+                                <button
+                                  onClick={() => cutToClip(c)}
+                                  disabled={chatBusy}
+                                  style={{
+                                    background: 'rgba(99,102,241,0.12)',
+                                    border: '1px solid rgba(99,102,241,0.3)',
+                                    borderRadius: 7,
+                                    padding: '4px 10px',
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                    color: '#C7D2FE',
+                                    cursor: chatBusy ? 'default' : 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 5,
+                                  }}
+                                >
+                                  <Scissors size={11} /> Cut to this clip
+                                </button>
+                              </div>
+                            ))}
                           </div>
                         )}
 
