@@ -181,6 +181,15 @@ describe('refineProfile', () => {
   });
 
   it('applies cinematic LUT presets like Teal & Orange, Kodak 35mm, and Noir', () => {
+    const directGrade = refineProfile(profile(), 'color grade');
+    expect(directGrade.changed).toBe(true);
+    expect(directGrade.profile.grade.contrast).toBeGreaterThan(0);
+    expect(directGrade.profile.grade.saturation).toBeGreaterThan(0);
+
+    const gradeFootage = refineProfile(profile(), 'color grade the footage');
+    expect(gradeFootage.changed).toBe(true);
+    expect(gradeFootage.profile.grade.contrast).toBeGreaterThan(0);
+
     const to = refineProfile(profile(), 'apply teal and orange grade');
     expect(to.changed).toBe(true);
     expect(to.profile.grade.warmth).toBeGreaterThan(0);

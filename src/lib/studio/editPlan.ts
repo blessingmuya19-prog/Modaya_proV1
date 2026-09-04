@@ -396,9 +396,19 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
   const grade = profile.grade;
   const effects: Effects = {
     ...DEFAULT_EFFECTS,
-    brightness: 1 + (grade.brightness || 0) * 0.3,
-    contrast: 1 + (grade.contrast || 0) * 0.4,
-    saturation: 1 + (grade.saturation || 0) * 0.4,
+    brightness: 1 + (grade.brightness || 0) * 0.4,
+    contrast: 1 + (grade.contrast || 0) * 0.5,
+    saturation: 1 + (grade.saturation || 0) * 0.5,
+    colorGrade: {
+      temperature: Math.round((grade.warmth || 0) * 60),
+      tint: 0,
+      vibrance: Math.round((grade.saturation || 0) * 50),
+      exposure: grade.brightness || 0,
+      contrast: 1 + (grade.contrast || 0) * 0.5,
+      highlights: 0,
+      shadows: 0,
+      intensity: 100,
+    },
   };
 
   const video: PlannedShot[] = [];
