@@ -312,15 +312,19 @@ export function fitRect(
 /** CSS filter string for a clip's colour effects. */
 export function filterFor(fx: Effects): string {
   const parts: string[] = [];
-  if (fx.brightness !== 1) parts.push(`brightness(${fx.brightness})`);
-  if (fx.contrast   !== 1) parts.push(`contrast(${fx.contrast})`);
-  if (fx.saturation !== 1) parts.push(`saturate(${fx.saturation})`);
+  if (fx.brightness !== 1) parts.push(`brightness(${Number(fx.brightness.toFixed(3))})`);
+  if (fx.contrast   !== 1) parts.push(`contrast(${Number(fx.contrast.toFixed(3))})`);
+  if (fx.saturation !== 1) parts.push(`saturate(${Number(fx.saturation.toFixed(3))})`);
   if (fx.blurPx      >  0) parts.push(`blur(${fx.blurPx}px)`);
   if (fx.colorGrade) {
     const cg = fx.colorGrade;
-    if (cg.temperature > 0) parts.push(`sepia(${Math.round(cg.temperature * 0.35)}%)`);
-    else if (cg.temperature < 0) parts.push(`hue-rotate(${Math.round(cg.temperature * 0.45)}deg)`);
-    if (cg.vibrance !== 0) parts.push(`saturate(${Math.max(0, 1 + cg.vibrance * 0.01).toFixed(2)})`);
+    if (cg.temperature > 0) {
+      const warmDeg = Math.min(10, Math.round(cg.temperature * 0.12));
+      if (warmDeg > 0) parts.push(`hue-rotate(-${warmDeg}deg)`);
+    } else if (cg.temperature < 0) {
+      const coolDeg = Math.min(18, Math.round(Math.abs(cg.temperature) * 0.25));
+      if (coolDeg > 0) parts.push(`hue-rotate(${coolDeg}deg)`);
+    }
   }
   return parts.length ? parts.join(' ') : 'none';
 }

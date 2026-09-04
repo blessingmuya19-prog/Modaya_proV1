@@ -284,10 +284,12 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
     || (/\bvibrant\b/i.test(text) && /\bbright\b/i.test(text))
   );
 
-  // Reference grade request (e.g. "color rade like reference", "color grade like reference", "match reference color", "grade like reference")
+  // Reference grade request (e.g. "color rade like reference", "color grade like reference", "match reference color", "i dont the color grade is the same", "grade like reference")
   const wantsRefGrade = !isColorQuestion && (
-    /\b(color grad(e|ing|ed) (the )?(footage|video|image)?\s*like (the )?reference|match (the )?(reference|ref) (colors?|grade|look|image)|reference (color|grade|look)|use (the )?reference (colors?|grade|look)|grade like (the )?reference|like (the )?reference)\b/i.test(text)
-    && /\b(color|grade|look|tone|warmth|contrast|saturation|image|video|footage)\b/i.test(text)
+    (/\b(color grad(e|ing|ed)? (the )?(footage|video|image)?\s*like (the )?reference|match (the )?(reference|ref) (colors?|grade|look|image)|reference (color|grade|look)|use (the )?reference (colors?|grade|look)|grade like (the )?reference|like (the )?reference)\b/i.test(text)
+    && /\b(color|grade|look|tone|warmth|contrast|saturation|image|video|footage)\b/i.test(text))
+    || /\b(color grad(e|ing)? (is )?(not|isn.?t|dont|don.?t)?\s*(the )?same|make (the )?color (grad(e|ing) )?(the )?same|same (color|grade) as reference|make (the )?colors? match)\b/i.test(text)
+    || (/\b(not the same|dont think|doesn.?t match|not matching|dont the color)\b/i.test(text) && /\b(color|grade|look)\b/i.test(text))
   );
 
   const wantsColorGrade = !resetGrade && !isColorQuestion && !wantsVibrantBright && !wantsRefGrade && (
@@ -322,10 +324,10 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
     handledGrade = true;
   } else if (wantsRefGrade) {
     p.grade = {
-      brightness: 0.06,
-      contrast: 0.30,
-      saturation: 0.38,
-      warmth: 0.20,
+      brightness: 0.08,
+      contrast: 0.38,
+      saturation: 0.45,
+      warmth: 0.24,
     };
     changed = true;
     did.push('matched the color grade, warmth, and contrast to your reference video');

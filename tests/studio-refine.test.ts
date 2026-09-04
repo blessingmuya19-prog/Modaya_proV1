@@ -251,6 +251,12 @@ describe('refineProfile', () => {
     const cinTypo = refineProfile(profile(), 'cinamatic grade');
     expect(cinTypo.changed).toBe(true);
     expect(cinTypo.profile.grade.contrast).toBeGreaterThan(0.2);
+
+    const gradeNotSame = refineProfile(profile(), 'i dont the color grade is the same');
+    expect(gradeNotSame.changed).toBe(true);
+    expect(gradeNotSame.profile.grade.contrast).toBeGreaterThan(0.3);
+    expect(gradeNotSame.profile.grade.saturation).toBeGreaterThan(0.3);
+    expect(gradeNotSame.reply).toMatch(/reference/i);
   });
 
   it('handles selective reference editing requests', () => {
