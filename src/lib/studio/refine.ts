@@ -178,6 +178,44 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
     did.push('generated and brought captions onto the timeline');
   }
 
+  // Selective reference matching
+  const wantsUncutWithRef = /\b(keep (the )?(whole|all|full) video and (match|use) reference|uncut (with|and) reference|don.?t cut (anything|my video)? (and|just) (match|use) reference)\b/i.test(text);
+  const wantsOnlyRefColor = /\b(only (match|use|copy|apply) (the )?reference (colou?rs?|grade)|just (match|use|copy) reference (colou?rs?|grade))\b/i.test(text);
+  const wantsOnlyRefCaptions = /\b(only (match|use|copy|apply) (the )?reference (captions?|subtitles?)|just (match|use|copy) reference (captions?|subtitles?))\b/i.test(text);
+
+  if (wantsUncutWithRef) {
+    p.uncut = true;
+    p.energy = 0;
+    p.cutsPerMin = 0;
+    p.punchInRate = 0;
+    p.punchInMax = 1;
+    changed = true;
+    did.push('kept 100% of your footage uncut while applying reference color grading and style');
+  } else if (wantsOnlyRefColor) {
+    p.uncut = true;
+    p.energy = 0;
+    p.cutsPerMin = 0;
+    p.punchInRate = 0;
+    p.punchInMax = 1;
+    p.grade = {
+      brightness: base.grade.brightness !== 0 ? base.grade.brightness : 0.04,
+      contrast: base.grade.contrast > 0 ? clamp(base.grade.contrast + 0.1, 0.15, 0.45) : 0.22,
+      saturation: base.grade.saturation > 0 ? clamp(base.grade.saturation + 0.1, 0.15, 0.45) : 0.25,
+      warmth: base.grade.warmth !== 0 ? base.grade.warmth : 0.14,
+    };
+    changed = true;
+    did.push('matched only the reference color grade without altering your cuts');
+  } else if (wantsOnlyRefCaptions) {
+    p.uncut = true;
+    p.energy = 0;
+    p.cutsPerMin = 0;
+    p.punchInRate = 0;
+    p.punchInMax = 1;
+    p.captions = { present: true, position: base.captions?.position ?? 'lower', emphasis: 0.75 };
+    changed = true;
+    did.push('matched only the reference captions and typography without altering your cuts');
+  }
+
   // Professional, Cinematic, and Reference Production Level presets
   const makePro = /\b(replicate (the )?reference|match (the )?reference|production level|production quality|make it (look )?pro(fessional)?|cinematic|creator style|make it look good|improve|make it (cool|epic|awesome)|high quality)\b/i.test(text);
   const wantsBeatSync = /\b(beat sync|sync to beat|on the beat|musical cuts?|beat locked)\b/i.test(text);
@@ -306,9 +344,17 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
   const asksWhatChanged = /\b(what did you (do|change)|what changed|show me (the )?changes|explain (the )?edit|why did you cut)\b/i.test(text);
   const asksHowToExport = /\b(how (do|can) i (export|download|save|render)|where is export|how to export)\b/i.test(text);
   const asksHelp = /\b(help|how (does this work|do i use this)|what can you do|what commands)\b/i.test(text);
-  const asksColorGrade = /\b(can (you|it) colou?r grade|colou?r grad(e|ing)|how to colou?r grade|what colou?rs?|grading)\b/i.test(text);
+  const asksColorGrade = /\b(can (you|it) colou?r grade|how to colou?r grade|what (colou?r|grades?|luts?|presets?)|explain colou?r)\b/i.test(text);
+  const asksRefEdit = /\b(what about (for )?(reference|ref)( edit)?|how (does )?reference (edit|work)|reference edit (help|info|works?)|explain reference)\b/i.test(text);
 
   if (!changed) {
+    if (asksRefEdit) {
+      return {
+        profile: base,
+        changed: false,
+        reply: "In Reference Edit, Modaya learns your reference video's color grade, typography & captions, pacing, beat sync, and framing. You can replicate the full style with “replicate reference”, or selectively apply only what you want without cutting your video: “only match reference color”, “only match reference captions”, “don't cut anything and match reference style”, or “keep original 16:9 format”.",
+      };
+    }
     if (asksColorGrade) {
       return {
         profile: base,

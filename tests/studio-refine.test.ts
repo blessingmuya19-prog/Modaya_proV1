@@ -219,6 +219,26 @@ describe('refineProfile', () => {
     expect(noir.profile.grade.saturation).toBe(-1);
   });
 
+  it('handles selective reference editing requests', () => {
+    const refColor = refineProfile(profile(), 'only match reference color');
+    expect(refColor.changed).toBe(true);
+    expect(refColor.profile.uncut).toBe(true);
+    expect(refColor.reply).toMatch(/color/i);
+
+    const refCaps = refineProfile(profile(), 'only match reference captions');
+    expect(refCaps.changed).toBe(true);
+    expect(refCaps.profile.uncut).toBe(true);
+    expect(refCaps.profile.captions.present).toBe(true);
+
+    const uncutRef = refineProfile(profile(), 'keep whole video and match reference');
+    expect(uncutRef.changed).toBe(true);
+    expect(uncutRef.profile.uncut).toBe(true);
+
+    const askRef = refineProfile(profile(), 'what about for reference edit');
+    expect(askRef.changed).toBe(false);
+    expect(askRef.reply).toMatch(/reference edit/i);
+  });
+
   it('answers "can it color grade" with informative guidance', () => {
     const r = refineProfile(profile(), 'can you color grade');
     expect(r.changed).toBe(false);
