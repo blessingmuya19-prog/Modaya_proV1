@@ -6,10 +6,10 @@
  * video) and Modaya does the editing. There is no timeline, no codec, no
  * parameters. The user watches named creative stages complete, then gets a
  * preview they can Export, Regenerate, or adjust by typing what they want
- * changed. The full timeline is one "Advanced" click away for power users.
+ * changed.
  *
- * Every heavy lifting calls into the same engine the pro editor uses — this
- * component is only the simple surface over it.
+ * Every heavy lifting calls into the same AI + engine that used to power the
+ * Pro Editor — Studio is the editor now.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -34,8 +34,8 @@ import { detectSilences } from '@/lib/ai/operations';
 import { DEFAULT_EFFECTS } from '@/lib/render/sequence';
 import { transcribeMedia } from '@/lib/ai/transcribeClient';
 import { buildSequence, type Sequence, type StyleLayer } from '@/lib/render/sequence';
-import PreviewCanvas from '../editor/PreviewCanvas';
-import { ExportModal } from '../editor/ExportModal';
+import PreviewCanvas from './PreviewCanvas';
+import { ExportModal } from './ExportModal';
 import {
   stagesForRun, markActive, markDone, pipelineProgress, referenceMatch, resultHeadline,
   type StageState, type StageId,
@@ -45,7 +45,7 @@ import { buildEditMap, explainMarker, markerIcon, fmtTime, referenceMoment, type
 import { addVersion, loadVersions, type EditVersion } from '@/lib/studio/versions';
 import { parseTimeRange } from '@/lib/referenceLink';
 import { GlowButton, GLOW_GRADIENT } from '../ui/theme';
-import type { EditorClip } from '../editor/EditorShell';
+import type { EditorClip } from '@/lib/studio/editorTypes';
 
 const F = "'Inter',system-ui,-apple-system,sans-serif";
 /**

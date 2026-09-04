@@ -4,7 +4,7 @@ import {
   diffEditVersions,
   fingerprintRecipe,
 } from '@/lib/studio/editHistory';
-import type { EditorClip } from '@/components/editor/EditorShell';
+import type { EditorClip } from '@/lib/studio/editorTypes';
 import type { EditVersion } from '@/lib/studio/versions';
 
 describe('AI edit timeline history & visual diff snapshot engine', () => {

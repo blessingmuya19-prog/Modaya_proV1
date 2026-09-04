@@ -6,7 +6,7 @@ import {
 } from '@/lib/render/exporter';
 import type { Sequence } from '@/lib/render/sequence';
 
-/* ── design tokens (mirrors EditorShell) ── */
+/* ── design tokens (Studio chrome) ── */
 const C = {
   bg:     '#050505', surface: '#070707', s2: '#0a0a0a', s3: '#0e0e0e',
   b:      '#111111', b2:      '#141414', b3: '#1a1a1a', b4: '#222222',

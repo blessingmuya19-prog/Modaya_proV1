@@ -363,9 +363,7 @@ function ProjectCard({ project, viewMode, onRequestDelete, onRename }: {
   );
 
   return isReady ? (
-    // Open the simple Studio experience (Lovable-for-video), not the
-    // advanced pro editor — that stays one "Advanced"/"Take full control"
-    // click away from inside the Studio.
+    // Open the Studio — the editor.
     <Link href={`/studio/${project.id}`} style={{ textDecoration: 'none' }}>{card}</Link>
   ) : card;
 }

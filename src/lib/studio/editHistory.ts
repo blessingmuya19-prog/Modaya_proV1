@@ -6,7 +6,7 @@
  */
 
 import type { EditVersion, VersionRecipe } from './versions';
-import type { EditorClip } from '@/components/editor/EditorShell';
+import type { EditorClip } from './editorTypes';
 import type { Effects } from '../render/sequence';
 
 export interface ClipDelta {

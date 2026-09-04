@@ -256,7 +256,7 @@ body {
 }
 .timeline-clip:hover { filter: brightness(1.25); }
 
-/* Shimmer skeleton (dark surfaces: pro editor / media) */
+/* Shimmer skeleton (dark surfaces: studio / media) */
 .shimmer {
   background: linear-gradient(90deg, #111111 0%, #181818 50%, #111111 100%);
   background-size: 200% 100%;
@@ -270,7 +270,7 @@ body {
 }
 
 /* Dark SaaS surface scope (marketing/landing page). Scopes the scrollbar
-   and base text to the dark chrome without touching the pro editor vars. */
+   and base text to the dark chrome without touching the studio vars. */
 .dark-surface { background-color: #000000; color: #FAFAFA; }
 .dark-surface ::-webkit-scrollbar-track { background: #000000; }
 .dark-surface ::-webkit-scrollbar-thumb { background: #3F3F46; border-radius: 3px; }

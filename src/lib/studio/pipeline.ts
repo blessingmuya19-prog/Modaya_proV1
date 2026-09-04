@@ -3,9 +3,9 @@
  * experience.
  *
  * The product rule: the user supplies footage (and optionally a reference
- * video) and describes nothing technical. Modaya runs the same engine the
- * pro editor uses, but presents it as a fixed list of *named creative stages*
- * the user watches complete — never timelines, codecs or parameters.
+ * video) and describes nothing technical. Modaya runs the editing engine and
+ * presents it as a fixed list of *named creative stages* the user watches
+ * complete — never timelines, codecs or parameters.
  *
  * This module is the pure, testable spine of that flow: the ordered stages,
  * their completion from the signals each real step produces, and a

@@ -1,11 +1,10 @@
 'use client';
 /**
- * Studio route — the default Modaya experience. Drop footage (and a reference),
- * Modaya does the editing, get a finished video with one-tap export. The full
- * timeline lives one click away at /editor/[id] for power users.
+ * Studio route — Modaya's editor. Drop footage (and a reference), Modaya
+ * does the editing, get a finished video with one-tap export.
  *
  * `?mode=edit|reference` (set by the /new picker) only focuses the drop
- * screen — the editor itself is identical either way.
+ * screen — the edit flow is identical either way.
  */
 import React, { useEffect, useState, Suspense } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
