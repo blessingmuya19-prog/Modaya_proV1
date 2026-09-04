@@ -492,17 +492,18 @@ export class PreviewEngine {
         }
         const r = fitRect(w, h, W, H, tr);
         const filterStr = filterFor(clip.effects);
-        if (filterStr && filterStr !== 'none') {
+        if (filterStr && filterStr !== 'none' && ctx.filter !== filterStr) {
           ctx.filter = filterStr;
-        } else if (ctx.filter !== 'none') {
+        } else if ((!filterStr || filterStr === 'none') && ctx.filter !== 'none') {
           ctx.filter = 'none';
         }
         if (clip.effects.opacity < 1) {
           ctx.globalAlpha = clip.effects.opacity;
         }
         try { ctx.drawImage(v, r.x, r.y, r.w, r.h); this.stats.drawn++; } catch {}
-        if (ctx.filter !== 'none') ctx.filter = 'none';
-        if (ctx.globalAlpha !== 1) ctx.globalAlpha = 1;
+        if (clip.effects.opacity < 1) {
+          ctx.globalAlpha = 1;
+        }
       }
     }
 

@@ -117,6 +117,10 @@ export default function PreviewCanvas({
     const e = engineRef.current;
     if (!e) return;
     try {
+      if (playing) {
+        // While playing, don't interrupt active playback with redundant seeks
+        if (Math.abs(playheadS - e.time) < 0.4) return;
+      }
       if (Math.abs(playheadS - echoed.current) < 0.04) return;
       if (Math.abs(e.time - playheadS) < 0.04) return;
       e.seek(playheadS, playing);
