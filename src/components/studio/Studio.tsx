@@ -527,7 +527,10 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     const tick = async (id: StageId, work: () => Promise<void> | void) => {
       if (cancelRef.current) return;
       setStage(id, 'active');
-      await Promise.resolve(work());
+      await Promise.race([
+        Promise.resolve(work()),
+        new Promise(r => setTimeout(r, 4500)), // 4.5s stage safety guard
+      ]).catch(() => {});
       setStage(id, 'done');
     };
 

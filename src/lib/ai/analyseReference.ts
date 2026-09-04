@@ -72,13 +72,13 @@ export function measureFrame(ctx: CanvasRenderingContext2D, t: number): FrameSam
  *  sampled and frame times are rebased to the window start (so the resulting
  *  profile describes that section alone). */
 export async function sampleFrames(
-  url: string, durationS: number, fps = 1, maxFrames = 45,
+  url: string, durationS: number, fps = 1, maxFrames = 10,
   onProgress?: (p: number) => void,
   range?: { startS: number; lenS: number },
 ): Promise<FrameSample[]> {
   const windowLen = range?.lenS ?? durationS;
   const rangeStart = range?.startS ?? 0;
-  const count = Math.max(6, Math.min(maxFrames, Math.round(windowLen * fps)));
+  const count = Math.max(4, Math.min(maxFrames, Math.round(windowLen * fps)));
   const step  = windowLen / count;
 
   const video = document.createElement('video');
@@ -104,15 +104,15 @@ export async function sampleFrames(
 
   const frames: FrameSample[] = [];
   const startTime = Date.now();
-  const MAX_SAMPLE_TIME_MS = 8000; // 8s cutoff
+  const MAX_SAMPLE_TIME_MS = 2500; // 2.5s fast cutoff
 
   try {
     video.load();
     if (video.readyState < 2) {
       await Promise.race([
-        once('loadeddata', 3500),
-        once('canplay', 3500),
-        once('loadedmetadata', 3500),
+        once('loadeddata', 1800),
+        once('canplay', 1800),
+        once('loadedmetadata', 1800),
       ]);
     }
 
@@ -130,7 +130,7 @@ export async function sampleFrames(
       }
 
       if (Math.abs(video.currentTime - targetTime) > 0.3) {
-        await once('seeked', 900);
+        await once('seeked', 400);
       }
       try {
         ctx.drawImage(video, 0, 0, SAMPLE_W, SAMPLE_H);
@@ -181,12 +181,14 @@ export async function analyseAudio(file: Blob): Promise<AudioEnvelope | null> {
 
     if (!ctx) return null;
 
-    const buf = await file.arrayBuffer();
+    // Fast-slice long video files to avoid huge arrayBuffer memory copies
+    const fastSlice = file.size > 15 * 1024 * 1024 ? file.slice(0, 15 * 1024 * 1024) : file;
+    const buf = await fastSlice.arrayBuffer();
 
     // Decode with timeout guard so large or corrupted audio files don't hang the thread
     const audioPromise = ctx.decodeAudioData(buf);
     const timeoutPromise = new Promise<null>((_, reject) =>
-      setTimeout(() => reject(new Error('decodeAudioData timeout')), 8000)
+      setTimeout(() => reject(new Error('decodeAudioData timeout')), 2500)
     );
     const audio = await Promise.race([audioPromise, timeoutPromise]);
     if (!audio) return null;
