@@ -684,6 +684,9 @@ Text style — the "style" object, every field optional:
   size: small | medium | large
   colour: a hex value or a plain colour name
   background: box | shadow | none
+  animation: karaoke_pop | karaoke_glow | karaoke_box | typewriter | none
+  highlightColour: a hex value or a plain colour name — the active-word
+                   colour under karaoke animations
   bold: true|false, uppercase: true|false
 - position is where the words sit in the FRAME. It has nothing to do with
   which track holds them, so "captions at the top" is position:"top" — never
@@ -754,11 +757,15 @@ AUDIO-SYNC RULE — when REFERENCE STYLE LEARNED (or the request) says
   between kept sections.
 
 STYLE LOCKING — when REFERENCE STYLE LEARNED describes captions (e.g. "bold
-captions along the bottom"):
+animated pop-in captions along the bottom"):
 - You MUST emit add_captions. Set position from the reference's own words
   (bottom/lower → "lower", top → "top", middle → "centre") and copy EVERY
   flag it names (bold, size, colour, background, font, uppercase) into the
   style object verbatim. Then style_text may follow for anything extra.
+- CAPTION TRANSITIONS are style too. If the reference says "animated",
+  "pop-in", "word-by-word" or names a highlight colour, add the matching
+  animation ("karaoke_pop" for pop/bounce) and the highlightColour to the
+  style object — never default to a static caption when the reference moves.
 - The reference wins over vague user wording. Never let "just some captions"
   downgrade a bold-bottom reference to a plain centre caption.
 - If the plan needs no caption work at all, do not invent a caption op to

@@ -129,6 +129,30 @@ describe('groundOperations — style locking from the reference', () => {
     const ops: Operation[] = [{ op: 'grade', brightness: 1.1, contrast: 1.1, saturation: 1.2 }];
     expect(groundOperations(ops, 'punch it up', { style: REF })).toEqual(ops);
   });
+
+  it('locks the caption transition and highlight into style', () => {
+    const style = 'bold animated pop-in captions along the bottom (yellow highlights)';
+    const [op] = groundOperations(
+      [{ op: 'add_captions', position: 'centre', everyS: 3 }],
+      'like the reference',
+      { style },
+    ) as [{ op: 'add_captions'; position: string; style: Record<string, unknown> }];
+    expect(op.position).toBe('lower');
+    expect(op.style).toMatchObject({
+      bold: true, animation: 'karaoke_pop', highlightColour: '#ffd400',
+    });
+  });
+
+  it('keeps a static reference static', () => {
+    const style = 'bold captions along the bottom';
+    const [op] = groundOperations(
+      [{ op: 'add_captions', position: 'centre', everyS: 3 }],
+      'like the reference',
+      { style },
+    ) as [{ op: 'add_captions'; style: Record<string, unknown> }];
+    expect(op.style.animation).toBeUndefined();
+    expect(op.style.highlightColour).toBeUndefined();
+  });
 });
 
 describe('loudnessPeaks', () => {

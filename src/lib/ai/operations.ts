@@ -507,11 +507,26 @@ function lockTextToStyle(style: string): {
     : /\bright\b/.test(s)           ? 'right' as const
     : /\bcent(er|re)\b/.test(s)     ? 'centre' as const
     : undefined;
+  /* Caption motion: the reference's transitions are as much part of its DNA
+     as the placement. Pop/bounce/pulse/transition → karaoke_pop; glow/neon →
+     karaoke_glow; typewriter stays typewriter; boxed/pill → karaoke_box. */
+  const animation = /(^|\b)(pop|pulse|bounce|bouncy|transition|animated|word ?by ?word)\b/.test(s)
+      ? 'karaoke_pop'
+    : /\b(glow|neon)\b/.test(s)                        ? 'karaoke_glow'
+    : /\btypewriter\b/.test(s)                         ? 'typewriter'
+    : /\b(box(?:ed| up| out)|pill)\b/.test(s)          ? 'karaoke_box'
+    : undefined;
+  const COLOUR_WORD = '(?:#[0-9a-f]{3,6}|white|black|yellow|red|green|blue|orange|pink|purple|grey|gray|cyan)';
+  const highlight = s.match(
+    new RegExp(`\\b(?:highlight|accent)(?: ?colou?r)?[: ]*(${COLOUR_WORD})\\b`))?.[1]
+    ?? s.match(new RegExp(`\\b(${COLOUR_WORD})\\s+(?:highlights?|accent)\\b`))?.[1];
   const styleOut = parseStyle({
     font: s.match(/\b(serif|mono|display|handwritten|sans)\b/)?.[1],
     size: s.match(/\b(small|medium|large|big)\b/)?.[1]?.replace(/big/, 'large'),
     colour: s.match(/\b(white|black|yellow|red|green|blue|orange|pink|purple|grey|gray|#[0-9a-f]{3,6})\b/)?.[1],
     background: s.match(/\b(box|shadow|none)\b/)?.[1],
+    ...(highlight ? { highlightColour: highlight } : {}),
+    ...(animation ? { animation } : {}),
     ...(/\bbold\b/.test(s) ? { bold: true } : {}),
     ...(/\buppercase|caps\b/.test(s) ? { uppercase: true } : {}),
   });

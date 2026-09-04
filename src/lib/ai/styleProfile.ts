@@ -21,6 +21,9 @@ export interface FrameSample {
   detail: number;        // 0..1 edge energy — proxy for text/graphics
   /** Edge energy in the lower third — proxy for burned-in captions. */
   lowerDetail: number;
+  /** Mean colour (hex) of the most saturated pixels in the lower third —
+   *  the caption band. Absent when nothing saturated sits there. */
+  lowerColour?: string;
 }
 
 export interface AudioEnvelope {
@@ -50,7 +53,15 @@ export interface StyleProfile {
   /** How often shots use a push-in, 0..1. */
   punchInRate:  number;
   punchInMax:   number;
-  captions:     { present: boolean; position: 'centre' | 'lower'; emphasis: number };
+  captions:     {
+    present: boolean; position: 'centre' | 'lower'; emphasis: number;
+    /** Measured caption motion — kinetic captions (word-by-word pop-ins or
+     *  captions that appear/disappear) vs a static burn-in. */
+    animated?: boolean;
+    /** Dominant colour of the caption band, when something saturated is
+     *  there — becomes the karaoke highlight colour. */
+    highlightColour?: string;
+  };
   beatSynced:   boolean;
   bpm:          number | null;
   energy:       number;      // 0..1 overall intensity
@@ -186,6 +197,48 @@ export function isBeatSynced(cuts: number[], onsets: number[], toleranceS = 0.12
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const avg   = (xs: number[]) => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
 
+/** The dominant caption-band colour across frames — the most frequent
+ *  measured lower-third colour wins (ties fall to the first). */
+function dominantCaptionColour(frames: FrameSample[]): string | undefined {
+  const counts = new Map<string, number>();
+  let best: string | undefined;
+  let bestN = 0;
+  for (const f of frames) {
+    const c = f.lowerColour;
+    if (!c) continue;
+    const n = (counts.get(c) ?? 0) + 1;
+    counts.set(c, n);
+    if (n > bestN) { best = c; bestN = n; }
+  }
+  return best;
+}
+
+/**
+ * Caption motion, measured from the lower-third edge-energy series.
+ *
+ * A static burn-in holds a steady lower band; kinetic captions — word-by-word
+ * pop-ins, captions that appear and disappear between shots — pulse it frame
+ * to frame. That pulse is exactly what "captions transition" means, and it is
+ * the only honest signal available from sampled frames.
+ */
+export function captionTransition(
+  frames: FrameSample[],
+  opts: { minFlux?: number; minCv?: number } = {},
+): { animated: boolean; highlightColour?: string } {
+  const { minFlux = 0.45, minCv = 0.35 } = opts;
+  const lower = frames.map(f => f.lowerDetail);
+  if (lower.length < 3) return { animated: false };
+  const mean = avg(lower);
+  if (mean <= 0.01) return { animated: false };
+  const { lo, hi } = { lo: Math.min(...lower), hi: Math.max(...lower) };
+  const flux = (hi - lo) / mean;
+  const sd   = Math.sqrt(avg(lower.map(d => (d - mean) ** 2)));
+  const cv   = sd / mean;
+  const animated = flux >= minFlux || cv >= minCv;
+  const highlightColour = animated ? dominantCaptionColour(frames) : undefined;
+  return { animated, ...(highlightColour ? { highlightColour } : {}) };
+}
+
 export function buildStyleProfile(opts: {
   sourceName: string;
   durationS:  number;
@@ -260,6 +313,7 @@ export function buildStyleProfile(opts: {
   const lowerDetail = avg(frames.map(f => f.lowerDetail));
   const midDetail   = avg(frames.map(f => f.detail));
   const captionish  = lowerDetail > midDetail * 1.25 && lowerDetail > 0.12;
+  const captionLook = captionTransition(frames);
 
   const onsets = audio?.onsets ?? [];
   const energy = clamp(
@@ -289,6 +343,9 @@ export function buildStyleProfile(opts: {
       present:  captionish,
       position: lowerDetail > midDetail * 1.8 ? 'lower' : 'centre',
       emphasis: Number(clamp(lowerDetail * 3, 0, 1).toFixed(2)),
+      ...(captionish && captionLook.animated ? { animated: true } : {}),
+      ...(captionish && captionLook.highlightColour
+        ? { highlightColour: captionLook.highlightColour } : {}),
     },
     beatSynced: isBeatSynced(cuts, onsets),
     bpm:        audio?.bpm ?? null,
@@ -312,7 +369,8 @@ export function describeStyle(p: StyleProfile): string {
   bits.push(look.length ? `${look.join(', ')} grade` : 'neutral grade');
 
   if (p.punchInRate > 0.25) bits.push(`push-ins on ~${Math.round(p.punchInRate * 100)}% of shots`);
-  if (p.captions.present)   bits.push(`burned-in ${p.captions.position} captions`);
+  if (p.captions.present)   bits.push(`burned-in ${p.captions.position} captions` +
+    (p.captions.animated ? ', animating word by word' : ''));
   if (p.beatSynced)         bits.push(p.bpm ? `cuts locked to ~${p.bpm} BPM` : 'cuts locked to the beat');
 
   return bits.join(' · ');

@@ -228,6 +228,25 @@ describe('one-AI first pass and look decisions', () => {
     expect(neutral).toContain('no captions');
   });
 
+  it('tells the AI when the reference captions transition and what colour pulses', () => {
+    const moving = styleForAi({
+      ...profile,
+      captions: {
+        present: true, position: 'lower', emphasis: 0.9,
+        animated: true, highlightColour: '#facc15',
+      },
+    });
+    expect(moving).toContain('animated pop-in captions along the bottom');
+    expect(moving).toContain('yellow highlights');
+
+    const staticCaps = styleForAi({
+      ...profile,
+      captions: { present: true, position: 'centre', emphasis: 0.5 },
+    });
+    expect(staticCaps).toContain('bold captions along the middle');
+    expect(staticCaps).not.toContain('animated');
+  });
+
   it('cuts the chosen source window into its own programme (cut-to-clip)', () => {
     const p = plan();
     const window = [

@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   histDistance, detectCuts, shotLengths, paceOf, detectOnsets, estimateBpm,
-  isBeatSynced, buildStyleProfile, describeStyle, FrameSample,
+  isBeatSynced, buildStyleProfile, describeStyle, captionTransition, FrameSample,
 } from '@/lib/ai/styleProfile';
 import { planCutPoints, generateEditPlan } from '@/lib/ai/styleTransfer';
 
@@ -122,6 +122,51 @@ describe('style profile', () => {
     const text = describeStyle(profile);
     expect(text).toMatch(/cuts\/min/);
     expect(text.length).toBeGreaterThan(20);
+  });
+
+  it('detects caption transitions when the lower third pulses', () => {
+    /* Captions on/off between shots: lowerDetail jumps between 0.08 (off)
+       and 0.42 (on) — that motion is the transition. */
+    const moving = Array.from({ length: 16 }, (_, i) =>
+      frameAt(i / 4, 5, { detail: 0.1, lowerDetail: i % 2 ? 0.42 : 0.08 }));
+    const look = captionTransition(moving);
+    expect(look.animated).toBe(true);
+
+    /* A steady burn-in holds the same lower band — no transition. */
+    const still = Array.from({ length: 16 }, (_, i) =>
+      frameAt(i / 4, 5, { detail: 0.1, lowerDetail: 0.4 }));
+    expect(captionTransition(still).animated).toBe(false);
+  });
+
+  it('carries the dominant caption-band colour as the highlight', () => {
+    const frames = Array.from({ length: 16 }, (_, i) =>
+      frameAt(i / 4, 5, {
+        detail: 0.1, lowerDetail: i % 2 ? 0.42 : 0.08,
+        lowerColour: i % 3 === 0 ? '#22c55e' : '#facc15',   // green 6, yellow 10
+      }));
+    expect(captionTransition(frames)).toMatchObject({ animated: true, highlightColour: '#facc15' });
+  });
+
+  it('records animated captions plus their highlight in the profile', () => {
+    const withMovingCaps = buildStyleProfile({
+      sourceName: 'c.mp4', durationS: 20,
+      frames: Array.from({ length: 80 }, (_, i) =>
+        frameAt(i / 4, 5, {
+          detail: 0.1, lowerDetail: i % 2 ? 0.42 : 0.08,
+          lowerColour: '#facc15',
+        })),
+    });
+    expect(withMovingCaps.captions.present).toBe(true);
+    expect(withMovingCaps.captions.animated).toBe(true);
+    expect(withMovingCaps.captions.highlightColour).toBe('#facc15');
+
+    const withStaticCaps = buildStyleProfile({
+      sourceName: 'c.mp4', durationS: 20,
+      frames: Array.from({ length: 80 }, (_, i) =>
+        frameAt(i / 4, 5, { detail: 0.1, lowerDetail: 0.4 })),
+    });
+    expect(withStaticCaps.captions.present).toBe(true);
+    expect(withStaticCaps.captions.animated).toBeUndefined();
   });
 });
 

@@ -277,14 +277,18 @@ export function chooseLibraryBroll(opts: {
   return picks;
 }
 
-/** Map a transcript onto the condensed programme as lower-third captions. */
+/** Map a transcript onto the condensed programme as lower-third captions.
+ *  The look comes from what the reference measured — position, and when the
+ *  reference captions transition, the same word-level pop with the measured
+ *  highlight colour. Never a static white card when the reference moves. */
 function captionClips(
   shots: Array<{ srcStart: number; outStart: number; outEnd: number }>,
   transcript: TranscriptLine[] | undefined,
-  position: 'lower' | 'centre',
+  look: StyleProfile['captions'],
 ): PlannedShot[] {
   const caps: PlannedShot[] = [];
   let n = 0;
+  const position = look.position;
 
   const textStyle: TextStyle = {
     font: 'sans',
@@ -293,6 +297,11 @@ function captionClips(
     colour: '#FFFFFF',
     background: 'box',
     uppercase: false,
+    /* The reference's captions move — so the edit's do. Static burn-in stays
+       static; a transition gets word-by-word karaoke with the measured
+       highlight (yellow/green/…), never an invented colour. */
+    animation: look.animated ? 'karaoke_pop' : 'none',
+    ...(look.highlightColour ? { highlightColour: look.highlightColour } : {}),
   };
 
   if (transcript && transcript.length > 0) {
@@ -585,7 +594,7 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
   const caps = profile.captions.present
     ? captionClips(
         video.map(v => ({ srcStart: v.sourceIn, outStart: v.startS, outEnd: v.endS })),
-        transcript, profile.captions.position,
+        transcript, profile.captions,
       )
     : [];
 

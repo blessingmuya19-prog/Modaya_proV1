@@ -85,6 +85,37 @@ describe('composeStudioPlan — short mode', () => {
     }
   });
 
+  it('carries the reference caption transition and highlight into the captions', () => {
+    const k = composeStudioPlan({
+      profile: profile({
+        captions: {
+          present: true, position: 'lower', emphasis: 0.8,
+          animated: true, highlightColour: '#facc15',
+        },
+      }),
+      sourceDurationS: 300,
+      interest: interestWithSpike(),
+      transcript,
+    });
+    const caps = k.clips.filter(c => c.type === 'text');
+    expect(caps.length).toBeGreaterThan(0);
+    expect(caps.every(c => c.textStyle?.animation === 'karaoke_pop')).toBe(true);
+    expect(caps.every(c => c.textStyle?.highlightColour === '#facc15')).toBe(true);
+  });
+
+  it('keeps static captions static when the reference burn-in does not move', () => {
+    const k = composeStudioPlan({
+      profile: profile({
+        captions: { present: true, position: 'lower', emphasis: 0.6 },
+      }),
+      sourceDurationS: 300,
+      interest: interestWithSpike(),
+      transcript,
+    });
+    const caps = k.clips.filter(c => c.type === 'text');
+    expect(caps.every(c => c.textStyle?.animation === 'none')).toBe(true);
+  });
+
   it('generates dynamic highlight captions when transcript is empty but captions are enabled', () => {
     const fallbackPlan = composeStudioPlan({
       profile: profile({ sourceName: 'My Awesome Video.mp4' }),

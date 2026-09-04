@@ -28,6 +28,11 @@ export function measureFrame(ctx: CanvasRenderingContext2D, t: number): FrameSam
 
   let lumaSum = 0, satSum = 0, warmSum = 0, n = 0;
   const lumaGrid: number[] = new Array(SAMPLE_W * SAMPLE_H);
+  const lowerStart = Math.floor(SAMPLE_H * 0.66);
+  /* Caption-band colour: the saturated pixels of the lower third carry the
+     caption highlight (yellow/green/red accents on kinetic subs). Mean RGB of
+     anything above a saturation floor; absent when nothing vivid is there. */
+  let lowR = 0, lowG = 0, lowB = 0, lowN = 0;
 
   for (let p = 0, i = 0; p < data.length; p += 4, i++) {
     const r = data[p] / 255, g = data[p + 1] / 255, b = data[p + 2] / 255;
@@ -38,13 +43,15 @@ export function measureFrame(ctx: CanvasRenderingContext2D, t: number): FrameSam
     lumaGrid[i] = luma;
     hist[Math.min(BINS - 1, Math.floor(luma * BINS))]++;
     lumaSum += luma; satSum += sat; warmSum += r - b; n++;
+    if (Math.floor(i / SAMPLE_W) >= lowerStart && sat > 0.35) {
+      lowR += r; lowG += g; lowB += b; lowN++;
+    }
   }
 
   for (let i = 0; i < BINS; i++) hist[i] /= n || 1;
 
   // Edge energy overall and in the lower third (caption/graphics proxy)
   let detail = 0, lower = 0, lowerN = 0, detailN = 0;
-  const lowerStart = Math.floor(SAMPLE_H * 0.66);
   for (let y = 1; y < SAMPLE_H; y++) {
     for (let x = 1; x < SAMPLE_W; x++) {
       const i = y * SAMPLE_W + x;
@@ -56,6 +63,12 @@ export function measureFrame(ctx: CanvasRenderingContext2D, t: number): FrameSam
     }
   }
 
+  const lowerPx = SAMPLE_W * (SAMPLE_H - lowerStart);
+  const lowerColour = lowN >= lowerPx * 0.02
+    ? '#' + [lowR, lowG, lowB].map(v =>
+        Math.round((v / lowN) * 255).toString(16).padStart(2, '0')).join('')
+    : undefined;
+
   return {
     t,
     hist,
@@ -64,6 +77,7 @@ export function measureFrame(ctx: CanvasRenderingContext2D, t: number): FrameSam
     warmth:      warmSum / n,
     detail:      detail / (detailN || 1),
     lowerDetail: lower / (lowerN || 1),
+    ...(lowerColour ? { lowerColour } : {}),
   };
 }
 
