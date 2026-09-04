@@ -49,6 +49,11 @@ const NOT_YET: { match: RegExp; note: string }[] = [
 /** Clean and normalize user prompts to tolerate typos, keyboard slips, and punctuation. */
 export function normalizeInput(raw: string): string {
   let s = raw.toLowerCase()
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
     // Fix keyboard slip typos where semicolon/colon or other keys replace 'l' or vowels (e.g. 'co;or', 'co:or', 'c;or')
     .replace(/\bco[;:.,]?o?r\b|\bc[;:.]or\b/g, 'color')
     .replace(/[;:]+/g, ' ')
