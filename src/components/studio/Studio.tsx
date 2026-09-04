@@ -13,7 +13,11 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Film, Upload, Wand2, Download, RefreshCw, Sparkles, Send, SlidersHorizontal, CheckCircle2, Loader2, Plus } from 'lucide-react';
+import {
+  ArrowLeft, Film, Upload, Wand2, Download, RefreshCw, Sparkles, Send,
+  CheckCircle2, Loader2, Plus, Copy, Check, User, Bot, RotateCcw,
+  Layers
+} from 'lucide-react';
 import { LogoMark } from '../ui/Logo';
 import { getMedia, setMedia, subscribeMedia, analyseFile, type MediaEntry } from '@/lib/videoStore';
 import { saveMediaFile, saveBrollLibrary, saveBrollFile, loadBrollLibrary, deleteBrollFiles, type BrollMeta } from '@/lib/mediaDb';
@@ -170,6 +174,79 @@ function clipToEditor(c: {
   };
 }
 
+interface StudioChatMsg {
+  id: string;
+  role: 'user' | 'ai';
+  text: string;
+  timestamp: string;
+  version?: {
+    number: number;
+    label: string;
+    stats?: { durationS: number; cuts: number; match?: number };
+    versionId?: string;
+  };
+  diffs?: { label: string; value: string }[];
+  suggestions?: string[];
+}
+
+function getDiffBadges(prev: StyleProfile, next: StyleProfile): { label: string; value: string }[] {
+  const diffs: { label: string; value: string }[] = [];
+  if (prev.uncut !== next.uncut) {
+    diffs.push({ label: 'Footage', value: next.uncut ? 'Uncut (100% full)' : 'Trimmed' });
+  }
+  if (prev.grade.saturation !== next.grade.saturation || prev.grade.contrast !== next.grade.contrast || prev.grade.warmth !== next.grade.warmth) {
+    const isVibrant = next.grade.saturation > 1.25;
+    const isWarm = next.grade.warmth > 0.08;
+    diffs.push({ label: 'Color Grade', value: isVibrant ? (isWarm ? 'Vibrant Warm' : 'Vibrant') : 'Custom' });
+  }
+  if (prev.pace !== next.pace) {
+    diffs.push({ label: 'Pacing', value: next.pace.toUpperCase() });
+  }
+  if (prev.captions.present !== next.captions.present || prev.captions.position !== next.captions.position) {
+    diffs.push({ label: 'Captions', value: next.captions.present ? `Active (${next.captions.position})` : 'Disabled' });
+  }
+  if (prev.punchInRate !== next.punchInRate) {
+    diffs.push({ label: 'Punch-ins', value: next.punchInRate > 0 ? `${Math.round(next.punchInRate * 100)}%` : 'Off' });
+  }
+  if (prev.targetRatio !== next.targetRatio) {
+    diffs.push({ label: 'Aspect Ratio', value: next.targetRatio ?? 'Original' });
+  }
+  return diffs;
+}
+
+function getSmartSuggestions(profile: StyleProfile, hasRef: boolean): string[] {
+  const suggestions: string[] = [];
+  if (hasRef) {
+    suggestions.push('Color grade like reference');
+  }
+  if (!profile.uncut) {
+    suggestions.push("Don't cut anything");
+  } else {
+    suggestions.push('Make pacing fast');
+  }
+  if (!profile.captions.present) {
+    suggestions.push('Add bold captions');
+  } else {
+    suggestions.push('Center captions');
+  }
+  if (profile.grade.saturation < 1.3) {
+    suggestions.push('Make it vibrant and bright');
+  } else {
+    suggestions.push('Reset color grade');
+  }
+  return suggestions.slice(0, 4);
+}
+
+function formatMessageText(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={index} style={{ color: '#fff', fontWeight: 600 }}>{part.slice(2, -2)}</strong>;
+    }
+    return part;
+  });
+}
+
 export default function Studio({ projectId, projectName, mode: initialMode = 'edit' }: {
   projectId: string; projectName: string; mode?: 'edit' | 'reference';
 }) {
@@ -231,9 +308,16 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
   const [totalS, setTotalS] = useState(media?.durationS || 0);
   const [expOpen, setExpOpen] = useState(false);
 
-  const [chats, setChats] = useState<{ role: 'user' | 'ai'; text: string }[]>([]);
+  const [chats, setChats] = useState<StudioChatMsg[]>([]);
   const [input, setInput] = useState('');
   const [chatBusy, setChatBusy] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    chatScrollRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chats, chatBusy]);
 
   // ── result surface: compare / edit-map / versions / reference ──
   /** 'compare' (reference vs result) or 'iterate' (video + chat + edit map). */
@@ -451,7 +535,19 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
       setHeadline(resultHeadline({
         hasReference: ctx.hasRef, match: built.match, durationS: built.plan.durationS,
       }));
-      setChats(c => [...c, { role: 'ai', text: `Back on ${v.label} (Version ${v.number}). Ask me to change anything from here.` }]);
+      setChats(c => [...c, {
+        id: `restore-${Date.now()}`,
+        role: 'ai',
+        text: `Switched back to **${v.label}** (Version ${v.number}). Any new request will branch from this version.`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        version: {
+          number: v.number,
+          label: v.label,
+          stats: v.stats,
+          versionId: v.id,
+        },
+        suggestions: getSmartSuggestions(v.recipe.profile, ctx.hasRef),
+      }]);
     }
     setSelectedMarker(null);
   }, [applyPlan]);
@@ -631,6 +727,35 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         match: built?.match ?? 0,
         durationS: built?.plan.durationS ?? durationS,
       }));
+
+      const firstDiffs: { label: string; value: string }[] = [
+        { label: 'Cuts', value: baseProfile.uncut ? '0 (Uncut)' : `${built?.plan.cutCount ?? 0} cuts` },
+        { label: 'Color Grade', value: withRef ? 'Adaptive Ref' : (baseProfile.grade.saturation > 1.25 ? 'Vibrant' : 'Balanced') },
+        { label: 'Pacing', value: baseProfile.pace.toUpperCase() },
+        { label: 'Captions', value: baseProfile.captions.present ? 'Enabled' : 'Disabled' },
+      ];
+
+      setChats([{
+        id: `init-${Date.now()}`,
+        role: 'ai',
+        text: withRef
+          ? `Your edit is ready! I matched your reference's color grading DNA, pacing cadence, and hook timing on your footage. How would you like to refine it?`
+          : `Your edit is ready! I balanced speech audio, set the opening hook, and calibrated timeline pacing. Tell me what to adjust in your own words.`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        version: {
+          number: 1,
+          label: 'Initial Edit',
+          stats: { durationS: built?.plan.durationS ?? 0, cuts: built?.plan.cutCount ?? 0, match: built?.match ?? 0 },
+        },
+        diffs: firstDiffs,
+        suggestions: [
+          withRef ? 'Color grade like reference' : 'Make it vibrant & bright',
+          "Don't cut anything",
+          'Add bold captions',
+          'Make pacing fast',
+        ],
+      }]);
+
       setPhase('result');
       // The real pipeline produced an edit — only now is the project 'ready'.
       void fetch(`/api/projects/${projectId}`, {
@@ -717,6 +842,18 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           hasReference: last.recipe.hasRef, match: last.stats?.match ?? 0, durationS: last.stats?.durationS ?? durationS,
         }));
         setResultView('iterate');
+        setChats([{
+          id: `loaded-${Date.now()}`,
+          role: 'ai',
+          text: `Welcome back! Your edit is ready on **Version ${last.number}** (${last.label}). Tell me what you'd like to adjust.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          version: {
+            number: last.number,
+            label: last.label,
+            stats: last.stats,
+          },
+          suggestions: getSmartSuggestions(last.recipe.profile, last.recipe.hasRef),
+        }]);
         setPhase('result');
         // Try to surface the stored reference for the reference view.
         try {
@@ -773,6 +910,30 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     }).catch(() => {});
   }, [projectId, setMediaEntry]);
 
+  const copyMessage = (txt: string, id: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      void navigator.clipboard.writeText(txt);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 1800);
+    }
+  };
+
+  const resetChat = () => {
+    if (!ctxRef.current) return;
+    setChats([{
+      id: `init-${Date.now()}`,
+      role: 'ai',
+      text: 'Chat history cleared. Tell me what changes you would like to make to your video edit.',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      suggestions: [
+        'Color grade like reference',
+        'Make it vibrant and bright',
+        "Don't cut anything",
+        'Add bold captions',
+      ],
+    }]);
+  };
+
   /**
    * "Tell Modaya what to change." The phrase is mapped onto the style profile
    * (pacing, punch-ins, captions, grade, length) and the EditPlan is
@@ -782,17 +943,29 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
   const sendRefinement = (customText?: string) => {
     const text = (customText ?? input).trim();
     if (!text || chatBusy) return;
-    setChats(c => [...c, { role: 'user', text }]);
+    const userMsg: StudioChatMsg = {
+      id: `usr-${Date.now()}`,
+      role: 'user',
+      text,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+    setChats(c => [...c, userMsg]);
     if (!customText) setInput('');
     setChatBusy(true);
     try {
       const current = profileRef.current ?? ctxRef.current?.baseProfile;
       if (!current || !ctxRef.current) {
-        setChats(c => [...c, { role: 'ai', text: 'Create an edit first, then tell me what to change.' }]);
+        setChats(c => [...c, {
+          id: `ai-${Date.now()}`,
+          role: 'ai',
+          text: 'Create an edit first, then tell me what to change.',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        }]);
         return;
       }
       const { profile: next, changed, reply } = refineProfile(current, text);
       if (changed) {
+        const diffBadges = getDiffBadges(current, next);
         profileRef.current = next;
         const seed = ++seedRef.current;
         const built = applyPlan(next, seed);
@@ -801,11 +974,39 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
             hasReference: ctxRef.current.hasRef, match: built.match, durationS: built.plan.durationS,
           }));
           void saveVersion(next, seed, text, built);
+          const nextVerNum = (versions[versions.length - 1]?.number ?? 1) + 1;
+          const aiMsg: StudioChatMsg = {
+            id: `ai-${Date.now()}`,
+            role: 'ai',
+            text: reply,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            version: {
+              number: nextVerNum,
+              label: text,
+              stats: { durationS: built.plan.durationS, cuts: built.plan.cutCount, match: built.match },
+            },
+            diffs: diffBadges,
+            suggestions: getSmartSuggestions(next, ctxRef.current.hasRef),
+          };
+          setChats(c => [...c, aiMsg]);
+          return;
         }
       }
-      setChats(c => [...c, { role: 'ai', text: reply }]);
+      const aiMsg: StudioChatMsg = {
+        id: `ai-${Date.now()}`,
+        role: 'ai',
+        text: reply,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        suggestions: getSmartSuggestions(current, ctxRef.current.hasRef),
+      };
+      setChats(c => [...c, aiMsg]);
     } catch {
-      setChats(c => [...c, { role: 'ai', text: 'I could not apply that change — try phrasing it as pacing, punch-ins, captions, colour or length.' }]);
+      setChats(c => [...c, {
+        id: `ai-${Date.now()}`,
+        role: 'ai',
+        text: 'I could not apply that change — try phrasing it as color grade, pacing, captions, punch-ins, or duration.',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      }]);
     } finally {
       setChatBusy(false);
     }
@@ -821,10 +1022,22 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     const built = applyPlan(current, seed);
     if (built) {
       setHeadline(resultHeadline({
-        hasReference: ctxRef.current.hasRef, match: built.match, durationS: built.plan.durationS,
+        hasReference: ctxRef.current?.hasRef ?? false, match: built.match, durationS: built.plan.durationS,
       }));
       void saveVersion(current, seed, '', built);
-      setChats(c => [...c, { role: 'ai', text: 'Done — I recut it with fresh timing choices.' }]);
+      const nextVerNum = (versions[versions.length - 1]?.number ?? 1) + 1;
+      setChats(c => [...c, {
+        id: `ai-${Date.now()}`,
+        role: 'ai',
+        text: 'Done! I re-cut the footage with fresh timing choices and alternate rhythm.',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        version: {
+          number: nextVerNum,
+          label: 'Regenerated Timing',
+          stats: { durationS: built.plan.durationS, cuts: built.plan.cutCount, match: built.match },
+        },
+        suggestions: getSmartSuggestions(current, ctxRef.current?.hasRef ?? false),
+      }]);
     }
     setChatBusy(false);
   };
@@ -1047,25 +1260,403 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
             </div>
           </div>
 
-          {/* Right: Modaya conversation */}
-          <div style={{ borderLeft: `1px solid ${C.b}`, display: 'flex', flexDirection: 'column', minHeight: 0, background: C.surface }}>
-            <div style={{ padding: '16px 18px', borderBottom: `1px solid ${C.b}`, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Sparkles size={17} color={C.accent} />
-              <span style={{ fontWeight: 900, fontSize: 15, fontFamily: "'Satoshi','Inter',system-ui,-apple-system,sans-serif", letterSpacing: '-0.02em' }}>Modaya</span>
-              <span style={{ marginLeft: 'auto', color: C.dim, fontSize: 11 }}>Tell it what to change</span>
-            </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ alignSelf: 'flex-start', maxWidth: '92%', padding: '10px 14px', borderRadius: 12, background: C.s3, color: C.sec, fontSize: 13.5, lineHeight: 1.5 }}>
-                Your edit is ready. I kept the strongest moment as the hook, cut the dead air{match > 0 ? `, applied the reference's vibrant color grade, and matched the pacing` : ''}. What would you like to change?
+          {/* Right: Modern Lovable-style AI Copilot */}
+          <div style={{
+            borderLeft: `1px solid ${C.b}`,
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+            background: 'linear-gradient(180deg, #0C0D11 0%, #08080A 100%)',
+          }}>
+            {/* Copilot Header */}
+            <div style={{
+              padding: '14px 18px',
+              borderBottom: `1px solid ${C.b}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'rgba(255,255,255,0.02)',
+              backdropFilter: 'blur(8px)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 10,
+                  background: 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 50%, #EC4899 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#fff',
+                  boxShadow: '0 2px 12px rgba(139,92,246,0.35)',
+                }}>
+                  <Sparkles size={16} />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontWeight: 800, fontSize: 14.5, letterSpacing: '-0.02em', color: '#FAFAFA' }}>Modaya Copilot</span>
+                    <span style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      padding: '2px 7px',
+                      borderRadius: 999,
+                      background: chatBusy ? 'rgba(168,85,247,0.15)' : 'rgba(52,211,153,0.15)',
+                      color: chatBusy ? '#C084FC' : '#34D399',
+                      border: `1px solid ${chatBusy ? 'rgba(168,85,247,0.3)' : 'rgba(52,211,153,0.3)'}`,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}>
+                      <span style={{
+                        width: 5,
+                        height: 5,
+                        borderRadius: '50%',
+                        background: chatBusy ? '#C084FC' : '#34D399',
+                        boxShadow: `0 0 6px ${chatBusy ? '#C084FC' : '#34D399'}`,
+                        animation: chatBusy ? 'pulseGlow 1.2s infinite' : 'none',
+                      }} />
+                      {chatBusy ? 'Editing…' : 'Ready'}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: 11, color: C.dim }}>Interactive AI Video Director</span>
+                </div>
               </div>
-              {chats.map((m, i) => (
-                <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '92%', padding: '9px 13px', borderRadius: 12, background: m.role === 'user' ? C.accent : C.s3, color: m.role === 'user' ? '#fff' : C.sec, fontSize: 13, lineHeight: 1.45 }}>{m.text}</div>
-              ))}
-              {chatBusy && <div style={{ color: C.muted, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}><Loader2 size={12} className="spin" /> Modaya is adjusting…</div>}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {currentVersion && (
+                  <button
+                    onClick={() => setVersionOpen(v => !v)}
+                    style={{
+                      background: 'rgba(255,255,255,0.05)',
+                      border: `1px solid ${C.b3}`,
+                      borderRadius: 8,
+                      padding: '4px 8px',
+                      color: C.sec,
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    <Layers size={12} color="#A78BFA" /> v{currentVersion.number}
+                  </button>
+                )}
+                <button
+                  onClick={resetChat}
+                  title="Reset conversation"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: C.dim,
+                    cursor: 'pointer',
+                    padding: 5,
+                    borderRadius: 6,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'color 120ms',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.color = C.text; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = C.dim; }}
+                >
+                  <RotateCcw size={14} />
+                </button>
+              </div>
             </div>
-            <div style={{ padding: 12, borderTop: `1px solid ${C.b}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {/* Quick suggestion chips */}
-              <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2, scrollbarWidth: 'none' }}>
+
+            {/* Messages Scroll Area */}
+            <div
+              className="custom-scrollbar"
+              style={{
+                flex: 1,
+                overflowY: 'auto',
+                padding: '16px 16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 14,
+              }}
+            >
+              {chats.map((m) => (
+                <div
+                  key={m.id}
+                  className="chat-msg-anim"
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: m.role === 'user' ? 'flex-end' : 'flex-start',
+                    gap: 4,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 8,
+                      maxWidth: m.role === 'user' ? '88%' : '98%',
+                      alignItems: 'flex-start',
+                      flexDirection: m.role === 'user' ? 'row-reverse' : 'row',
+                    }}
+                  >
+                    {/* Avatar */}
+                    {m.role === 'user' ? (
+                      <div style={{
+                        width: 26,
+                        height: 26,
+                        borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #374151, #1F2937)',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#E5E7EB',
+                        flexShrink: 0,
+                        marginTop: 2,
+                      }}>
+                        <User size={13} />
+                      </div>
+                    ) : (
+                      <div style={{
+                        width: 26,
+                        height: 26,
+                        borderRadius: 8,
+                        background: 'linear-gradient(135deg, #6366F1, #8B5CF6)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#fff',
+                        flexShrink: 0,
+                        marginTop: 2,
+                        boxShadow: '0 2px 8px rgba(139,92,246,0.3)',
+                      }}>
+                        <Sparkles size={13} />
+                      </div>
+                    )}
+
+                    {/* Message Bubble Card */}
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 6,
+                      minWidth: 0,
+                    }}>
+                      <div style={{
+                        padding: m.role === 'user' ? '10px 14px' : '12px 15px',
+                        borderRadius: m.role === 'user' ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
+                        background: m.role === 'user'
+                          ? 'linear-gradient(135deg, #27272A, #18181B)'
+                          : 'rgba(255,255,255,0.035)',
+                        border: m.role === 'user'
+                          ? '1px solid rgba(255,255,255,0.14)'
+                          : '1px solid rgba(255,255,255,0.08)',
+                        color: m.role === 'user' ? '#FAFAFA' : '#E4E4E7',
+                        fontSize: 13.5,
+                        lineHeight: 1.55,
+                        boxShadow: '0 4px 18px rgba(0,0,0,0.25)',
+                      }}>
+                        <div style={{ whiteSpace: 'pre-wrap' }}>{formatMessageText(m.text)}</div>
+
+                        {/* Artifact Card: Version Applied */}
+                        {m.version && (
+                          <div style={{
+                            marginTop: 10,
+                            padding: '10px 12px',
+                            borderRadius: 10,
+                            background: 'rgba(99,102,241,0.08)',
+                            border: '1px solid rgba(99,102,241,0.22)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 6,
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: '#A5B4FC', display: 'flex', alignItems: 'center', gap: 5 }}>
+                                <CheckCircle2 size={13} color="#34D399" /> Version {m.version.number} Live
+                              </span>
+                              {m.version.stats && (
+                                <span style={{ fontSize: 11, color: C.dim }}>
+                                  {fmtTime(m.version.stats.durationS)} · {m.version.stats.cuts} cuts
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Applied Diffs Chips */}
+                            {m.diffs && m.diffs.length > 0 && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 2 }}>
+                                {m.diffs.map((d, di) => (
+                                  <span
+                                    key={di}
+                                    style={{
+                                      fontSize: 10.5,
+                                      padding: '2px 8px',
+                                      borderRadius: 6,
+                                      background: 'rgba(255,255,255,0.06)',
+                                      border: '1px solid rgba(255,255,255,0.1)',
+                                      color: '#D1D5DB',
+                                    }}
+                                  >
+                                    <span style={{ color: '#9CA3AF' }}>{d.label}:</span> <b>{d.value}</b>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Follow-up suggestions */}
+                        {m.suggestions && m.suggestions.length > 0 && (
+                          <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                            {m.suggestions.map((s, si) => (
+                              <button
+                                key={si}
+                                onClick={() => sendRefinement(s)}
+                                disabled={chatBusy}
+                                style={{
+                                  background: 'rgba(99,102,241,0.08)',
+                                  border: '1px solid rgba(99,102,241,0.25)',
+                                  borderRadius: 8,
+                                  padding: '4px 9px',
+                                  fontSize: 11.5,
+                                  fontWeight: 500,
+                                  color: '#C7D2FE',
+                                  cursor: chatBusy ? 'default' : 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  transition: 'all 120ms',
+                                }}
+                                onMouseEnter={e => {
+                                  e.currentTarget.style.background = 'rgba(99,102,241,0.18)';
+                                  e.currentTarget.style.borderColor = '#818CF8';
+                                  e.currentTarget.style.color = '#fff';
+                                }}
+                                onMouseLeave={e => {
+                                  e.currentTarget.style.background = 'rgba(99,102,241,0.08)';
+                                  e.currentTarget.style.borderColor = 'rgba(99,102,241,0.25)';
+                                  e.currentTarget.style.color = '#C7D2FE';
+                                }}
+                              >
+                                <Sparkles size={11} color="#A78BFA" /> {s}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Footer: timestamp + copy */}
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start',
+                        gap: 8,
+                        padding: '0 4px',
+                      }}>
+                        <span style={{ fontSize: 10.5, color: C.dim }}>{m.timestamp}</span>
+                        {m.role === 'ai' && (
+                          <button
+                            onClick={() => copyMessage(m.text, m.id)}
+                            title="Copy text"
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: C.dim,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 3,
+                              fontSize: 10.5,
+                              padding: 2,
+                              transition: 'color 120ms',
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.color = C.text; }}
+                            onMouseLeave={e => { e.currentTarget.style.color = C.dim; }}
+                          >
+                            {copiedId === m.id ? <Check size={11} color="#34D399" /> : <Copy size={11} />}
+                            <span>{copiedId === m.id ? 'Copied' : 'Copy'}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Lovable Thinking / Generating State */}
+              {chatBusy && (
+                <div
+                  className="chat-msg-anim"
+                  style={{
+                    display: 'flex',
+                    gap: 8,
+                    maxWidth: '98%',
+                    alignItems: 'flex-start',
+                  }}
+                >
+                  <div style={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: 8,
+                    background: 'linear-gradient(135deg, #6366F1, #8B5CF6)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#fff',
+                    flexShrink: 0,
+                    marginTop: 2,
+                  }}>
+                    <Loader2 size={13} className="spin" />
+                  </div>
+                  <div style={{
+                    flex: 1,
+                    padding: '12px 16px',
+                    borderRadius: '4px 16px 16px 16px',
+                    background: 'rgba(255,255,255,0.035)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: '#A5B4FC', fontSize: 13, fontWeight: 600 }}>
+                      <Sparkles size={14} className="spin" />
+                      <span>Modaya AI is refining your video…</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      <div style={{ fontSize: 11.5, color: C.muted, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#6366F1' }} />
+                        Analyzing instructions & style parameters
+                      </div>
+                      <div style={{ fontSize: 11.5, color: C.muted, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#8B5CF6' }} />
+                        Synthesizing timeline cuts & GPU color grading
+                      </div>
+                      <div style={{ fontSize: 11.5, color: C.muted, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#34D399' }} />
+                        Rendering real-time 60 FPS preview
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div ref={chatScrollRef} />
+            </div>
+
+            {/* Lovable-Style Floating Input Bar */}
+            <div style={{
+              padding: '12px 14px',
+              borderTop: `1px solid ${C.b}`,
+              background: 'rgba(10,10,11,0.92)',
+              backdropFilter: 'blur(12px)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+            }}>
+              {/* Quick Suggestion Chips */}
+              <div style={{
+                display: 'flex',
+                gap: 6,
+                overflowX: 'auto',
+                paddingBottom: 2,
+                scrollbarWidth: 'none',
+              }}>
                 {[
                   { label: '🎨 Match Ref Color', prompt: 'Color grade like reference' },
                   { label: '✨ Vibrant & Bright', prompt: 'Make it vibrant and bright' },
@@ -1078,8 +1669,8 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
                     onClick={() => sendRefinement(chip.prompt)}
                     disabled={chatBusy}
                     style={{
-                      background: C.s3,
-                      border: `1px solid ${C.b3}`,
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid rgba(255,255,255,0.09)',
                       borderRadius: 999,
                       padding: '4px 10px',
                       fontSize: 11.5,
@@ -1092,24 +1683,91 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
                       gap: 4,
                       transition: 'all 120ms',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = C.accent; e.currentTarget.style.color = C.text; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = C.b3; e.currentTarget.style.color = C.sec; }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.25)';
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                      e.currentTarget.style.color = '#fff';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)';
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                      e.currentTarget.style.color = C.sec;
+                    }}
                   >
                     {chip.label}
                   </button>
                 ))}
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, background: C.s2, border: `1px solid ${C.b3}`, borderRadius: 12, padding: '8px 10px' }}>
+              {/* Floating Input Box */}
+              <div style={{
+                background: 'rgba(255,255,255,0.035)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: 14,
+                padding: '10px 12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+                boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+                transition: 'all 150ms ease',
+              }}>
                 <textarea
-                  value={input} onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendRefinement(); } }}
-                  rows={1} placeholder='Ask Modaya…  e.g. "Color grade like reference" or "Make it vibrant and bright"'
-                  style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', resize: 'none', color: C.text, fontFamily: F, fontSize: 13.5, lineHeight: 1.5, maxHeight: 90 }}
+                  ref={inputRef}
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      sendRefinement();
+                    }
+                  }}
+                  rows={2}
+                  placeholder={`Ask Modaya… e.g. "Color grade like reference", "Don't cut anything", "Make it vibrant"`}
+                  style={{
+                    width: '100%',
+                    background: 'transparent',
+                    border: 'none',
+                    outline: 'none',
+                    resize: 'none',
+                    color: '#FAFAFA',
+                    fontFamily: F,
+                    fontSize: 13.5,
+                    lineHeight: 1.5,
+                    maxHeight: 120,
+                  }}
                 />
-                <button onClick={() => sendRefinement()} disabled={!input.trim() || chatBusy} style={{ width: 34, height: 34, borderRadius: 9, border: 'none', background: input.trim() && !chatBusy ? C.accent : C.b3, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: input.trim() ? 'pointer' : 'default', flexShrink: 0 }}>
-                  <Send size={15} />
-                </button>
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 11, color: C.dim, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span>↵ Send</span>
+                    <span>·</span>
+                    <span>Shift+↵ Newline</span>
+                  </span>
+
+                  <button
+                    onClick={() => sendRefinement()}
+                    disabled={!input.trim() || chatBusy}
+                    style={{
+                      height: 32,
+                      padding: '0 14px',
+                      borderRadius: 8,
+                      border: 'none',
+                      background: input.trim() && !chatBusy ? 'linear-gradient(135deg, #6366F1, #8B5CF6)' : 'rgba(255,255,255,0.08)',
+                      color: input.trim() && !chatBusy ? '#fff' : C.dim,
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      cursor: input.trim() && !chatBusy ? 'pointer' : 'default',
+                      boxShadow: input.trim() && !chatBusy ? '0 2px 10px rgba(139,92,246,0.35)' : 'none',
+                      transition: 'all 150ms ease',
+                    }}
+                  >
+                    {chatBusy ? <Loader2 size={13} className="spin" /> : <Send size={13} />}
+                    <span>{chatBusy ? 'Editing…' : 'Apply'}</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1145,7 +1803,15 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulseGlow { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.55; transform: scale(0.95); } }
+        @keyframes slideUpFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         .spin { animation: spin 0.8s linear infinite; }
+        .pulse-glow { animation: pulseGlow 2s infinite ease-in-out; }
+        .chat-msg-anim { animation: slideUpFade 0.22s cubic-bezier(0.16, 1, 0.3, 1) both; }
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 999px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); }
         @media (max-width: 860px) { .studio-iterate-grid { grid-template-columns: 1fr !important; } }
       `}</style>
     </div>
