@@ -16,7 +16,7 @@ import Link from 'next/link';
 import {
   ArrowLeft, Film, Upload, Wand2, Download, RefreshCw, Sparkles, Send,
   CheckCircle2, Loader2, Plus, Copy, Check, User, Bot, RotateCcw,
-  Layers
+  Layers, Play, Pause, Palette, Scissors, SunMedium, Type, Zap, X, ZoomIn
 } from 'lucide-react';
 import { LogoMark } from '../ui/Logo';
 import { getMedia, setMedia, subscribeMedia, analyseFile, type MediaEntry } from '@/lib/videoStore';
@@ -245,6 +245,29 @@ function formatMessageText(text: string): React.ReactNode {
     }
     return part;
   });
+}
+
+function getSuggestionIcon(suggestion: string) {
+  const lower = suggestion.toLowerCase();
+  if (lower.includes('color') || lower.includes('grade') || lower.includes('warmth')) return Palette;
+  if (lower.includes('vibrant') || lower.includes('bright') || lower.includes('glow')) return SunMedium;
+  if (lower.includes('cut') || lower.includes('trim') || lower.includes('uncut')) return Scissors;
+  if (lower.includes('caption') || lower.includes('subtitle') || lower.includes('text')) return Type;
+  if (lower.includes('pace') || lower.includes('fast') || lower.includes('speed') || lower.includes('rhythm')) return Zap;
+  if (lower.includes('zoom') || lower.includes('punch')) return ZoomIn;
+  if (lower.includes('reset') || lower.includes('revert')) return RotateCcw;
+  return Sparkles;
+}
+
+function renderMarkerIcon(type: EditMarker['type']) {
+  switch (type) {
+    case 'hook': return <Sparkles size={11} color="#000000" />;
+    case 'cut': return <Scissors size={11} color="#000000" />;
+    case 'zoom': return <ZoomIn size={11} color="#000000" />;
+    case 'caption': return <Type size={11} color="#000000" />;
+    case 'broll': return <Film size={11} color="#000000" />;
+    default: return <Sparkles size={11} color="#000000" />;
+  }
 }
 
 export default function Studio({ projectId, projectName, mode: initialMode = 'edit' }: {
@@ -1098,7 +1121,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, fontSize: 13 }}>Preparing preview…</div>
       )}
       <button onClick={() => setPlaying(p => !p)} style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', width: 44, height: 44, borderRadius: '50%', background: 'rgba(15,27,51,0.55)', border: `1px solid rgba(255,255,255,0.25)`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
-        {playing ? '❚❚' : '▶'}
+        {playing ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" style={{ marginLeft: 2 }} />}
       </button>
     </div>
   );
@@ -1155,8 +1178,8 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           </div>
 
           <button onClick={() => { const frac = playing ? (playhead / Math.max(1, totalS)) : 0; syncProgress(frac, !playing); }}
-            style={{ ...primaryBtn, marginTop: 4 }}>
-            {playing ? '❚❚ Pause both' : '▶ Play together (synced)'}
+            style={{ ...primaryBtn, marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+            {playing ? <><Pause size={14} fill="currentColor" /> Pause both</> : <><Play size={14} fill="currentColor" /> Play together (synced)</>}
           </button>
 
           {plan?.summary && <p style={{ margin: 0, color: C.dim, fontSize: 12, textAlign: 'center', maxWidth: 560 }}>{plan.summary}</p>}
@@ -1505,39 +1528,43 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
                         {/* Follow-up suggestions */}
                         {m.suggestions && m.suggestions.length > 0 && (
                           <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                            {m.suggestions.map((s, si) => (
-                              <button
-                                key={si}
-                                onClick={() => sendRefinement(s)}
-                                disabled={chatBusy}
-                                style={{
-                                  background: 'rgba(99,102,241,0.08)',
-                                  border: '1px solid rgba(99,102,241,0.25)',
-                                  borderRadius: 8,
-                                  padding: '4px 9px',
-                                  fontSize: 11.5,
-                                  fontWeight: 500,
-                                  color: '#C7D2FE',
-                                  cursor: chatBusy ? 'default' : 'pointer',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 4,
-                                  transition: 'all 120ms',
-                                }}
-                                onMouseEnter={e => {
-                                  e.currentTarget.style.background = 'rgba(99,102,241,0.18)';
-                                  e.currentTarget.style.borderColor = '#818CF8';
-                                  e.currentTarget.style.color = '#fff';
-                                }}
-                                onMouseLeave={e => {
-                                  e.currentTarget.style.background = 'rgba(99,102,241,0.08)';
-                                  e.currentTarget.style.borderColor = 'rgba(99,102,241,0.25)';
-                                  e.currentTarget.style.color = '#C7D2FE';
-                                }}
-                              >
-                                <Sparkles size={11} color="#A78BFA" /> {s}
-                              </button>
-                            ))}
+                            {m.suggestions.map((s, si) => {
+                              const SugIcon = getSuggestionIcon(s);
+                              return (
+                                <button
+                                  key={si}
+                                  onClick={() => sendRefinement(s)}
+                                  disabled={chatBusy}
+                                  style={{
+                                    background: 'rgba(99,102,241,0.08)',
+                                    border: '1px solid rgba(99,102,241,0.25)',
+                                    borderRadius: 8,
+                                    padding: '4px 9px',
+                                    fontSize: 11.5,
+                                    fontWeight: 500,
+                                    color: '#C7D2FE',
+                                    cursor: chatBusy ? 'default' : 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 5,
+                                    transition: 'all 120ms',
+                                  }}
+                                  onMouseEnter={e => {
+                                    e.currentTarget.style.background = 'rgba(99,102,241,0.18)';
+                                    e.currentTarget.style.borderColor = '#818CF8';
+                                    e.currentTarget.style.color = '#fff';
+                                  }}
+                                  onMouseLeave={e => {
+                                    e.currentTarget.style.background = 'rgba(99,102,241,0.08)';
+                                    e.currentTarget.style.borderColor = 'rgba(99,102,241,0.25)';
+                                    e.currentTarget.style.color = '#C7D2FE';
+                                  }}
+                                >
+                                  <SugIcon size={12} color="#A78BFA" />
+                                  <span>{s}</span>
+                                </button>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
@@ -1658,45 +1685,49 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
                 scrollbarWidth: 'none',
               }}>
                 {[
-                  { label: '🎨 Match Ref Color', prompt: 'Color grade like reference' },
-                  { label: '✨ Vibrant & Bright', prompt: 'Make it vibrant and bright' },
-                  { label: "✂️ Don't Cut Anything", prompt: "Don't cut anything" },
-                  { label: '📝 Bold Captions', prompt: 'Add bold captions' },
-                  { label: '⚡ Fast Pacing', prompt: 'Make pacing fast' },
-                ].map(chip => (
-                  <button
-                    key={chip.label}
-                    onClick={() => sendRefinement(chip.prompt)}
-                    disabled={chatBusy}
-                    style={{
-                      background: 'rgba(255,255,255,0.04)',
-                      border: '1px solid rgba(255,255,255,0.09)',
-                      borderRadius: 999,
-                      padding: '4px 10px',
-                      fontSize: 11.5,
-                      fontWeight: 500,
-                      color: C.sec,
-                      cursor: chatBusy ? 'default' : 'pointer',
-                      whiteSpace: 'nowrap',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      transition: 'all 120ms',
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.25)';
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
-                      e.currentTarget.style.color = '#fff';
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)';
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-                      e.currentTarget.style.color = C.sec;
-                    }}
-                  >
-                    {chip.label}
-                  </button>
-                ))}
+                  { icon: Palette, label: 'Match Ref Color', prompt: 'Color grade like reference' },
+                  { icon: SunMedium, label: 'Vibrant & Bright', prompt: 'Make it vibrant and bright' },
+                  { icon: Scissors, label: "Don't Cut Anything", prompt: "Don't cut anything" },
+                  { icon: Type, label: 'Bold Captions', prompt: 'Add bold captions' },
+                  { icon: Zap, label: 'Fast Pacing', prompt: 'Make pacing fast' },
+                ].map(chip => {
+                  const ChipIcon = chip.icon;
+                  return (
+                    <button
+                      key={chip.label}
+                      onClick={() => sendRefinement(chip.prompt)}
+                      disabled={chatBusy}
+                      style={{
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.09)',
+                        borderRadius: 999,
+                        padding: '4px 10px',
+                        fontSize: 11.5,
+                        fontWeight: 500,
+                        color: C.sec,
+                        cursor: chatBusy ? 'default' : 'pointer',
+                        whiteSpace: 'nowrap',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 5,
+                        transition: 'all 120ms',
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.25)';
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                        e.currentTarget.style.color = '#fff';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)';
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                        e.currentTarget.style.color = C.sec;
+                      }}
+                    >
+                      <ChipIcon size={12} color="#A78BFA" />
+                      <span>{chip.label}</span>
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Floating Input Box */}
@@ -1887,9 +1918,9 @@ function EditMap({ markers, durationS, playheadS, selectedId, onSeek, onSelect }
               title={`${m.label} at ${fmtTime(m.t)}`}
               style={{ position: 'absolute', left: `${left}%`, top: 6, transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
               <span style={{ width: active ? 30 : 26, height: active ? 30 : 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: m.type === 'cut' ? 13 : m.type === 'caption' ? 11 : 13, fontWeight: 800, color: '#000000',
+                fontWeight: 800, color: '#000000',
                 background: color, boxShadow: active ? `0 0 0 3px ${color}44` : 'none', border: active ? '2px solid #FFFFFF' : 'none', lineHeight: 1 }}>
-                {markerIcon(m.type)}
+                {renderMarkerIcon(m.type)}
               </span>
               <span style={{ position: 'absolute', top: 34, fontSize: 9, color: C.dim, whiteSpace: 'nowrap' }}>{fmtTime(m.t)}</span>
             </button>
@@ -2211,7 +2242,7 @@ function DropScreen({ projectId, projectName, mode, onModeChange, hasFootage, on
                     <div key={`${it.name}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
                       background: C.s3, borderRadius: 9 }}>
                       <span style={{ width: 30, height: 30, borderRadius: 7, background: C.s2, display: 'flex', alignItems: 'center',
-                        justifyContent: 'center', color: C.broll, flexShrink: 0, fontSize: 13 }}>▣</span>
+                        justifyContent: 'center', color: C.broll, flexShrink: 0 }}><Film size={14} /></span>
                       <span style={{ minWidth: 0, flex: 1 }}>
                         <span style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name}</span>
                         <span style={{ display: 'block', fontSize: 10.5, color: C.dim, marginTop: 1 }}>
@@ -2219,8 +2250,8 @@ function DropScreen({ projectId, projectName, mode, onModeChange, hasFootage, on
                         </span>
                       </span>
                       <button onClick={() => onRemoveBroll(i)} title="Remove"
-                        style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 13, fontFamily: F, flexShrink: 0, padding: 4 }}>
-                        ✕
+                        style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 4 }}>
+                        <X size={13} />
                       </button>
                     </div>
                   ))}
@@ -2236,7 +2267,7 @@ function DropScreen({ projectId, projectName, mode, onModeChange, hasFootage, on
                 style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
                   padding: '14px 18px', borderRadius: 14, cursor: 'pointer',
                   background: C.s2, border: `1.5px dashed ${C.b3}`, color: C.text, fontFamily: F }}>
-                <span style={{ width: 38, height: 38, borderRadius: 10, background: C.s3, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, flexShrink: 0, fontSize: 15 }}>▣</span>
+                <span style={{ width: 38, height: 38, borderRadius: 10, background: C.s3, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, flexShrink: 0 }}><Film size={16} /></span>
                 <span style={{ flex: 1 }}>
                   <span style={{ display: 'block', fontWeight: 600, fontSize: 14 }}>Add B-roll for cutaways</span>
                   <span style={{ display: 'block', color: C.dim, fontSize: 12, marginTop: 1 }}>Extra clips Modaya can cut to while you keep talking — drop them here or browse</span>
