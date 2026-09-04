@@ -146,6 +146,25 @@ describe('composeStudioPlan — full re-cut', () => {
     expect(plan.summary).toMatch(/uncut|100%/i);
   });
 
+  it('spreads fallback caption cards across the whole uncut programme when there is no transcript', () => {
+    // Regression: "don't cut anything" + "add captions" with no transcript used
+    // to produce a single caption card in the first 3 seconds, which read as
+    // "no captions" on a long video.
+    const uncut = profile({ uncut: true, sourceName: 'modaya-default' });
+    const plan = composeStudioPlan({
+      profile: uncut, sourceDurationS: 300, sourceRatio: '16:9',
+      interest: Array.from({ length: 300 }, () => 0.5),
+    });
+    const caps = plan.clips.filter(c => c.type === 'text');
+    expect(caps.length).toBeGreaterThan(5);
+    for (const c of caps) {
+      expect(c.endS).toBeLessThanOrEqual(plan.durationS + 0.01);
+    }
+    // Cards must reach well beyond the start of the programme
+    const last = caps[caps.length - 1];
+    expect(last.endS).toBeGreaterThan(plan.durationS * 0.5);
+  });
+
   it('preserves source aspect ratio when provided', () => {
     const plan = composeStudioPlan({
       profile: profile(), sourceDurationS: 60, sourceRatio: '16:9',

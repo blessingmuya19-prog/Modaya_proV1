@@ -325,20 +325,24 @@ function captionClips(
   }
 
   // Fallback: If no transcript exists but captions were explicitly requested,
-  // place dynamic title/highlight caption cards across shots so captions are always visible.
+  // place dynamic title/highlight caption cards across shots so captions are
+  // always visible. A single long shot (uncut mode) gets cards tiled every
+  // few seconds instead of one card at the very start.
   if (caps.length === 0 && shots.length > 0) {
     const cleanTitle = sourceName && sourceName !== 'modaya-default' && sourceName !== 'test'
       ? sourceName.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ')
       : 'Key Highlight';
+    const CADENCE_S = 7;   // one caption card roughly every 7 seconds
 
-    for (let i = 0; i < shots.length; i++) {
-      const shot = shots[i];
+    for (const shot of shots) {
       const shotLen = shot.outEnd - shot.outStart;
       if (shotLen < 1.0) continue;
-      const label = i === 0 ? `🔥 ${cleanTitle}` : `✨ Key Moment ${i + 1}`;
-      const startS = shot.outStart + 0.3;
-      const endS = shot.outStart + Math.min(shotLen - 0.2, 3.2);
-      if (endS - startS > 0.4) {
+      const perShot = Math.max(1, Math.round(shotLen / CADENCE_S));
+      for (let i = 0; i < perShot; i++) {
+        const startS = shot.outStart + 0.3 + i * CADENCE_S;
+        const endS = shot.outStart + Math.min(shotLen - 0.2, 3.2 + i * CADENCE_S);
+        if (endS - startS <= 0.4) continue;
+        const label = caps.length === 0 ? `🔥 ${cleanTitle}` : `✨ Key Moment ${caps.length + 1}`;
         caps.push({
           id: `cap-${n++}`,
           trackId: position === 'centre' ? 'text' : 'subs',

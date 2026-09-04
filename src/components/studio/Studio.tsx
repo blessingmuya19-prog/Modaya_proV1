@@ -346,6 +346,8 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
      interrupted by a new reply. A "Jump to latest" pill appears otherwise. */
   const chatStickRef = useRef(true);
   const [showJumpLatest, setShowJumpLatest] = useState(false);
+  /** We already tried to transcribe for a chat "add captions" request. */
+  const captionTranscribedRef = useRef(false);
 
   const scrollChatToBottom = useCallback((smooth: boolean) => {
     const el = chatScrollRef.current;
@@ -751,6 +753,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         captionsWanted: baseProfile.captions.present,
         sourceName: footage.filename || entry?.filename,
       };
+      captionTranscribedRef.current = transcript.length > 0;
       profileRef.current = baseProfile;
       seedRef.current = 1;
 
@@ -890,6 +893,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           captionsWanted: last.recipe.profile.captions.present,
           sourceName: footage.filename || media.filename,
         };
+        captionTranscribedRef.current = false;
         profileRef.current = last.recipe.profile;
         seedRef.current = last.recipe.seed;
         setHasRef(last.recipe.hasRef);
@@ -998,7 +1002,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
    * regenerated — the same brain as the first pass, so the change is real and
    * previewed immediately. No model call is needed for the common intents.
    */
-  const sendRefinement = (customText?: string) => {
+  const sendRefinement = async (customText?: string) => {
     const text = (customText ?? input).trim();
     if (!text || chatBusy) return;
     /* Sending always returns your view to the newest message. */
@@ -1026,6 +1030,29 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
       }
       const { profile: next, changed, reply } = refineProfile(current, text);
       if (changed) {
+        /* Captions need the real spoken words. The first run only transcribed
+           when captions were already on, so a later "add captions" request has
+           no transcript yet — transcribe now (best-effort; the plan falls back
+           to caption cards spread across the footage if this fails). */
+        if (next.captions.present && !ctxRef.current.transcript.length && !captionTranscribedRef.current) {
+          captionTranscribedRef.current = true;
+          const progress: StudioChatMsg = {
+            id: `asr-${Date.now()}`,
+            role: 'ai',
+            text: 'Transcribing your footage so the captions match the words…',
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          };
+          setChats(c => [...c, progress]);
+          const footage = await resolveFootage(projectId, getMedia(projectId));
+          if (footage) {
+            const lines = await transcribeMedia(projectId, footage.blob, ctxRef.current.durationS).catch(() => null);
+            if (lines && lines.length) {
+              ctxRef.current.transcript = lines;
+              ctxRef.current.captionsWanted = true;
+            }
+          }
+          setChats(c => c.filter(m => m.id !== progress.id));
+        }
         const diffBadges = getDiffBadges(current, next);
         profileRef.current = next;
         const seed = ++seedRef.current;
