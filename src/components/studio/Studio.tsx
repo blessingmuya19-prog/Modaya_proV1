@@ -578,7 +578,13 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
       beatSnapRate: measuredBeatSnapRate(videoShots, ctx?.onsets ?? []),
       refBeatSynced: refProfile.beatSynced,
       refPunchInRate: refProfile.punchInRate,
-      editPunchInRate: editProfile.punchInRate,
+      /* Punch-in rate measured from the plan's own shots (scale > 1) — never
+         carried from a profile, so a plan that barely pushes in is scored as
+         is and a reference rate is not mistaken for an achieved one. */
+      editPunchInRate: (() => {
+        const punched = videoShots.filter(c => (c.transform?.scale ?? 1) > 1.02).length;
+        return videoShots.length ? punched / videoShots.length : 0;
+      })(),
       captionsWanted: Boolean(ctx?.captionsWanted || editProfile.captions?.present),
       captionsPresent: plan.captions > 0,
       refGrade: refProfile.grade,

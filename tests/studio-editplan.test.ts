@@ -152,6 +152,77 @@ describe('composeStudioPlan — short mode', () => {
     const vids = plan.clips.filter(c => c.trackId === 'video');
     expect(vids.every(v => v.sourceIn >= 0)).toBe(true);
   });
+
+  it('cuts at the reference rhythm — shot lengths follow its cadence and variance', () => {
+    /* 12 cuts/min ≈ 5s shots, tiny variance ⇒ metronome regularity. The last
+       shot of a moment is a remainder by construction, so judge the body. */
+    const steady = composeStudioPlan({
+      profile: profile({ cutsPerMin: 12, shotMeanS: 5, shotVariance: 0.08, targetRatio: '9:16' }),
+      sourceDurationS: 300, interest: interestWithSpike(),
+    });
+    const lens = steady.clips
+      .filter(c => c.trackId === 'video')
+      .map(c => c.endS - c.startS);
+    expect(lens.length).toBeGreaterThan(3);
+    const sorted = [...lens].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    expect(median).toBeGreaterThan(3.5);    // ~5s ± the subdivision remainder
+    expect(median).toBeLessThan(6.5);
+    const inBand = lens.filter(l => l >= 3.5 && l <= 6.5).length;
+    expect(inBand / lens.length).toBeGreaterThan(0.7);
+  });
+
+  it('a steady reference stays regular; an erratic one varies', () => {
+    const mk = (variance: number) => {
+      const p = composeStudioPlan({
+        profile: profile({ cutsPerMin: 12, shotMeanS: 5, shotVariance: variance, targetRatio: '9:16' }),
+        sourceDurationS: 300, interest: interestWithSpike(),
+      });
+      return p.clips.filter(c => c.trackId === 'video').map(c => c.endS - c.startS);
+    };
+    /* Median absolute deviation is robust against subdivision-tail shots. */
+    const mad = (xs: number[]) => {
+      const med = [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+      const dev = xs.map(x => Math.abs(x - med)).sort((a, b) => a - b);
+      return dev[Math.floor(dev.length / 2)];
+    };
+    const steady = mk(0.05), erratic = mk(1.0);
+    expect(mad(steady)).toBeLessThan(0.4);              // metronome
+    expect(mad(erratic)).toBeGreaterThan(mad(steady));  // keeps viewer on edge
+  });
+
+  it('lands every cut on the measured onsets when the reference is beat-synced', () => {
+    const grid = Array.from({ length: 400 }, (_, i) => i * 0.5);
+    const plan = composeStudioPlan({
+      profile: profile({ cutsPerMin: 30, shotMeanS: 2, shotVariance: 0.3, beatSynced: true, targetRatio: '9:16' }),
+      sourceDurationS: 300, interest: interestWithSpike(), onsets: grid,
+    });
+    const vids = plan.clips.filter(c => c.trackId === 'video');
+    expect(vids.length).toBeGreaterThan(3);
+    for (const v of vids) {
+      const srcEnd = v.sourceIn + (v.endS - v.startS);
+      const onGrid = (t: number) => grid.some(g => Math.abs(g - t) < 0.02);
+      expect(onGrid(v.sourceIn)).toBe(true);
+      expect(onGrid(srcEnd)).toBe(true);
+    }
+  });
+
+  it('pushes in at exactly the reference rate — never a forced alternation', () => {
+    const none = composeStudioPlan({
+      profile: profile({ punchInRate: 0, targetRatio: '9:16' }),
+      sourceDurationS: 300, interest: interestWithSpike(),
+    });
+    expect(none.clips.filter(c => c.trackId === 'video')
+      .every(c => (c.transform.scale ?? 1) <= 1.02)).toBe(true);
+
+    const all = composeStudioPlan({
+      profile: profile({ punchInRate: 1, targetRatio: '9:16' }),
+      sourceDurationS: 300, interest: interestWithSpike(),
+    });
+    expect(all.clips.filter(c => c.trackId === 'video').length).toBeGreaterThan(0);
+    expect(all.clips.filter(c => c.trackId === 'video')
+      .every(c => (c.transform.scale ?? 1) > 1.02)).toBe(true);
+  });
 });
 
 describe('composeStudioPlan — full re-cut', () => {

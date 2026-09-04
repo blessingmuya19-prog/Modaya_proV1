@@ -341,6 +341,10 @@ export function syncProfileAfterAi(profile: StyleProfile, plan: StudioPlan | nul
   const videos = plan.clips.filter(c => c.type === 'video' && c.trackId === 'video');
   const fullSource = videos.length === 1 &&
     Math.abs((videos[0]?.endS ?? 0) - (videos[0]?.startS ?? 0) - plan.durationS) < 0.1;
+  /* Punch-ins are measured from the plan itself (scale > 1 means the shot
+     pushes in) — never carried over from the reference, so the next
+     regenerate and the match score see what the edit ACTUALLY does. */
+  const punched = videos.filter(v => (v.transform?.scale ?? 1) > 1.02).length;
   return {
     ...profile,
     captions: {
@@ -350,6 +354,9 @@ export function syncProfileAfterAi(profile: StyleProfile, plan: StudioPlan | nul
     },
     uncut: fullSource || videos.length === 0,
     cutsPerMin: plan.durationS > 0 ? Math.round((videos.length / plan.durationS) * 60 * 10) / 10 : 0,
+    punchInRate: videos.length
+      ? Number((punched / videos.length).toFixed(2))
+      : profile.punchInRate,
   };
 }
 

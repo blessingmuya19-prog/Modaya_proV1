@@ -120,7 +120,9 @@ function meanInterest(interest: number[] | undefined, s: number, e: number): num
   return sum / (b - a);
 }
 
-/** Snap a cut to a nearby onset so changes land on a beat. */
+/** Snap a cut to a nearby onset so changes land on a beat. `windowS` is how
+ *  far a cut may travel; a beat-synced reference gets a wider window so cuts
+ *  land ON the grid, a regular edit only corrects near misses. */
 function snap(onsets: number[], t: number, windowS: number): number {
   if (!onsets.length) return t;
   let best = t, bestD = Infinity;
@@ -132,6 +134,20 @@ function snap(onsets: number[], t: number, windowS: number): number {
 }
 
 /**
+ * One shot length drawn from the reference's measured rhythm: its cut
+ * cadence (60 / cutsPerMin) as the mean, its measured shot-length VARIANCE as
+ * the spread — a steady reference cuts with metronome regularity, an erratic
+ * one keeps the viewer on edge. Deterministic via the caller's seeded rand.
+ */
+function rhythmLength(
+  profile: StyleProfile, rand: () => number, minS: number, maxS: number,
+): number {
+  const mean = 60 / Math.max(1, profile.cutsPerMin || 12);
+  const cv = clamp(profile.shotVariance, 0.04, 1.1);
+  return clamp(mean * (1 + cv * (rand() * 2 - 1)), minS, maxS);
+}
+
+/**
  * Choose the source ranges that survive. Returns chronological, non-overlapping
  * [start,end] windows. In short mode the single strongest window is placed
  * first (the hook), then the remaining target is filled from what follows.
@@ -139,12 +155,16 @@ function snap(onsets: number[], t: number, windowS: number): number {
 export function chooseMoments(opts: {
   durationS: number; targetS: number; interest?: number[]; onsets?: number[];
   hookFirst: boolean; minShotS?: number;
+  /** How far a moment boundary may travel to land on a beat. Wider for a
+   *  beat-synced reference so the hook itself starts on the grid. */
+  beatTolS?: number;
 }): Array<{ s: number; e: number; score: number }> {
   const { durationS, interest, onsets = [], hookFirst } = opts;
   const targetS = clamp(opts.targetS, 8, Math.max(8, durationS));
   const winLen = clamp(targetS * 0.34, 6, 30);   // ~3 beats fill the short
   const step = Math.max(1, winLen / 3);
   const minShot = opts.minShotS ?? 4;
+  const beatTol = opts.beatTolS ?? 0.4;
 
   type Win = { s: number; e: number; score: number };
   const wins: Win[] = [];
@@ -184,8 +204,8 @@ export function chooseMoments(opts: {
 
   // Snap boundaries to nearby onsets for clean cuts.
   return sorted.map(w => ({
-    s: Math.max(0, snap(onsets, w.s, 0.4)),
-    e: Math.min(durationS, snap(onsets, w.e, 0.4)),
+    s: Math.max(0, snap(onsets, w.s, beatTol)),
+    e: Math.min(durationS, snap(onsets, w.e, beatTol)),
     score: w.score,
   })).filter(w => w.e - w.s >= minShot * 0.6);
 }
@@ -454,15 +474,18 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
     kept = 1;
   } else if (mode === 'short') {
     const targetS = clamp(opts.targetSeconds ?? (refShort ? profile.durationS : 45), 20, 90);
-    const moments = chooseMoments({ durationS, targetS, interest, onsets, hookFirst: true });
-    // Subdivide moments into rhythmic, engaging shots matching profile.cutsPerMin (or ~2.5s-4.5s shots)
-    // so the video actually has professional editing rhythm and alternating punch-ins on speech emphasis!
-    const targetShotLen = profile.cutsPerMin > 0 ? clamp(60 / profile.cutsPerMin, 1.8, 5.0) : 3.2;
+    const beatTol = profile.beatSynced ? 0.55 : 0.4;
+    const moments = chooseMoments({ durationS, targetS, interest, onsets, hookFirst: true, beatTolS: beatTol });
+    // Subdivide moments into shots drawn from the REFERENCE'S rhythm — its cut
+    // cadence as the mean, its measured shot-length variance as the spread —
+    // instead of a generic 2.5–4.5s pattern. Punch-ins follow the reference's
+    // measured rate, never a fixed alternation.
+    const baseLen = clamp(60 / Math.max(1, profile.cutsPerMin || 12), 1.4, 8.0);
 
     moments.forEach((m, mIdx) => {
       const momentLen = m.e - m.s;
 
-      if (momentLen <= targetShotLen * 1.35) {
+      if (momentLen <= baseLen * 1.35) {
         const punchIn = rand() < profile.punchInRate;
         const scale = punchIn ? 1 + (profile.punchInMax - 1) * (0.6 + rand() * 0.4) : 1;
         video.push({
@@ -484,17 +507,24 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
         cursor += momentLen;
         kept++;
       } else {
-        // Subdivide moment into dynamic, rhythm-matched sub-shots with alternating punch-in framing
+        // Subdivide the moment into rhythm-matched sub-shots. A beat-synced
+        // reference lands every cut on the measured onsets; otherwise only
+        // near misses are corrected so a loose timestamp never drags the cut
+        // off-pattern.
         let mCur = m.s;
         let subIdx = 0;
         while (mCur < m.e - 0.4) {
-          const nextTarget = mCur + targetShotLen * (0.85 + rand() * 0.3);
-          const snapped = snap(onsets, nextTarget, 0.35);
-          const subEnd = Math.min(m.e, Math.max(mCur + 1.2, snapped));
+          const base = rhythmLength(profile, rand, 1.0, Math.max(1.4, baseLen * 1.6));
+          const target = mCur + base;
+          let end = snap(onsets, target, profile.beatSynced ? 1.2 : 0.35);
+          /* A beat just before the target would make a shot too short to keep
+             the rhythm — fall back to the metronome length instead. */
+          if (end - mCur < base * 0.55) end = target;
+          const subEnd = Math.min(m.e, Math.max(mCur + 1.0, end));
           const subLen = subEnd - mCur;
 
-          // Alternate punch-in on every other sub-shot or when punchInRate fires
-          const punchIn = (subIdx % 2 === 1) || (rand() < profile.punchInRate);
+          // Punch-ins at the reference's measured rate — no forced alternation.
+          const punchIn = rand() < profile.punchInRate;
           const scale = punchIn ? 1 + (profile.punchInMax - 1) * (0.7 + rand() * 0.3) : 1;
 
           video.push({
@@ -522,12 +552,17 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
       }
     });
   } else {
-    // Full re-cut: cut on the reference's rhythm, drop the weakest stretches.
-    const meanShot = 60 / Math.max(3, profile.cutsPerMin || 12);
+    // Full re-cut: cut on the reference's rhythm — same shot-length
+    // distribution (mean cadence + measured variance) — and drop the weakest
+    // stretches. Beat-synced references land every cut on the measured grid.
     const edges: number[] = [0];
     let t = 0;
     while (t < durationS - 0.5 && edges.length < 400) {
-      t = Math.min(durationS, t + meanShot * (0.7 + rand() * 0.6));
+      t = Math.min(durationS, t + rhythmLength(profile, rand, 0.8, 30));
+      if (profile.beatSynced && onsets.length) {
+        const snapped = snap(onsets, t, 1.2);
+        t = Math.max(t, Math.min(durationS, snapped));   // never move backwards
+      }
       edges.push(t);
     }
     const segs = edges.slice(1).map((e, i) => ({ s: edges[i], e })).filter(g => g.e - g.s > 0.25);

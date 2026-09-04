@@ -156,6 +156,19 @@ describe('studio ⇄ editor AI bridge', () => {
     const synced2 = syncProfileAfterAi({ ...profile, captions: { present: false, position: 'lower', emphasis: 0 } }, whole);
     expect(synced2.uncut).toBe(true);
   });
+
+  it('measures punch-ins from the plan, not the reference profile', () => {
+    const punched = plan();
+    punched.clips = [
+      { ...punched.clips[0], transform: { ...DEFAULT_TRANSFORM, scale: 1.12 } },
+      { ...punched.clips[2], transform: { ...DEFAULT_TRANSFORM, scale: 1 } },
+    ];
+    const synced = syncProfileAfterAi(
+      { ...profile, punchInRate: 0.8 },   // reference says 80%…
+      punched,
+    );
+    expect(synced.punchInRate).toBe(0.5); // …but only 1 of 2 shots actually pushes in
+  });
 });
 
 describe('one-AI first pass and look decisions', () => {
