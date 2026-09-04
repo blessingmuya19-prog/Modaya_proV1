@@ -42,8 +42,9 @@ import { buildSequence, type Sequence, type StyleLayer } from '@/lib/render/sequ
 import PreviewCanvas from './PreviewCanvas';
 import { ExportModal } from './ExportModal';
 import {
-  stagesForRun, markActive, markDone, pipelineProgress, referenceMatch, resultHeadline,
-  type StageState, type StageId,
+  stagesForRun, markActive, markDone, pipelineProgress, resultHeadline,
+  referenceMatchDetail, measuredBeatSnapRate, gradeAgreement, MATCH_AXIS_LABELS,
+  type StageState, type StageId, type ReferenceMatchDetail,
 } from '@/lib/studio/pipeline';
 import { buildEditMap, explainMarker, markerIcon, fmtTime, referenceMoment, type EditMarker, type RefMoment } from '@/lib/studio/editMap';
 import { addVersion, loadVersions, type EditVersion } from '@/lib/studio/versions';
@@ -205,6 +206,14 @@ interface StudioChatMsg {
   reason?: string;
   /** Standalone short clips the AI suggested — one tap cuts to it. */
   clips?: ClipSuggestion[];
+}
+
+/** "pacing, captions and colour grade" — the honest list of what a run
+ *  actually matched. */
+function listPhrase(items: string[]): string {
+  if (!items.length) return '';
+  if (items.length === 1) return items[0];
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
 
 function getDiffBadges(prev: StyleProfile, next: StyleProfile): { label: string; value: string }[] {
@@ -549,10 +558,43 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brollItems, phase]);
 
+  /** The reference-match score for a plan, computed from MEASURED inputs only:
+   *  no hardcoded beat rates, no self-agreement on pacing, and the grade the
+   *  edit actually applies. The returned axes say what the score covers, so
+   *  "93% match" cannot hide that only the colour grade was scored. */
+  const matchPlan = useCallback((
+    plan: StudioPlan,
+    refProfile: StyleProfile,
+    editProfile: StyleProfile,
+  ): ReferenceMatchDetail => {
+    const ctx = ctxRef.current;
+    const videoShots = plan.clips.filter(c => c.type === 'video');
+    const cutCount = Math.max(1, plan.cutCount || videoShots.length);
+    const editCpm = (cutCount / Math.max(1, plan.durationS)) * 60;
+    return referenceMatchDetail({
+      hasReference: Boolean(ctx?.hasRef),
+      editCutsPerMin: editCpm,
+      refCutsPerMin: refProfile.cutsPerMin,
+      beatSnapRate: measuredBeatSnapRate(videoShots, ctx?.onsets ?? []),
+      refBeatSynced: refProfile.beatSynced,
+      refPunchInRate: refProfile.punchInRate,
+      editPunchInRate: editProfile.punchInRate,
+      captionsWanted: Boolean(ctx?.captionsWanted || editProfile.captions?.present),
+      captionsPresent: plan.captions > 0,
+      refGrade: refProfile.grade,
+      gradeAgreement: gradeAgreement(refProfile.grade, editProfile.grade),
+    });
+  }, []);
+
+  /** Coverage labels, human-facing, in score order. */
+  const matchCoverage = useCallback((detail: ReferenceMatchDetail): string[] =>
+    detail.axes.map(a => MATCH_AXIS_LABELS[a.label] ?? a.label), []);
+
   /** Compose the EditPlan from the current profile and push it to the preview.
    *  Shared by the first run, Regenerate and every chat refinement. Returns
    *  the plan plus the grounded reference-match score. */
-  const applyPlan = useCallback((profile: StyleProfile, seed: number): { plan: StudioPlan; match: number } | null => {
+  const applyPlan = useCallback((profile: StyleProfile, seed: number):
+    { plan: StudioPlan; match: number; coverage: string[] } | null => {
     const ctx = ctxRef.current;
     if (!ctx) return null;
     const curMedia = projectId ? getMedia(projectId) : null;
@@ -592,27 +634,15 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     setStyleLayer(layer);
     setTotalS(plan.durationS);
 
-    const videoShots = plan.clips.filter(c => c.type === 'video');
-    const cutCount = Math.max(1, plan.cutCount || videoShots.length);
-    const editCpm = (cutCount / Math.max(1, plan.durationS)) * 60;
-    const m = referenceMatch({
-      hasReference: ctx.hasRef,
-      editCutsPerMin: editCpm,
-      refCutsPerMin: ctx.baseProfile.cutsPerMin || editCpm,
-      beatSnapRate: ctx.hasRef ? 0.7 : 0,
-      refPunchInRate: ctx.baseProfile.punchInRate,
-      editPunchInRate: profile.punchInRate,
-      captionsWanted: ctx.captionsWanted,
-      captionsPresent: !ctx.captionsWanted || plan.captions > 0,
-    });
-    setMatch(m);
-    return { plan, match: m };
-  }, [projectId]);
+    const detail = matchPlan(plan, ctx.baseProfile, profile);
+    setMatch(detail.score);
+    return { plan, match: detail.score, coverage: matchCoverage(detail) };
+  }, [projectId, matchPlan, matchCoverage]);
 
   /** Persist a newly composed plan as the next version (never overwrites). */
   const saveVersion = useCallback(async (
     profile: StyleProfile, seed: number, note: string,
-    built: { plan: StudioPlan; match: number },
+    built: { plan: StudioPlan; match: number; coverage: string[] },
     snapshot?: { clips: PlannedShot[]; durationS: number; frame: StudioPlan['frame'] },
   ) => {
     const ctx = ctxRef.current;
@@ -657,12 +687,14 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           setClips(restored.clips.map(clipToEditor));
           setStyleLayer(layer);
           setTotalS(restored.durationS);
-          return { plan: restored, match: v.stats?.match ?? 0 } as { plan: StudioPlan; match: number };
+          return { plan: restored, match: v.stats?.match ?? 0, coverage: [] } as
+            { plan: StudioPlan; match: number; coverage: string[] };
         })()
       : applyPlan(v.recipe.profile, v.recipe.seed);
     if (built) {
       setHeadline(resultHeadline({
         hasReference: ctx.hasRef, match: built.match, durationS: built.plan.durationS,
+        coverage: built.coverage,
       }));
       setChats(c => [...c, {
         id: `restore-${Date.now()}`,
@@ -841,11 +873,12 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
 
       // 4 — the AI makes Version 1 (or the deterministic composer when the
       // brief is empty or the AI cannot be reached).
-      let built: { plan: StudioPlan; match: number } | null = null as { plan: StudioPlan; match: number } | null;
+      let built: { plan: StudioPlan; match: number; coverage: string[] } | null =
+        null as { plan: StudioPlan; match: number; coverage: string[] } | null;
       let v1FromAi = false;
       let briefAiNote = '';
       const firstCutFromAi = async (profile: StyleProfile, briefText: string): Promise<{
-        built: { plan: StudioPlan; match: number }; profile: StyleProfile;
+        built: { plan: StudioPlan; match: number; coverage: string[] }; profile: StyleProfile;
       } | null> => {
         const curMedia = projectId ? getMedia(projectId) : null;
         const ratio: StudioPlan['frame']['ratio'] = curMedia && curMedia.width && curMedia.height
@@ -896,21 +929,9 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           setStyleLayer(look.layer);
           setTotalS(out.plan.durationS);
 
-          const videoShots = out.plan.clips.filter(c => c.type === 'video' && c.trackId === 'video');
-          const cutCount = Math.max(1, out.plan.cutCount || videoShots.length);
-          const editCpm = (cutCount / Math.max(1, out.plan.durationS)) * 60;
-          const m = referenceMatch({
-            hasReference: ctxRef.current!.hasRef,
-            editCutsPerMin: editCpm,
-            refCutsPerMin: profile.cutsPerMin || editCpm,
-            beatSnapRate: ctxRef.current!.hasRef ? 0.7 : 0,
-            refPunchInRate: profile.punchInRate,
-            editPunchInRate: synced.punchInRate,
-            captionsWanted: ctxRef.current!.captionsWanted || (synced.captions?.present ?? false),
-            captionsPresent: out.plan.captions > 0,
-          });
-          setMatch(m);
-          return { built: { plan: out.plan, match: m }, profile: synced };
+          const detail = matchPlan(out.plan, profile, synced);
+          setMatch(detail.score);
+          return { built: { plan: out.plan, match: detail.score, coverage: matchCoverage(detail) }, profile: synced };
         } catch {
           return null;
         }
@@ -956,6 +977,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         hasReference: ctxRef.current?.hasRef ?? false,
         match: built?.match ?? 0,
         durationS: built?.plan.durationS ?? durationS,
+        coverage: built?.coverage,
       }));
 
       const firstDiffs: { label: string; value: string }[] = [
@@ -969,7 +991,9 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         id: `init-${Date.now()}`,
         role: 'ai',
         text: (withRef
-          ? `Your edit is ready! I matched your reference's color grading DNA, pacing cadence, and hook timing on your footage. How would you like to refine it?`
+          ? (built?.coverage?.length
+              ? `Your edit is ready! I matched your reference's ${listPhrase(built.coverage)} on your footage. How would you like to refine it?`
+              : "Your edit is ready, but I couldn't find a distinctive style to match in that reference — so I built the edit from your footage itself. How would you like to refine it?")
           : `Your edit is ready! I balanced speech audio, set the opening hook, and calibrated timeline pacing. Tell me what to adjust in your own words.`)
           + (briefAiNote ? `\n\nNote: ${briefAiNote}` : ''),
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -1307,29 +1331,18 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         setStyleLayer(look.layer);
         setTotalS(proOut.plan.durationS);
 
-        const videoShots = proOut.plan.clips.filter(c => c.type === 'video' && c.trackId === 'video');
-        const cutCount = Math.max(1, proOut.plan.cutCount || videoShots.length);
-        const editCpm = (cutCount / Math.max(1, proOut.plan.durationS)) * 60;
-        const m = referenceMatch({
-          hasReference: ctxRef.current.hasRef,
-          editCutsPerMin: editCpm,
-          refCutsPerMin: ctxRef.current.baseProfile.cutsPerMin || editCpm,
-          beatSnapRate: ctxRef.current.hasRef ? 0.7 : 0,
-          refPunchInRate: ctxRef.current.baseProfile.punchInRate,
-          editPunchInRate: synced.punchInRate,
-          captionsWanted: ctxRef.current.captionsWanted || (synced.captions?.present ?? false),
-          captionsPresent: proOut.plan.captions > 0,
-        });
-        setMatch(m);
+        const detail = matchPlan(proOut.plan, ctxRef.current.baseProfile, synced);
+        setMatch(detail.score);
         setHeadline(resultHeadline({
-          hasReference: ctxRef.current.hasRef, match: m, durationS: proOut.plan.durationS,
+          hasReference: ctxRef.current.hasRef, match: detail.score,
+          durationS: proOut.plan.durationS, coverage: matchCoverage(detail),
         }));
 
         const diffBadges = getDiffBadges(current, synced);
         const nextVerNum = (versions[versions.length - 1]?.number ?? 1) + 1;
         void saveVersion(
           synced, ++seedRef.current, text,
-          { plan: proOut.plan, match: m },
+          { plan: proOut.plan, match: detail.score, coverage: matchCoverage(detail) },
           { clips: proOut.plan.clips, durationS: proOut.plan.durationS, frame: proOut.plan.frame },
         );
         setChats(c => [...c, {
@@ -1341,7 +1354,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           version: {
             number: nextVerNum,
             label: text,
-            stats: { durationS: proOut.plan.durationS, cuts: proOut.plan.cutCount, match: m },
+            stats: { durationS: proOut.plan.durationS, cuts: proOut.plan.cutCount, match: detail.score },
           },
           diffs: diffBadges,
           summary: summary !== 'No change' ? summary : undefined,
@@ -1368,10 +1381,18 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         setStyleLayer(look.layer);
         setPlan(nextPlan);
         setClips(nextPlan.clips.map(clipToEditor));
+        /* A new grade changes the grade axis (the only thing look-only edits
+           touch), so the score is re-measured — never carried over. */
+        const detail = matchPlan(nextPlan, ctxRef.current.baseProfile, synced);
+        setMatch(detail.score);
+        setHeadline(resultHeadline({
+          hasReference: ctxRef.current.hasRef, match: detail.score,
+          durationS: nextPlan.durationS, coverage: matchCoverage(detail),
+        }));
         const diffBadges = getDiffBadges(current, synced);
         const nextVerNum = (versions[versions.length - 1]?.number ?? 1) + 1;
         void saveVersion(synced, ++seedRef.current, text,
-          { plan: nextPlan, match },
+          { plan: nextPlan, match: detail.score, coverage: matchCoverage(detail) },
           { clips: nextPlan.clips, durationS: nextPlan.durationS, frame: nextPlan.frame });
         setChats(c => [...c, {
           id: `ai-${Date.now()}`,
@@ -1382,7 +1403,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           version: {
             number: nextVerNum,
             label: text,
-            stats: { durationS: nextPlan.durationS, cuts: nextPlan.cutCount, match },
+            stats: { durationS: nextPlan.durationS, cuts: nextPlan.cutCount, match: detail.score },
           },
           diffs: diffBadges,
           summary: summary !== 'No change' ? summary : undefined,
@@ -1443,23 +1464,15 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         setClips(out.plan.clips.map(clipToEditor));
         setStyleLayer(out.styleLayer);
         setTotalS(out.plan.durationS);
-        const m = referenceMatch({
-          hasReference: ctxRef.current.hasRef,
-          editCutsPerMin: 0,
-          refCutsPerMin: ctxRef.current.baseProfile.cutsPerMin || 0,
-          beatSnapRate: 0,
-          refPunchInRate: ctxRef.current.baseProfile.punchInRate,
-          editPunchInRate: synced.punchInRate,
-          captionsWanted: ctxRef.current.captionsWanted,
-          captionsPresent: out.plan.captions > 0,
-        });
-        setMatch(m);
+        const detail = matchPlan(out.plan, ctxRef.current.baseProfile, synced);
+        setMatch(detail.score);
         setHeadline(resultHeadline({
-          hasReference: ctxRef.current.hasRef, match: m, durationS: out.plan.durationS,
+          hasReference: ctxRef.current.hasRef, match: detail.score,
+          durationS: out.plan.durationS, coverage: matchCoverage(detail),
         }));
         const nextVerNum = (versions[versions.length - 1]?.number ?? 1) + 1;
         void saveVersion(synced, ++seedRef.current, `Clip: ${clip.title}`,
-          { plan: out.plan, match: m },
+          { plan: out.plan, match: detail.score, coverage: matchCoverage(detail) },
           { clips: out.plan.clips, durationS: out.plan.durationS, frame: out.plan.frame });
         const stat = `Cut to “${clip.title}” (${fmtTime(clip.startS)}–${fmtTime(clip.endS)}) ${
           clip.source === 'ai' ? '— AI pick' : clip.source === 'hybrid' ? '— AI + measured' : '— measured'}.`;
@@ -1471,7 +1484,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           version: {
             number: nextVerNum,
             label: `Clip: ${clip.title}`,
-            stats: { durationS: out.plan.durationS, cuts: out.plan.cutCount, match: m },
+            stats: { durationS: out.plan.durationS, cuts: out.plan.cutCount, match: detail.score },
           },
           suggestions: getSmartSuggestions(synced, ctxRef.current!.hasRef),
         }]);
@@ -1502,18 +1515,11 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     setClips(snap.plan.clips.map(clipToEditor));
     setStyleLayer(snap.styleLayer);
     setTotalS(snap.plan.durationS);
-    const videoShots = snap.plan.clips.filter(c => c.type === 'video' && c.trackId === 'video');
-    const m = referenceMatch({
-      hasReference: ctxRef.current?.hasRef ?? false,
-      editCutsPerMin: (Math.max(1, snap.plan.cutCount || videoShots.length) / Math.max(1, snap.plan.durationS)) * 60,
-      refCutsPerMin: ctxRef.current?.baseProfile.cutsPerMin || 0,
-      beatSnapRate: ctxRef.current?.hasRef ? 0.7 : 0,
-      refPunchInRate: ctxRef.current?.baseProfile.punchInRate ?? 0,
-      editPunchInRate: snap.profile.punchInRate,
-      captionsWanted: ctxRef.current?.captionsWanted ?? false,
-      captionsPresent: snap.plan.captions > 0,
-    });
-    setMatch(m);
+    const ref = ctxRef.current?.baseProfile;
+    const detail = ref
+      ? matchPlan(snap.plan, ref, snap.profile)
+      : { score: 0, axes: [] };
+    setMatch(detail.score);
     setChats(c => [...c, {
       id: `ai-${Date.now()}`,
       role: 'ai',
@@ -1533,7 +1539,8 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     const built = applyPlan(current, seed);
     if (built) {
       setHeadline(resultHeadline({
-        hasReference: ctxRef.current?.hasRef ?? false, match: built.match, durationS: built.plan.durationS,
+        hasReference: ctxRef.current?.hasRef ?? false, match: built.match,
+        durationS: built.plan.durationS, coverage: built.coverage,
       }));
       void saveVersion(current, seed, '', built);
       const nextVerNum = (versions[versions.length - 1]?.number ?? 1) + 1;

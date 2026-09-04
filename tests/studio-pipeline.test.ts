@@ -6,7 +6,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   stagesForRun, markActive, markDone, pipelineProgress,
-  referenceMatch, resultHeadline, STUDIO_STAGES,
+  referenceMatch, referenceMatchDetail, resultHeadline, STUDIO_STAGES,
+  gradeAgreement, gradeDistinct, measuredBeatSnapRate,
 } from '@/lib/studio/pipeline';
 
 describe('stagesForRun', () => {
@@ -63,10 +64,13 @@ describe('stage progression', () => {
 });
 
 describe('referenceMatch', () => {
+  const REF_GRADE = { brightness: 1.05, contrast: 1.28, saturation: 1.35, warmth: 0.2 };
   const base = {
     hasReference: true, editCutsPerMin: 30, refCutsPerMin: 30,
-    beatSnapRate: 1, refPunchInRate: 0.4, editPunchInRate: 0.4,
+    beatSnapRate: 1, refBeatSynced: true,
+    refPunchInRate: 0.4, editPunchInRate: 0.4,
     captionsWanted: true, captionsPresent: true,
+    refGrade: REF_GRADE, gradeAgreement: 1,
   };
 
   it('is high when the edit mirrors the reference', () => {
@@ -90,11 +94,108 @@ describe('referenceMatch', () => {
   it('never leaves the 0..100 band for extreme inputs', () => {
     const wild = referenceMatch({
       hasReference: true, editCutsPerMin: 999, refCutsPerMin: 1,
-      beatSnapRate: 5, refPunchInRate: 3, editPunchInRate: -2,
+      beatSnapRate: 5, refBeatSynced: true,
+      refPunchInRate: 3, editPunchInRate: -2,
       captionsWanted: true, captionsPresent: true,
+      refGrade: REF_GRADE, gradeAgreement: 5,
     });
     expect(wild).toBeGreaterThanOrEqual(0);
     expect(wild).toBeLessThanOrEqual(100);
+  });
+
+  it('never credits a pacing the reference did not specify', () => {
+    const detail = referenceMatchDetail({
+      hasReference: true,
+      editCutsPerMin: 1, refCutsPerMin: 0,       // reference: no detectable cuts
+      beatSnapRate: 0.8, refBeatSynced: false,
+      refPunchInRate: 0, editPunchInRate: 0,     // neither side pushes in
+      captionsWanted: false, captionsPresent: false,
+      refGrade: REF_GRADE, gradeAgreement: 1,
+    });
+    /* Only the colour grade was measurable — it cannot be diluted by
+       absent-in-both aspects, and it can't claim beat-sync either. */
+    expect(detail.axes.map(a => a.label)).toEqual(['colour grade']);
+    expect(detail.score).toBe(100);
+  });
+
+  it('a grade-only edit against a paced reference scores low', () => {
+    const detail = referenceMatchDetail({
+      hasReference: true,
+      editCutsPerMin: 1, refCutsPerMin: 12,      // reference cuts; edit does not
+      beatSnapRate: 0, refBeatSynced: false,
+      refPunchInRate: 0, editPunchInRate: 0,
+      captionsWanted: false, captionsPresent: false,
+      refGrade: REF_GRADE, gradeAgreement: 1,    // the ONLY thing it did match
+    });
+    expect(detail.axes.map(a => a.label)).toContain('pacing');
+    expect(detail.axes.map(a => a.label)).toContain('colour grade');
+    expect(detail.score).toBeLessThan(60);
+  });
+
+  it('a neutral reference cannot carry the score on a grade that is not there', () => {
+    const detail = referenceMatchDetail({
+      hasReference: true,
+      editCutsPerMin: 30, refCutsPerMin: 0,
+      beatSnapRate: 0, refBeatSynced: false,
+      refPunchInRate: 0, editPunchInRate: 0,
+      captionsWanted: false, captionsPresent: false,
+      refGrade: { brightness: 1, contrast: 1, saturation: 1, warmth: 0 },
+      gradeAgreement: 1,
+    });
+    expect(detail.score).toBe(0);
+  });
+
+  it('only counts beat-sync when the reference is verifiably on the beat', () => {
+    const notSynced = referenceMatchDetail({ ...base, refBeatSynced: false, gradeAgreement: 1 });
+    expect(notSynced.axes.some(a => a.label === 'beat-sync')).toBe(false);
+    const synced = referenceMatchDetail({
+      ...base, refBeatSynced: true, beatSnapRate: 0.4, gradeAgreement: 1,
+    });
+    const beat = synced.axes.find(a => a.label === 'beat-sync')!;
+    expect(beat.value).toBeCloseTo(0.4);
+  });
+});
+
+describe('gradeAgreement', () => {
+  it('is 1 for identical grades and 0 for opposite extremes', () => {
+    const g = { brightness: 1.05, contrast: 1.3, saturation: 1.4, warmth: 0.2 };
+    expect(gradeAgreement(g, { ...g })).toBe(1);
+    expect(gradeAgreement(
+      { brightness: 1, contrast: 1, saturation: 1, warmth: 0 },
+      { brightness: 1.35, contrast: 1.35, saturation: 1.55, warmth: 0.8 },
+    )).toBe(0);
+  });
+
+  it('drops proportionally for a partial miss', () => {
+    const a = { brightness: 1, contrast: 1.2, saturation: 1.3, warmth: 0.1 };
+    const b = { ...a, saturation: 1.6 };   // 0.3 off on one axis
+    expect(gradeAgreement(a, b)).toBeGreaterThan(0.6);
+    expect(gradeAgreement(a, b)).toBeLessThan(1);
+  });
+});
+
+describe('gradeDistinct', () => {
+  it('is false for neutral and true for anything the profiler produces', () => {
+    expect(gradeDistinct({ brightness: 1, contrast: 1, saturation: 1, warmth: 0 })).toBe(false);
+    expect(gradeDistinct({ brightness: 1.02, contrast: 1.22, saturation: 1.26, warmth: 0.07 })).toBe(true);
+  });
+});
+
+describe('measuredBeatSnapRate', () => {
+  const clips = [
+    { startS: 0, endS: 4.0 },
+    { startS: 4.0, endS: 8.0 },
+    { startS: 8.0, endS: 12.0 },
+  ];
+
+  it('counts boundaries that land on real onsets', () => {
+    expect(measuredBeatSnapRate(clips, [0, 4, 8, 12])).toBe(1);
+    expect(measuredBeatSnapRate(clips, [0.5, 4.1, 7.9, 11])).toBeCloseTo(2 / 4, 5);
+  });
+
+  it('is 0 without onsets or clips — never assumed', () => {
+    expect(measuredBeatSnapRate(clips, [])).toBe(0);
+    expect(measuredBeatSnapRate([], [0, 4])).toBe(0);
   });
 });
 
@@ -106,6 +207,13 @@ describe('resultHeadline', () => {
     const h = resultHeadline({ hasReference: false, match: 0, durationS: 34 });
     expect(h).not.toContain('%');
     expect(h).toContain('0:34');
+  });
+  it('names what the score actually covers', () => {
+    const h = resultHeadline({
+      hasReference: true, match: 93, durationS: 48, coverage: ['colour grade'],
+    });
+    expect(h).toContain('93% match');
+    expect(h).toContain('(colour grade)');
   });
 });
 
