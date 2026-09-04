@@ -74,8 +74,14 @@ export default function PreviewCanvas({
   }, []);
 
   useEffect(() => {
-    try { engineRef.current?.setSequence(sequence); } catch {}
-  }, [sequence]);
+    try {
+      const e = engineRef.current;
+      if (e) {
+        e.setSequence(sequence);
+        e.seek(playheadS, playing);
+      }
+    } catch {}
+  }, [sequence, playheadS, playing]);
 
   useEffect(() => {
     try {

@@ -91,7 +91,7 @@ export class PreviewEngine {
 
   attach(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    this.ctx    = canvas.getContext('2d', { alpha: false, desynchronized: true }) ?? canvas.getContext('2d', { alpha: false });
+    this.ctx    = canvas.getContext('2d') ?? canvas.getContext('2d', { willReadFrequently: false });
     if (this.ctx) {
       this.ctx.imageSmoothingEnabled = true;
       this.ctx.imageSmoothingQuality = 'medium';
