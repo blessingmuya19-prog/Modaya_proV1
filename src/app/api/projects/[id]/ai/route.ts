@@ -87,6 +87,88 @@ function detectIntent(text: string): Intent {
   return 'unknown';
 }
 
+/**
+ * Reason about compound requests without a model: split on the words people
+ * use to chain asks ("cut the dead air AND add captions"), classify each
+ * clause, and return the distinct intents in execution order. Returns [] when
+ * the request is really one thing, so single-intent behaviour is unchanged.
+ *
+ * Ordering is deliberate: clips/captions/restyle/steps run in the order the
+ * person said them, except captions always come before restyle when both are
+ * present (there is nothing to restyle until captions exist).
+ */
+function intentsFor(text: string): Intent[] {
+  const clauses = text
+    .split(/,|\band\b|\balso\b|\bthen\b|\bplus\b|\bwhile\b|\bafter that\b/gi)
+    .map(c => c.trim())
+    .filter(Boolean);
+  if (clauses.length < 2) return [];
+
+  let intents: Intent[] = [];
+  for (const clause of clauses.slice(0, 4)) {
+    const intent = detectIntent(clause);
+    if (intent === 'unknown' || intents.includes(intent)) continue;
+    intents.push(intent);
+  }
+  if (intents.length < 2) return [];
+
+  /* Captions must exist before they can be restyled. */
+  const cap = intents.indexOf('captions');
+  const style = intents.indexOf('restyle');
+  if (cap >= 0 && style >= 0 && style < cap) {
+    intents[cap] = 'restyle';
+    intents[style] = 'captions';
+  }
+  return intents;
+}
+
+/**
+ * Deterministic multi-step plan: run each intent against the timeline left by
+ * the previous one, and narrate the reasoning step by step. A step that cannot
+ * run says so honestly instead of pretending; it never wipes the steps that
+ * already ran.
+ */
+function applyEditSteps(
+  intents: Intent[], clips: Clip[], durationS: number,
+  ctx: Parameters<typeof applyEdit>[3],
+): EditResult {
+  let working = clips;
+  const replies: string[] = [];
+  const summaries: string[] = [];
+  const affected = new Set<string>();
+  let savedS = 0;
+  let clipSuggestions: ClipSuggestion[] | undefined;
+
+  for (const intent of intents) {
+    const step = applyEdit(intent, working, durationS, ctx);
+    working = step.newClips;
+    savedS += step.savedS;
+    step.affectedIds.forEach(id => affected.add(id));
+    replies.push(step.reply);
+    if (step.summary !== 'No change') summaries.push(step.summary);
+    if (step.clipSuggestions?.length) clipSuggestions = step.clipSuggestions;
+  }
+
+  const reason = summaries.length
+    ? summaries.map((s, i) => `Step ${i + 1}: ${s}`).join(' · ')
+    : undefined;
+
+  /* One reply when everything ran, otherwise the honest notes joined — the
+     compounding of "can't" + "done" reads fine in the user's words. */
+  const reply = [...new Set(replies)].join(' ').slice(0, 700);
+
+  return {
+    reply: reply || 'No change.',
+    summary: summaries.join(' · ') || 'No change',
+    savedS: Math.round(savedS),
+    affectedIds: [...affected].slice(0, 8),
+    newClips: working,
+    intent: intents[0],
+    ...(clipSuggestions?.length ? { clipSuggestions } : {}),
+    ...(reason ? { reason } : {}),
+  };
+}
+
 /** The words someone wants on screen, taken from what they actually wrote —
  *  never invented. Returns null when the request does not contain them. */
 export function wordsForOverlay(message: string): string | null {
@@ -173,6 +255,9 @@ interface EditResult {
       (grade, punch-in) that leave the clip list unchanged while still being
       part of the same single AI answer. */
   applied?:     Operation[];
+  /** The plan/reasoning behind the edit, in the user's terms: what was
+      understood and what was done, in order. */
+  reason?:      string;
 }
 
 /**
@@ -514,12 +599,29 @@ const SYSTEM = `You are the editing brain of Modaya, an AI video editor.
 You receive the state of a timeline and a request from the user, and you reply
 with a short spoken response plus the operations needed to carry it out.
 
+THINK BEFORE YOU ANSWER — this is not a parroting task:
+1. Understand the scene: read the TRANSCRIPT, the PICTURE measurements, and any
+   FRAMES attached. Decide what is really going on (what is said, where the
+   energy is, what the footage is doing) before choosing an edit.
+2. Break the request into steps. People routinely ask for several things at
+   once ("like the reference but shorter, with bold captions"). Each distinct
+   ask is its own operation, listed in the order they must run (structural
+   changes first, then text, then looks).
+3. Then, and only then, emit operations. Every operation must be justified by
+   the request and grounded in the data you were given — never invent timestamps,
+   words, or things you cannot see.
+
 Reply with JSON only, in exactly this shape:
 {
   "reply": "one or two sentences, conversational, first person, no markdown",
+  "reason": "one or two sentences explaining your plan: what you understood and
+             what you are doing, in order — shown to the user as the thinking
+             behind the edit",
   "operations": [ ... ],
   "clips": [ ... ]
 }
+"reason" is required whenever operations change the timeline (or the request is
+ambiguous and you say so). Keep it plain, no markdown, under 40 words.
 
 "clips" is used ONLY when the user asks to find/create multiple short clips
 for TikTok, Reels, Shorts or social (e.g. "give me 5 clips", "find viral
@@ -594,7 +696,15 @@ Rules:
 - Use the SILENT SPANS provided when the user asks to cut pauses or dead air.
 - Never invent timestamps beyond the video duration.
 - Prefer few, large operations over many small ones.
-- If the request is unclear, use "none" and ask a clarifying question in reply.
+- If the request is unclear, use "none" and ask a clarifying question in reply,
+  and say in "reason" exactly what is unclear.
+- Compound requests run in order inside one operations array. Structural edits
+  (remove/keep/trim) come first so later text and style operation land on the
+  final footage; then captions/text; then looks (grade, punch_in). Never put a
+  grade before a cut that changes what the grade applies to.
+- When the request references a reference video ("like the reference", "match
+  its style"), read the REFERENCE STYLE LEARNED block and apply the grade and
+  caption style it describes — never invent one. If it is absent, say so.
 
 Choosing the "best", "strongest" or "highlight" part:
 - Use the LOUDNESS block. It is measured from the real audio of this file.
@@ -622,7 +732,7 @@ What you cannot do — say so plainly instead of pretending:
   three sizes. Never say you cannot add text or cannot change the font.
 - Do not infer content from the file name. A title is not evidence.`;
 
-interface Plan { reply: string; operations: unknown; clips?: unknown }
+interface Plan { reply: string; operations: unknown; clips?: unknown; reason?: string }
 
 /**
  * Which build is answering. When someone is looking at a stale deployment,
@@ -650,7 +760,7 @@ async function planWithLlm(opts: {
   /** A few frames, as data URLs, for a model that can actually see. */
   frames?:   string[];
 }): Promise<{
-  plan:    { reply: string; operations: Operation[]; clips?: ClipSuggestion[] } | null;
+  plan:    { reply: string; operations: Operation[]; clips?: ClipSuggestion[]; reason?: string } | null;
   failure: { reason: FailureReason; detail: string } | null;
   /** True when frames were sent but no model available could look at them. */
   blind?:  boolean;
@@ -730,11 +840,18 @@ async function planWithLlm(opts: {
   const aiClips = Array.isArray(plan.clips) ? sanitiseClips({ clips: plan.clips }, clipReq) : [];
   const clipsOut = aiClips.length ? mergeClips(aiClips, clipReq) : undefined;
 
+  /* The model's reasoning travels with the edit so the UI can show the plan
+     behind it. Capped, and only when it is genuinely about the operations. */
+  const reason = typeof plan.reason === 'string' && plan.reason.trim()
+    ? plan.reason.trim().slice(0, 300)
+    : undefined;
+
   return {
     plan: {
       reply:      plan.reply.slice(0, 600),
       operations: validateOperations(plan.operations, { durationS: opts.durationS }),
       ...(clipsOut?.length ? { clips: clipsOut } : {}),
+      ...(reason ? { reason } : {}),
     },
     failure: null,
     blind,
@@ -939,6 +1056,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         newClips:    outcome.clips as Clip[],
         intent:      'unknown',
         applied:     outcome.applied,
+        reason:      plan.reason,
         ...(plan.clips?.length ? { clipSuggestions: plan.clips } : {}),
       };
     }
@@ -964,10 +1082,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       : "I'm running without an AI model, so I only understand a few set phrases: cut the dead air, " +
         'pick the highlights, or add captions. No provider key reached this deployment ' +
         `(${buildTag()}) — if you have just added one, it only takes effect on a build made afterwards.`;
-    edit = applyEdit(intent, clips, durationS, {
+    const stepCtx = {
       silences, energy, modelNote, transcript, message, visual,
       previousClips: project?.previousClips ?? [],
-    });
+    };
+    /* Compound request ("cut the pauses and add captions") gets the same
+       step-by-step reasoning the model would do — each step sees the timeline
+       the previous one produced. */
+    const intents = intentsFor(message);
+    edit = intents.length > 1 && intent !== 'clips'
+      ? applyEditSteps(intents, clips, durationS, stepCtx)
+      : applyEdit(intent, clips, durationS, stepCtx);
+  }
+
+  /* Reasoning safety: a plan that would remove every frame of footage is not
+     an edit, it is a mistake in the plan. Refuse it and say why, rather than
+     delivering a timeline with nothing on it. */
+  const hadVideo = clips.some(c => c.type === 'video');
+  const stillVideo = edit.newClips.some(c => c.type === 'video');
+  if (hadVideo && !stillVideo) {
+    edit = {
+      reply: "I won't remove the entire video — that would leave nothing to export. " +
+             'Tell me which part to keep instead and I will cut to it.',
+      summary: 'no change — whole video protected',
+      savedS: 0, affectedIds: [],
+      newClips: clips,
+      intent: edit.intent,
+      reason: 'safety check: the plan would have removed every frame of footage, so it was refused.',
+    };
   }
 
   const now    = new Date().toISOString();
@@ -999,6 +1141,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       affectedIds: edit.affectedIds,
       intent:      edit.intent,
       newClips:    edit.newClips,
+      ...(edit.reason ? { reason: edit.reason } : {}),
       ...(edit.applied?.length ? { applied: edit.applied } : {}),
       ...(edit.clipSuggestions?.length ? { clips: edit.clipSuggestions } : {}),
     },

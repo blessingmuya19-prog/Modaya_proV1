@@ -19,7 +19,7 @@ import {
   ArrowLeft, Film, Upload, Wand2, Download, RefreshCw, Sparkles, Send,
   CheckCircle2, Loader2, Plus, Copy, Check, User, Bot, RotateCcw,
   Layers, Play, Pause, Palette, Scissors, SunMedium, Type, Zap, X, ZoomIn,
-  ChevronDown
+  ChevronDown, Lightbulb
 } from 'lucide-react';
 import { LogoMark } from '../ui/Logo';
 import { getMedia, setMedia, subscribeMedia, analyseFile, type MediaEntry } from '@/lib/videoStore';
@@ -201,6 +201,8 @@ interface StudioChatMsg {
   /** One-line edit summary shown as a chip (what actually happened). */
   summary?: string;
   savedS?: number;
+  /** The AI's plan/reasoning, in the user's terms — shown under the reply. */
+  reason?: string;
   /** Standalone short clips the AI suggested — one tap cuts to it. */
   clips?: ClipSuggestion[];
 }
@@ -1276,6 +1278,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
 
       const proOut = applyAiResult(plan, styleLayer, current, ctxRef.current.durationS, edit.newClips as AiClip[]);
       const aiText = String(data?.aiMessage?.text ?? edit.summary ?? '');
+      const aiReason = typeof edit.reason === 'string' ? edit.reason.trim() : undefined;
       const captionNote = /caption|subtitle|transcri/i.test(text) && ctxRef.current.transcript.length === 0
         && !/(transcri|speech key|empty caption slots)/i.test(aiText)
         ? " I couldn't transcribe the speech on your footage (no speech key or no intelligible audio), so caption slots were placed instead — add a Groq key in Settings → AI for word-accurate captions."
@@ -1332,6 +1335,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           role: 'ai',
           text: aiText + captionNote,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          reason: aiReason,
           version: {
             number: nextVerNum,
             label: text,
@@ -1372,6 +1376,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           role: 'ai',
           text: aiText + captionNote,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          reason: aiReason,
           version: {
             number: nextVerNum,
             label: text,
@@ -1393,6 +1398,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         role: 'ai',
         text: aiText || 'No change needed.',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        reason: aiReason,
         summary: clipSuggestions?.length ? undefined : (summary !== 'No change' ? summary : undefined),
         savedS: clipSuggestions?.length ? undefined : (savedS || undefined),
         clips: clipSuggestions,
@@ -1989,6 +1995,25 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
                         boxShadow: '0 4px 18px rgba(0,0,0,0.25)',
                       }}>
                         <div style={{ whiteSpace: 'pre-wrap' }}>{formatMessageText(m.text)}</div>
+
+                        {/* The AI's reasoning behind the edit */}
+                        {m.reason && (
+                          <div style={{
+                            marginTop: 7,
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: 6,
+                            padding: '7px 9px',
+                            borderRadius: 8,
+                            background: 'rgba(99,102,241,0.06)',
+                            border: '1px solid rgba(99,102,241,0.16)',
+                          }}>
+                            <Lightbulb size={12} color="#A78BFA" style={{ flexShrink: 0, marginTop: 1 }} />
+                            <span style={{ fontSize: 11.5, color: '#A5B4FC', lineHeight: 1.5, fontStyle: 'italic' }}>
+                              {m.reason}
+                            </span>
+                          </div>
+                        )}
 
                         {/* Artifact Card: Version Applied */}
                         {m.version && (
