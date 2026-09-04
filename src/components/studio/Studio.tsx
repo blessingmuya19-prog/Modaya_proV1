@@ -903,9 +903,6 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={() => setVersionOpen(v => !v)} style={ghostBtn}><Sparkles size={13} /> Versions ({versions.length})</button>
           <button onClick={() => setExpOpen(true)} style={primaryBtn}><Download size={14} /> Export</button>
-          <Link href={`/editor/${projectId}`} style={{ textDecoration: 'none' }}>
-            <button style={ghostBtn}><SlidersHorizontal size={13} /> Advanced</button>
-          </Link>
         </div>
       </header>
 
@@ -1047,9 +1044,6 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
               <button onClick={regenerate} disabled={chatBusy} style={ghostBtn}>
                 {chatBusy ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />} Regenerate
               </button>
-              <Link href={`/editor/${projectId}`} style={{ textDecoration: 'none' }}>
-                <button style={ghostBtn}><SlidersHorizontal size={13} /> Take full control</button>
-              </Link>
             </div>
           </div>
 

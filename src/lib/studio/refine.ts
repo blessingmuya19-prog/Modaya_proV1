@@ -458,7 +458,7 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
       return {
         profile: base,
         changed: false,
-        reply: "Click the 'Export' button at the top right to render and download your high-definition MP4 video, or click 'Take full control' to fine-tune your cuts in the multi-track editor.",
+        reply: "Click the 'Export' button at the top right to render and download your high-definition MP4 video, or tell me in the chat what you'd like to adjust (e.g. captions, color grade, or pacing).",
       };
     }
     if (asksHelp) {
