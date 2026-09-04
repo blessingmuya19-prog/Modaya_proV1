@@ -25,7 +25,13 @@ import { saveMediaFile, saveBrollLibrary, saveBrollFile, loadBrollLibrary, delet
 import { getProjectMedia, uploadProjectMedia, getReferenceBlob, getBrollLibrary, backupBrollToCloud, trimCloudBroll } from '@/lib/mediaCloud';
 import { analyseAudio, analyseReference, interestCurve } from '@/lib/ai/analyseReference';
 import type { StyleProfile } from '@/lib/ai/styleProfile';
-import { composeStudioPlan, type StudioPlan, type TranscriptLine } from '@/lib/studio/editPlan';
+import { composeStudioPlan, type StudioPlan, type PlannedShot, type TranscriptLine } from '@/lib/studio/editPlan';
+import {
+  toProView, applyProResult, syncProfileAfterPro, transcriptPayload,
+  applyProfileEffectsToLayer, type ProClip,
+} from '@/lib/studio/proAi';
+import { detectSilences } from '@/lib/ai/operations';
+import { DEFAULT_EFFECTS } from '@/lib/render/sequence';
 import { transcribeMedia } from '@/lib/ai/transcribeClient';
 import { buildSequence, type Sequence, type StyleLayer } from '@/lib/render/sequence';
 import PreviewCanvas from '../editor/PreviewCanvas';
@@ -396,6 +402,9 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     durationS: number; onsets: number[]; interest: number[]; transcript: TranscriptLine[];
     baseProfile: StyleProfile; hasRef: boolean; captionsWanted: boolean;
     sourceName?: string;
+    /** Grounding for the Pro AI route: measured pauses + audio state. */
+    silences: [number, number][];
+    audio: 'pending' | 'ready' | 'failed';
   } | null>(null);
   /** The profile currently driving the edit (reference/default, then refined). */
   const profileRef = useRef<StyleProfile | null>(null);
@@ -571,13 +580,15 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
   const saveVersion = useCallback(async (
     profile: StyleProfile, seed: number, note: string,
     built: { plan: StudioPlan; match: number },
+    snapshot?: { clips: PlannedShot[]; durationS: number; frame: StudioPlan['frame'] },
   ) => {
     const ctx = ctxRef.current;
     if (!ctx) return;
     try {
       const { versions: vs } = await addVersion(projectId, {
         profile, seed, hasRef: ctx.hasRef, refName, note: note || undefined,
-      }, { durationS: built.plan.durationS, cuts: built.plan.cutCount, match: built.match });
+      }, { durationS: built.plan.durationS, cuts: built.plan.cutCount, match: built.match },
+        snapshot);
       setVersions(vs);
     } catch { /* versioning is non-blocking */ }
   }, [projectId, refName]);
@@ -588,7 +599,34 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     if (!ctx) return;
     profileRef.current = v.recipe.profile;
     seedRef.current = v.recipe.seed;
-    const built = applyPlan(v.recipe.profile, v.recipe.seed);
+    /* Versions produced by the Pro AI carry a timeline snapshot, since its
+       edits do not replay through composeStudioPlan. */
+    const built = v.snapshot
+      ? (() => {
+          const restored: StudioPlan = {
+            clips: v.snapshot!.clips,
+            durationS: v.snapshot!.durationS,
+            removedS: Math.max(0, ctx.durationS - v.snapshot!.durationS),
+            cutCount: v.snapshot!.clips.filter(c => c.type === 'video' && c.trackId === 'video').length,
+            summary: `Version ${v.number} restored`,
+            profileName: v.recipe.profile.sourceName,
+            frame: v.snapshot!.frame,
+            captions: v.snapshot!.clips.filter(c => c.type === 'text').length,
+            broll: v.snapshot!.clips.filter(c => c.type === 'video' && c.trackId !== 'video').length,
+            brollFromLibrary: false,
+            hookFirst: false,
+          };
+          const layer: StyleLayer = {};
+          for (const c of restored.clips) {
+            if (c.type === 'video') layer[c.id] = { sourceIn: c.sourceIn, transform: c.transform, effects: c.effects };
+          }
+          setPlan(restored);
+          setClips(restored.clips.map(clipToEditor));
+          setStyleLayer(layer);
+          setTotalS(restored.durationS);
+          return { plan: restored, match: v.stats?.match ?? 0 } as { plan: StudioPlan; match: number };
+        })()
+      : applyPlan(v.recipe.profile, v.recipe.seed);
     if (built) {
       setHeadline(resultHeadline({
         hasReference: ctx.hasRef, match: built.match, durationS: built.plan.durationS,
@@ -759,6 +797,9 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         baseProfile, hasRef: withRef && !!profile,
         captionsWanted: baseProfile.captions.present,
         sourceName: footage.filename || entry?.filename,
+        /* Grounding for the Pro AI route. */
+        silences: env ? detectSilences(env.rms, env.hopS) : [],
+        audio: env ? 'ready' : 'failed',
       };
       profileRef.current = baseProfile;
       seedRef.current = 1;
@@ -898,6 +939,8 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           baseProfile: last.recipe.profile, hasRef: last.recipe.hasRef,
           captionsWanted: last.recipe.profile.captions.present,
           sourceName: footage.filename || media.filename,
+          silences: env ? detectSilences(env.rms, env.hopS) : [],
+          audio: env ? 'ready' : 'failed',
         };
         profileRef.current = last.recipe.profile;
         seedRef.current = last.recipe.seed;
@@ -1002,10 +1045,13 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
   };
 
   /**
-   * "Tell Modaya what to change." The phrase is mapped onto the style profile
-   * (pacing, punch-ins, captions, grade, length) and the EditPlan is
-   * regenerated — the same brain as the first pass, so the change is real and
-   * previewed immediately. No model call is needed for the common intents.
+   * "Tell Modaya what to change." Refinements now run through the SAME AI the
+   * Pro Editor uses — /api/projects/[id]/ai — with the Studio's timeline,
+   * transcript, silences and energy sent along, so captions carry the real
+   * spoken words, text placement/restyle/moves work, and cuts are grounded in
+   * measured audio. The lightweight local parser stays as the fallback for
+   * offline/preset intents (grade presets, aspect ratio, pacing) and for the
+   * first-pass plan.
    */
   const sendRefinement = async (customText?: string) => {
     const text = (customText ?? input).trim();
@@ -1034,31 +1080,168 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         return;
       }
       const { profile: next, changed, reply } = refineProfile(current, text);
-      if (changed) {
-        /* Captions need the real spoken words, and they must come from the
-           FOOTAGE — a plan built without a transcript falls back to generic
-           caption cards. Transcribe on every caption request (retrying costs
-           a decode, but a user who just added a key expects it to work), then
-           say plainly if no speech service / no audible speech was available
-           instead of pretending word-exact captions were generated. */
-        if (next.captions.present && !ctxRef.current.transcript.length) {
-          const progress: StudioChatMsg = {
-            id: `asr-${Date.now()}`,
-            role: 'ai',
-            text: 'Transcribing your footage so the captions match the words…',
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          };
-          setChats(c => [...c, progress]);
-          const footage = await resolveFootage(projectId, getMedia(projectId));
-          if (footage) {
-            const lines = await transcribeMedia(projectId, footage.blob, ctxRef.current.durationS).catch(() => null);
-            if (lines && lines.length) {
-              ctxRef.current.transcript = lines;
-              ctxRef.current.captionsWanted = true;
+
+      /* Captions need the real spoken words from the FOOTAGE. Transcribe on
+         demand so the Pro AI writes what was actually said. */
+      if (next.captions.present && !ctxRef.current.transcript.length) {
+        const progress: StudioChatMsg = {
+          id: `asr-${Date.now()}`,
+          role: 'ai',
+          text: 'Transcribing your footage so the captions match the words…',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+        setChats(c => [...c, progress]);
+        const footage = await resolveFootage(projectId, getMedia(projectId));
+        if (footage) {
+          const lines = await transcribeMedia(projectId, footage.blob, ctxRef.current.durationS).catch(() => null);
+          if (lines && lines.length) {
+            ctxRef.current.transcript = lines;
+            ctxRef.current.captionsWanted = true;
+          }
+        }
+        setChats(c => c.filter(m => m.id !== progress.id));
+      }
+
+      /* ── Pro Editor AI route ── */
+      if (plan && plan.clips.length > 0) {
+        const view = toProView(plan, styleLayer);
+        const res = await fetch(`/api/projects/${projectId}/ai`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: text,
+            durationS: ctxRef.current.durationS,
+            clips: view.clips,
+            silences: ctxRef.current.silences,
+            energy: ctxRef.current.interest,
+            audio: ctxRef.current.audio,
+            transcript: ctxRef.current.transcript.length
+              ? transcriptPayload(ctxRef.current.transcript)
+              : undefined,
+            history: chats.slice(-8).map(m => ({ role: m.role, text: m.text })),
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json().catch(() => null);
+          const edit = data?.edit;
+          if (edit && Array.isArray(edit.newClips)) {
+            const summary = String(edit.summary ?? '');
+            const aiText = String(data?.aiMessage?.text ?? summary ?? '');
+            const proOut = applyProResult(
+              plan, styleLayer, next, ctxRef.current.durationS,
+              edit.newClips as ProClip[],
+            );
+            const timelineChanged = proOut?.applied ?? false;
+            const captionNote = next.captions.present && ctxRef.current.transcript.length === 0
+              && !/(transcri|speech key|empty caption slots)/i.test(aiText)
+              ? " I couldn't transcribe the speech on your footage (no speech key or no intelligible audio), so I placed caption slots instead — add a Groq key in Settings → AI for word-accurate captions."
+              : '';
+
+            if (timelineChanged && proOut) {
+              const synced = syncProfileAfterPro(next, proOut.plan);
+              profileRef.current = synced;
+              setPlan(proOut.plan);
+              setFrame(proOut.plan.frame);
+              setClips(proOut.plan.clips.map(clipToEditor));
+              setStyleLayer(proOut.styleLayer);
+              setTotalS(proOut.plan.durationS);
+
+              const videoShots = proOut.plan.clips.filter(c => c.type === 'video' && c.trackId === 'video');
+              const cutCount = Math.max(1, proOut.plan.cutCount || videoShots.length);
+              const editCpm = (cutCount / Math.max(1, proOut.plan.durationS)) * 60;
+              const m = referenceMatch({
+                hasReference: ctxRef.current.hasRef,
+                editCutsPerMin: editCpm,
+                refCutsPerMin: ctxRef.current.baseProfile.cutsPerMin || editCpm,
+                beatSnapRate: ctxRef.current.hasRef ? 0.7 : 0,
+                refPunchInRate: ctxRef.current.baseProfile.punchInRate,
+                editPunchInRate: synced.punchInRate,
+                captionsWanted: ctxRef.current.captionsWanted || (synced.captions?.present ?? false),
+                captionsPresent: proOut.plan.captions > 0,
+              });
+              setMatch(m);
+              setHeadline(resultHeadline({
+                hasReference: ctxRef.current.hasRef, match: m, durationS: proOut.plan.durationS,
+              }));
+
+              const diffBadges = getDiffBadges(current, synced);
+              const nextVerNum = (versions[versions.length - 1]?.number ?? 1) + 1;
+              void saveVersion(
+                synced, ++seedRef.current, text,
+                { plan: proOut.plan, match: m },
+                { clips: proOut.plan.clips, durationS: proOut.plan.durationS, frame: proOut.plan.frame },
+              );
+              setChats(c => [...c, {
+                id: `ai-${Date.now()}`,
+                role: 'ai',
+                text: (aiText || reply) + captionNote,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                version: {
+                  number: nextVerNum,
+                  label: text,
+                  stats: { durationS: proOut.plan.durationS, cuts: proOut.plan.cutCount, match: m },
+                },
+                diffs: diffBadges,
+                suggestions: getSmartSuggestions(synced, ctxRef.current!.hasRef),
+              }]);
+              return;
+            }
+
+            if (!timelineChanged && summary !== 'No change' && changed) {
+              /* Grade / punch-in: the AI applied a look without changing the
+                 timeline — push the refreshed profile grade onto the layer so
+                 the preview updates immediately. */
+              const layer = applyProfileEffectsToLayer(styleLayer, next);
+              const withEffects: PlannedShot[] = plan.clips.map(c =>
+                c.type === 'video' && layer[c.id]?.effects
+                  ? { ...c, effects: { ...DEFAULT_EFFECTS, ...layer[c.id]!.effects! } }
+                  : c);
+              const nextPlan: StudioPlan = { ...plan, clips: withEffects };
+              profileRef.current = next;
+              setStyleLayer(layer);
+              setPlan(nextPlan);
+              setClips(nextPlan.clips.map(clipToEditor));
+              const diffBadges = getDiffBadges(current, next);
+              const nextVerNum = (versions[versions.length - 1]?.number ?? 1) + 1;
+              void saveVersion(next, ++seedRef.current, text,
+                { plan: nextPlan, match },
+                { clips: nextPlan.clips, durationS: nextPlan.durationS, frame: nextPlan.frame });
+              setChats(c => [...c, {
+                id: `ai-${Date.now()}`,
+                role: 'ai',
+                text: (aiText || reply) + captionNote,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                version: {
+                  number: nextVerNum,
+                  label: text,
+                  stats: { durationS: nextPlan.durationS, cuts: nextPlan.cutCount, match },
+                },
+                diffs: diffBadges,
+                suggestions: getSmartSuggestions(next, ctxRef.current!.hasRef),
+              }]);
+              return;
+            }
+
+            /* The Pro AI answered without changing anything. When the local
+               parser has a real Studio edit the AI route does not know about
+               (keep everything uncut, aspect ratio, pacing presets), apply
+               that locally; otherwise show the AI's answer as-is. */
+            if (!changed) {
+              setChats(c => [...c, {
+                id: `ai-${Date.now()}`,
+                role: 'ai',
+                text: aiText || 'No change needed.',
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                suggestions: getSmartSuggestions(current, ctxRef.current!.hasRef),
+              }]);
+              return;
             }
           }
-          setChats(c => c.filter(m => m.id !== progress.id));
         }
+      }
+
+      /* ── Local fallback (route unavailable, or Studio-only intents) ── */
+      if (changed) {
         const diffBadges = getDiffBadges(current, next);
         profileRef.current = next;
         const seed = ++seedRef.current;
@@ -1070,11 +1253,11 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           void saveVersion(next, seed, text, built);
           const nextVerNum = (versions[versions.length - 1]?.number ?? 1) + 1;
           /* When captions were asked for but no words could be transcribed,
-             say so — the plan falls back to highlight cards, and pretending
+             say so — the plan falls back to caption slots, and pretending
              they are real captions is exactly how this got reported as
              "there's no captions" before. */
           const captionNote = next.captions.present && ctxRef.current.transcript.length === 0
-            ? " I couldn't transcribe the speech on your footage (no speech key or no intelligible audio), so I placed highlight captions instead — add a Groq key in Settings → AI for word-accurate captions."
+            ? " I couldn't transcribe the speech on your footage (no speech key or no intelligible audio), so I placed caption slots instead — add a Groq key in Settings → AI for word-accurate captions."
             : '';
           const aiMsg: StudioChatMsg = {
             id: `ai-${Date.now()}`,

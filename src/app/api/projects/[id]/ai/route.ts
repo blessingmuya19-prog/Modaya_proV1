@@ -107,7 +107,35 @@ export function wordsForOverlay(message: string): string | null {
   return null;
 }
 
-// ── Reply & edit generation ───────────────────────────────────────────────────
+/* ── Reply & edit generation ─────────────────────────────────────────────────── */
+
+/** Validate a timeline sent from the browser. Studio owns its clips locally,
+ *  so a missing/invalid body falls back to the server copy. */
+function parseClientClips(raw: unknown): Clip[] | null {
+  if (!Array.isArray(raw)) return null;
+  const out: TimelineClip[] = [];
+  for (const c of raw.slice(0, 800)) {
+    if (!c || typeof c !== 'object') continue;
+    const o = c as Record<string, unknown>;
+    const id = typeof o.id === 'string' ? o.id : '';
+    const trackId = typeof o.trackId === 'string' ? o.trackId : '';
+    const label = typeof o.label === 'string' ? o.label : '';
+    const startS = Number(o.startS);
+    const endS = Number(o.endS);
+    const type = o.type;
+    if (!id || !trackId || !(type === 'video' || type === 'audio' || type === 'text' || type === 'subtitle')) continue;
+    if (!Number.isFinite(startS) || !Number.isFinite(endS) || endS <= startS) continue;
+    out.push({
+      id, trackId, label: label || type,
+      startS: Math.max(0, startS), endS,
+      type,
+      ...(typeof o.textPosition === 'string' ? { textPosition: o.textPosition as TimelineClip['textPosition'] } : {}),
+      ...(typeof o.textAlign === 'string' ? { textAlign: o.textAlign as TimelineClip['textAlign'] } : {}),
+      ...(o.textStyle && typeof o.textStyle === 'object' ? { textStyle: o.textStyle as TimelineClip['textStyle'] } : {}),
+    });
+  }
+  return out.length ? out as unknown as Clip[] : null;
+}
 
 const WHERE_WORDS: Record<'top'|'centre'|'lower', string> = {
   top: 'across the top', centre: 'in the middle', lower: 'along the bottom',
@@ -700,17 +728,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const project = db.projects.findById(id);
 
-  // Graceful fallback: project may not exist in serverless memory
-  const durationS = project?.durationS ?? 1578;
-  const clips     = project?.clips     ?? [];
+  const body = await req.json().catch(() => ({}));
+  const message: string = body.message?.trim() ?? '';
+  if (!message) return NextResponse.json({ error: 'Message required' }, { status: 400 });
+
+  /* The Studio keeps its timeline in the browser (IndexedDB + local state)
+     rather than on the server, so the route must be able to operate on the
+     clips it is sent — otherwise the same AI that edits the Pro Editor would
+     run against an empty timeline in Studio. The server copy is only a
+     fallback for the editor flow. */
+  const clientClips = parseClientClips(body.clips);
+  const durationS = Number(body.durationS) > 0
+    ? Number(body.durationS)
+    : project?.durationS ?? 1578;
+  const clips: Clip[] = clientClips ?? (project?.clips ?? []);
 
   if (project && project.userId !== user.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
-
-  const body = await req.json().catch(() => ({}));
-  const message: string = body.message?.trim() ?? '';
-  if (!message) return NextResponse.json({ error: 'Message required' }, { status: 400 });
 
   const silences: [number, number][] = Array.isArray(body.silences)
     ? body.silences.filter((r: unknown) => Array.isArray(r) && r.length === 2).slice(0, 200)
@@ -794,7 +829,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       : 'There is nothing to undo yet — this is as far back as I go.';
     const aiMsg = { role: 'ai' as const, text: reply, ts: new Date(Date.now() + 100).toISOString() };
 
-    if (project) {
+    /* Studio owns its timeline in the browser — never write its view over a
+       server project. */
+    if (project && !clientClips) {
       db.projects.update(id, {
         aiHistory: [...(project.aiHistory ?? []), userMsg, aiMsg],
         ...(back ? { clips: back, previousClips: project.clips } : {}),
@@ -823,7 +860,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (provider.ready) {
     const attempt = await planWithLlm({
       message, durationS, clips, silences, energy, audio, transcript, style, visual, frames,
-      history: (project?.aiHistory ?? []).map(m => ({ role: m.role, text: m.text })),
+      history: (Array.isArray(body.history) && body.history.length
+        ? body.history.slice(-8)
+        : (project?.aiHistory ?? []))
+        .map((m: { role?: unknown; text?: unknown }) => ({
+          role: String(m?.role) === 'ai' ? 'ai' as const : 'user' as const,
+          text: String(m?.text ?? ''),
+        })),
     });
     const plan = attempt.plan;
     failure = attempt.failure;
@@ -903,8 +946,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const userMsg = { role: 'user' as const, text: message, ts: now };
   const aiMsg   = { role: 'ai'   as const, text: edit.reply, ts: new Date(Date.now() + 100).toISOString() };
 
-  // Persist to project if it exists
-  if (project) {
+  // Persist to project if it exists (not for browser-owned Studio timelines)
+  if (project && !clientClips) {
     db.projects.update(id, {
       aiHistory: [...(project.aiHistory ?? []), userMsg, aiMsg],
       /* Every branch of applyEdit returns the whole timeline, including the

@@ -12,6 +12,7 @@
  * the list can travel with the project).
  */
 import type { StyleProfile } from '../ai/styleProfile';
+import type { PlannedShot } from './editPlan';
 import { saveRecord, loadRecord } from '../mediaDb';
 
 /** Everything needed to rebuild one exact cut. */
@@ -26,6 +27,15 @@ export interface VersionRecipe {
   note?:        string;
 }
 
+/** A fully-rendered timeline snapshot, for versions produced by the Pro AI
+ *  (its edits do not replay through composeStudioPlan, so the recipe alone is
+ *  not enough to restore them exactly). */
+export interface VersionSnapshot {
+  clips: PlannedShot[];
+  durationS: number;
+  frame: { width: number; height: number; ratio: '9:16' | '1:1' | '16:9' };
+}
+
 export interface EditVersion {
   id:      string;        // `v<number>`
   number:  number;
@@ -38,6 +48,8 @@ export interface EditVersion {
     cuts:     number;
     match:    number;      // reference match %, 0 without reference
   };
+  /** Present when the Pro Editor AI produced this version's timeline. */
+  snapshot?: VersionSnapshot;
 }
 
 const STORE = 'modaya-versions';
@@ -56,6 +68,7 @@ export async function addVersion(
   projectId: string,
   recipe: VersionRecipe,
   stats: EditVersion['stats'],
+  snapshot?: VersionSnapshot,
 ): Promise<{ versions: EditVersion[]; version: EditVersion }> {
   const existing = await loadVersions(projectId);
   const number = existing.length ? existing[existing.length - 1].number + 1 : 1;
@@ -66,6 +79,7 @@ export async function addVersion(
     createdAt: new Date().toISOString(),
     recipe,
     stats,
+    ...(snapshot ? { snapshot } : {}),
   };
   const versions = [...existing, version];
   await saveVersions(projectId, versions);
