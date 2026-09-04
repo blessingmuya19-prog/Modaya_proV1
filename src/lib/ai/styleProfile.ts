@@ -244,11 +244,11 @@ export function buildStyleProfile(opts: {
     shotVariance: meanS > 0 ? Number((sd / meanS).toFixed(2)) : 0,
     pace:         paceOf(cutsPerMin),
     grade: {
-      // Map the reference's look to a correction applied to *our* footage
-      brightness: Number(clamp(0.85 + luma * 0.45,  0.75, 1.25).toFixed(3)),
-      contrast:   Number(clamp(0.85 + spread * 0.6, 0.85, 1.35).toFixed(3)),
-      saturation: Number(clamp(0.75 + sat * 0.9,    0.80, 1.45).toFixed(3)),
-      warmth:     Number(clamp(warm, -1, 1).toFixed(3)),
+      // Map the reference's look to a rich, vibrant grading applied to footage
+      brightness: Number(clamp(0.95 + luma * 0.35,  0.88, 1.30).toFixed(3)),
+      contrast:   Number(clamp(1.05 + spread * 0.50, 1.05, 1.45).toFixed(3)),
+      saturation: Number(clamp(1.10 + sat * 0.80,    1.10, 1.55).toFixed(3)),
+      warmth:     Number(clamp(warm * 1.5, -0.6, 0.6).toFixed(3)),
     },
     punchInRate: Number(clamp(motion / 0.06, 0, 0.85).toFixed(2)),
     punchInMax:  Number((1 + clamp(motion / 0.05, 0, 1) * 0.18).toFixed(3)),

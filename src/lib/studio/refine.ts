@@ -46,13 +46,37 @@ const NOT_YET: { match: RegExp; note: string }[] = [
     note: 'Drop clips into the B-roll library on the drop screen — Modaya will weave them into your edit as silent cutaways.' },
 ];
 
+/** Clean and normalize user prompts to tolerate typos, keyboard slips, and punctuation. */
+export function normalizeInput(raw: string): string {
+  let s = raw.toLowerCase()
+    // Fix keyboard slip typos where semicolon/colon or other keys replace 'l' or vowels (e.g. 'co;or', 'co:or', 'c;or')
+    .replace(/\bco[;:.,]?o?r\b|\bc[;:.]or\b/g, 'color')
+    .replace(/[;:]+/g, ' ')
+    .replace(/[^\w\s\d'/%&.-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Normalize common typo variants across English inputs
+  s = s
+    .replace(/\b(co[;l]o?r|clor|colro|colr|colur|coler|colour)\b/g, 'color')
+    .replace(/\b(rade|grafe|gade|grde|grede|grad)\b/g, 'grade')
+    .replace(/\b(vibrat|vibrnt|viberant|vibrent|viberance)\b/g, 'vibrant')
+    .replace(/\b(brigth|birght|brigt)\b/g, 'bright')
+    .replace(/\b(referance|refernce|refrence|refference|refferrence)\b/g, 'reference')
+    .replace(/\b(cinamatic|cinamtic|cinmatic)\b/g, 'cinematic')
+    .replace(/\b(captin|captins|subtitel|subtitels|subtitile)\b/g, 'captions')
+    .replace(/\b(sont|dont|don.?t)\b/g, "don't");
+
+  return ` ${s} `;
+}
+
 /**
  * Apply a free-text refinement to a profile. `seed` is bumped by the caller to
  * make a regenerated plan differ even when the wording implied no measurable
  * change (e.g. "regenerate", "try again").
  */
 export function refineProfile(base: StyleProfile, message: string): RefineResult {
-  const text = ` ${message.toLowerCase()} `;
+  const text = normalizeInput(message);
   const p: StyleProfile = structuredClone(base);
   const did: string[] = [];
   let changed = false;
@@ -65,7 +89,7 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
   }
 
   // "Don't cut anything" / "Stop adding cuts" / "Only add what user asks for" / "Uncut" / "No cuts"
-  const wantsNoUnsolicitedCuts = /\b(stop (this thing of )?(adding|making|putting) (cuts?|edits?)|only (add|do|apply|include) what (i|the user|user) ask(s)?( for)?|don.?t add (cuts?|extra edits?)|no (extra|random|unsolicited) (cuts?|edits?)|leave (my )?(cuts?|footage|video) alone|stop cutting|stop editing cuts|only (apply|do|change) (the )?(colou?r|grade|captions?|subtitles?|ratio|format))\b/i.test(text);
+  const wantsNoUnsolicitedCuts = /\b(stop (this thing of )?(adding|making|putting) (cuts?|edits?)|only (add|do|apply|include) what (i|the user|user) ask(s)?( for)?|don.?t add (cuts?|extra edits?)|no (extra|random|unsolicited) (cuts?|edits?)|leave (my )?(cuts?|footage|video) alone|stop cutting|stop editing cuts|only (apply|do|change) (the )?(color|grade|captions?|subtitles?|ratio|format))\b/i.test(text);
 
   const wantsUncut = wantsNoUnsolicitedCuts
     || /\b(sont|dont|don.?t|do not|did not|never|stop|no)\s+(cut|trim|slice|remove|drop|edit)\b/i.test(text)
@@ -110,8 +134,7 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
     || (/\bslow\b/i.test(text.replace(/not?\s+slow|less?\s+slow/g, '')) && /too|make|more|faster/i.test(text));
   const wantsSlow = /\b(slower|calm|calmer|more relaxed|less energetic|slow down|too fast|rushed|breathing room)\b/i.test(text);
 
-  // "the intro/start/beginning is too slow" → tighten overall (start-first is
-  // a future refinement; we honour the clear intent: less dead air, faster cut).
+  // "the intro/start/beginning is too slow" → tighten overall
   const introSlow = /\b(intro|start|beginning|opening|hook)\b/i.test(text) && /\b(slow|drag|long|boring)\b/i.test(text);
 
   if (introSlow) {
@@ -180,7 +203,7 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
 
   // Selective reference matching
   const wantsUncutWithRef = /\b(keep (the )?(whole|all|full) video and (match|use) reference|uncut (with|and) reference|don.?t cut (anything|my video)? (and|just) (match|use) reference)\b/i.test(text);
-  const wantsOnlyRefColor = /\b(only (match|use|copy|apply) (the )?reference (colou?rs?|grade)|just (match|use|copy) reference (colou?rs?|grade))\b/i.test(text);
+  const wantsOnlyRefColor = /\b(only (match|use|copy|apply) (the )?reference (colors?|grade)|just (match|use|copy) reference (colors?|grade))\b/i.test(text);
   const wantsOnlyRefCaptions = /\b(only (match|use|copy|apply) (the )?reference (captions?|subtitles?)|just (match|use|copy) reference (captions?|subtitles?))\b/i.test(text);
 
   if (wantsUncutWithRef) {
@@ -199,9 +222,9 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
     p.punchInMax = 1;
     p.grade = {
       brightness: base.grade.brightness !== 0 ? base.grade.brightness : 0.04,
-      contrast: base.grade.contrast > 0 ? clamp(base.grade.contrast + 0.1, 0.15, 0.45) : 0.22,
-      saturation: base.grade.saturation > 0 ? clamp(base.grade.saturation + 0.1, 0.15, 0.45) : 0.25,
-      warmth: base.grade.warmth !== 0 ? base.grade.warmth : 0.14,
+      contrast: base.grade.contrast > 0 ? clamp(base.grade.contrast + 0.1, 0.15, 0.45) : 0.28,
+      saturation: base.grade.saturation > 0 ? clamp(base.grade.saturation + 0.1, 0.15, 0.45) : 0.35,
+      warmth: base.grade.warmth !== 0 ? base.grade.warmth : 0.18,
     };
     changed = true;
     did.push('matched only the reference color grade without altering your cuts');
@@ -223,10 +246,10 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
 
   if (makePro) {
     p.grade = {
-      brightness: clamp(p.grade.brightness + 0.04, -0.3, 0.3),
-      contrast: clamp(p.grade.contrast + 0.08, -0.3, 0.4),
-      saturation: clamp(p.grade.saturation + 0.08, -0.3, 0.4),
-      warmth: clamp(p.grade.warmth + 0.04, -0.5, 0.5),
+      brightness: clamp(p.grade.brightness + 0.05, -0.3, 0.3),
+      contrast: clamp(p.grade.contrast + 0.12, -0.3, 0.4),
+      saturation: clamp(p.grade.saturation + 0.12, -0.3, 0.4),
+      warmth: clamp(p.grade.warmth + 0.05, -0.5, 0.5),
     };
     p.punchInRate = Math.max(p.punchInRate, 0.45);
     p.punchInMax = Math.max(p.punchInMax, 1.18);
@@ -252,10 +275,26 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
   }
 
   // Colour grade & Cinematic LUTs
-  const resetGrade = /\b(remove grade|remove filter|reset colou?r|original colou?r|natural (colou?r|look|grade)|neutral grade)\b/.test(text);
-  const isColorQuestion = /\b(can (you|it) colou?r grade|how (do|can|to) (you )?colou?r grade|what (colou?r|grades?|luts?|presets?)|explain colou?r)\b/i.test(text);
-  const wantsRefGrade = !isColorQuestion && /\b(colou?r grad(e|ing|ed) (the )?(footage|video)?\s*like (the )?reference|match (the )?(reference|ref) colou?rs?|reference (colou?r|grade)|use (the )?reference colou?rs?|grade like (the )?reference)\b/i.test(text);
-  const wantsColorGrade = !resetGrade && !isColorQuestion && /\b((still |not |why |why is it not |its still not )?colou?r grad(e|ing|ed)|apply grad(e|ing|ed)|add grad(e|ing|ed)|grade (this|it|the footage|the video|video|footage|my video)|make it graded|cinematic grad(e|ing|ed)|do colou?r grad(e|ing|ed)|no colou?r grade was added)\b/i.test(text);
+  const resetGrade = /\b(remove grade|remove filter|reset color|original color|natural (color|look|grade)|neutral grade)\b/.test(text);
+  const isColorQuestion = /\b(can (you|it) color grade|how (do|can|to) (you )?color grade|what (color|grades?|luts?|presets?)|explain color)\b/i.test(text);
+
+  // Vibrant + Bright combined (e.g. "co;or grade vibrant bright", "color grade vibrant bright", "vibrant bright", "bright and vibrant")
+  const wantsVibrantBright = !resetGrade && !isColorQuestion && (
+    /\b(vibrant (and |& )?bright|bright (and |& )?vibrant|vivid (and |& )?bright|bright (and |& )?vivid|rich (and |& )?bright|bright (and |& )?rich)\b/i.test(text)
+    || (/\bvibrant\b/i.test(text) && /\bbright\b/i.test(text))
+  );
+
+  // Reference grade request (e.g. "color rade like reference", "color grade like reference", "match reference color", "grade like reference")
+  const wantsRefGrade = !isColorQuestion && (
+    /\b(color grad(e|ing|ed) (the )?(footage|video|image)?\s*like (the )?reference|match (the )?(reference|ref) (colors?|grade|look|image)|reference (color|grade|look)|use (the )?reference (colors?|grade|look)|grade like (the )?reference|like (the )?reference)\b/i.test(text)
+    && /\b(color|grade|look|tone|warmth|contrast|saturation|image|video|footage)\b/i.test(text)
+  );
+
+  const wantsColorGrade = !resetGrade && !isColorQuestion && !wantsVibrantBright && !wantsRefGrade && (
+    /\b((still |not |why |why is it not |its still not )?color grad(e|ing|ed)|apply grad(e|ing|ed)|add grad(e|ing|ed)|grade (this|it|the footage|the video|video|footage|my video)|make it graded|cinematic grad(e|ing|ed)|do color grad(e|ing|ed)|no color grade was added)\b/i.test(text)
+    || /\b(color grade|grade the footage|color the video)\b/i.test(text)
+  );
+
   const wantsTealOrange = /\b(teal\s*(and|&)?\s*orange|blockbuster (look|grade)|hollywood (look|grade))\b/i.test(text);
   const wantsKodak = /\b(kodak|35mm|vintage film|film look|analog look|retro look)\b/i.test(text);
   const wantsNoir = /\b(noir|black and white|black & white|b&w|monochrome|grayscale)\b/i.test(text);
@@ -265,10 +304,33 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
   const wantsBleachBypass = /\b(bleach bypass|gritty grade|silver contrast)\b/i.test(text);
   const wantsMoody = /\b(moody|darker|dim down|cinematic shadows)\b/i.test(text);
 
+  let handledGrade = false;
+
   if (resetGrade) {
     p.grade = { brightness: 0, contrast: 0, saturation: 0, warmth: 0 };
     changed = true; did.push('reset colour grade to natural');
-  } else if (wantsRefGrade || wantsColorGrade) {
+    handledGrade = true;
+  } else if (wantsVibrantBright) {
+    p.grade = {
+      brightness: clamp((p.grade.brightness || 0) + 0.08, -0.3, 0.4),
+      contrast: clamp((p.grade.contrast || 0) + 0.18, -0.3, 0.5),
+      saturation: clamp((p.grade.saturation || 0) + 0.28, -0.3, 0.6),
+      warmth: p.grade.warmth !== 0 ? p.grade.warmth : 0.12,
+    };
+    changed = true;
+    did.push('applied vibrant, bright cinematic color grading with boosted saturation and clarity');
+    handledGrade = true;
+  } else if (wantsRefGrade) {
+    p.grade = {
+      brightness: 0.06,
+      contrast: 0.30,
+      saturation: 0.38,
+      warmth: 0.20,
+    };
+    changed = true;
+    did.push('matched the color grade, warmth, and contrast to your reference video');
+    handledGrade = true;
+  } else if (wantsColorGrade) {
     p.grade = {
       brightness: 0.04,
       contrast: 0.30,
@@ -276,48 +338,64 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
       warmth: 0.20,
     };
     changed = true;
-    did.push(wantsRefGrade ? 'matched the color grade, warmth, and contrast to your reference video' : 'applied rich cinematic color grading with high contrast, vibrant saturation, and warm sunlight tones');
+    did.push('applied rich cinematic color grading with high contrast, vibrant saturation, and warm sunlight tones');
+    handledGrade = true;
   } else if (wantsTealOrange) {
     p.grade = { brightness: 0.02, contrast: 0.22, saturation: 0.25, warmth: 0.15 };
     changed = true; did.push('applied Hollywood Teal & Orange color grade');
+    handledGrade = true;
   } else if (wantsKodak) {
     p.grade = { brightness: 0.01, contrast: 0.12, saturation: -0.05, warmth: 0.22 };
     changed = true; did.push('applied Kodak Portra 35mm film grade');
+    handledGrade = true;
   } else if (wantsNoir) {
     p.grade = { brightness: 0.02, contrast: 0.35, saturation: -1.0, warmth: 0 };
     changed = true; did.push('applied high-contrast Cinematic Noir black & white grade');
+    handledGrade = true;
   } else if (wantsCyberpunk) {
     p.grade = { brightness: 0.03, contrast: 0.30, saturation: 0.45, warmth: -0.25 };
     changed = true; did.push('applied Cyber Neon color grade');
+    handledGrade = true;
   } else if (wantsGoldenHour) {
     p.grade = { brightness: 0.04, contrast: 0.10, saturation: 0.30, warmth: 0.45 };
     changed = true; did.push('applied Golden Hour warm sunset color grade');
+    handledGrade = true;
   } else if (wantsFuji) {
     p.grade = { brightness: 0.02, contrast: 0.25, saturation: 0.38, warmth: -0.08 };
     changed = true; did.push('applied Fujifilm Velvia vivid color grade');
+    handledGrade = true;
   } else if (wantsBleachBypass) {
     p.grade = { brightness: -0.02, contrast: 0.45, saturation: -0.40, warmth: -0.05 };
     changed = true; did.push('applied high-impact Bleach Bypass color grade');
+    handledGrade = true;
   } else if (wantsMoody) {
     p.grade = { brightness: -0.08, contrast: 0.25, saturation: 0.05, warmth: -0.05 };
     changed = true; did.push('applied moody cinematic shadow grading');
+    handledGrade = true;
   }
 
-  if (/\b(more|warmer|warm up)\b.*\b(colou?r|grade|warm|tone)\b/.test(text) || /\bwarmer\b/.test(text)) {
-    p.grade = { ...p.grade, warmth: clamp(p.grade.warmth + 0.12, -1, 1), saturation: clamp(p.grade.saturation + 0.05, -1, 1) };
-    changed = true; did.push('warmed the grade');
-  }
-  if (/\b(cooler|colder)\b/.test(text)) {
-    p.grade = { ...p.grade, warmth: clamp(p.grade.warmth - 0.12, -1, 1) };
-    changed = true; did.push('cooled the grade');
-  }
-  if (/\b(more vivid|more saturated|punchier colou?r|pop)\b/.test(text)) {
-    p.grade = { ...p.grade, saturation: clamp(p.grade.saturation + 0.12, -1, 1), contrast: clamp(p.grade.contrast + 0.05, -1, 1) };
-    changed = true; did.push('made the colours more vivid');
-  }
-  if (/\b(brighter|too dark|lighten)\b/.test(text)) {
-    p.grade = { ...p.grade, brightness: clamp(p.grade.brightness + 0.08, -1, 1) };
-    changed = true; did.push('brightened the picture');
+  // Individual tone modifications (warm, cool, vivid, bright, contrast) if not already handled
+  if (!handledGrade) {
+    if (/\b(more|warmer|warm up)\b.*\b(color|grade|warm|tone)\b/.test(text) || /\bwarmer\b/.test(text)) {
+      p.grade = { ...p.grade, warmth: clamp(p.grade.warmth + 0.14, -1, 1), saturation: clamp(p.grade.saturation + 0.05, -1, 1) };
+      changed = true; did.push('warmed the grade');
+    }
+    if (/\b(cooler|colder)\b/.test(text)) {
+      p.grade = { ...p.grade, warmth: clamp(p.grade.warmth - 0.14, -1, 1) };
+      changed = true; did.push('cooled the grade');
+    }
+    if (/\b(more vivid|more saturated|punchier color|pop|vibrant|vivid|rich color)\b/.test(text)) {
+      p.grade = { ...p.grade, saturation: clamp(p.grade.saturation + 0.16, -1, 1), contrast: clamp(p.grade.contrast + 0.06, -1, 1) };
+      changed = true; did.push('made the colours more vivid');
+    }
+    if (/\b(brighter|too dark|lighten|bright)\b/.test(text)) {
+      p.grade = { ...p.grade, brightness: clamp(p.grade.brightness + 0.08, -1, 1) };
+      changed = true; did.push('brightened the picture');
+    }
+    if (/\b(more contrast|contrast|punchy)\b/.test(text)) {
+      p.grade = { ...p.grade, contrast: clamp(p.grade.contrast + 0.12, -1, 1) };
+      changed = true; did.push('boosted contrast');
+    }
   }
 
   // Shorter / longer whole edit
@@ -344,7 +422,7 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
   const asksWhatChanged = /\b(what did you (do|change)|what changed|show me (the )?changes|explain (the )?edit|why did you cut)\b/i.test(text);
   const asksHowToExport = /\b(how (do|can) i (export|download|save|render)|where is export|how to export)\b/i.test(text);
   const asksHelp = /\b(help|how (does this work|do i use this)|what can you do|what commands)\b/i.test(text);
-  const asksColorGrade = /\b(can (you|it) colou?r grade|how to colou?r grade|what (colou?r|grades?|luts?|presets?)|explain colou?r)\b/i.test(text);
+  const asksColorGrade = /\b(can (you|it) color grade|how to color grade|what (color|grades?|luts?|presets?)|explain color)\b/i.test(text);
   const asksRefEdit = /\b(what about (for )?(reference|ref)( edit)?|how (does )?reference (edit|work)|reference edit (help|info|works?)|explain reference)\b/i.test(text);
 
   if (!changed) {

@@ -228,6 +228,31 @@ describe('refineProfile', () => {
     expect(noir.profile.grade.saturation).toBe(-1);
   });
 
+  it('tolerates typos like "co;or grade vibrant bright" and "color rade like reference"', () => {
+    const typoVibrant = refineProfile(profile(), 'co;or grade vibrant bright');
+    expect(typoVibrant.changed).toBe(true);
+    expect(typoVibrant.profile.grade.saturation).toBeGreaterThan(0.2);
+    expect(typoVibrant.profile.grade.brightness).toBeGreaterThan(0);
+    expect(typoVibrant.reply).toMatch(/vibrant/i);
+
+    const typoRef = refineProfile(profile(), 'color rade like reference');
+    expect(typoRef.changed).toBe(true);
+    expect(typoRef.profile.grade.contrast).toBeGreaterThan(0.2);
+    expect(typoRef.reply).toMatch(/reference/i);
+
+    const vibrantBright = refineProfile(profile(), 'vibrant bright');
+    expect(vibrantBright.changed).toBe(true);
+    expect(vibrantBright.profile.grade.saturation).toBeGreaterThan(0.2);
+
+    const makeVibrantBright = refineProfile(profile(), 'make it vibrant and bright');
+    expect(makeVibrantBright.changed).toBe(true);
+    expect(makeVibrantBright.profile.grade.saturation).toBeGreaterThan(0.2);
+
+    const cinTypo = refineProfile(profile(), 'cinamatic grade');
+    expect(cinTypo.changed).toBe(true);
+    expect(cinTypo.profile.grade.contrast).toBeGreaterThan(0.2);
+  });
+
   it('handles selective reference editing requests', () => {
     const refColor = refineProfile(profile(), 'only match reference color');
     expect(refColor.changed).toBe(true);

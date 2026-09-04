@@ -1055,7 +1055,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ alignSelf: 'flex-start', maxWidth: '92%', padding: '10px 14px', borderRadius: 12, background: C.s3, color: C.sec, fontSize: 13.5, lineHeight: 1.5 }}>
-                Your edit is ready. I kept the strongest moment as the hook, cut the dead air{match > 0 ? ` and matched the reference's pacing` : ''}. What would you like to change?
+                Your edit is ready. I kept the strongest moment as the hook, cut the dead air{match > 0 ? `, applied the reference's vibrant color grade, and matched the pacing` : ''}. What would you like to change?
               </div>
               {chats.map((m, i) => (
                 <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '92%', padding: '9px 13px', borderRadius: 12, background: m.role === 'user' ? C.accent : C.s3, color: m.role === 'user' ? '#fff' : C.sec, fontSize: 13, lineHeight: 1.45 }}>{m.text}</div>
@@ -1067,7 +1067,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
                 <textarea
                   value={input} onChange={e => setInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendRefinement(); } }}
-                  rows={1} placeholder='Ask Modaya…  e.g. "Make the second half faster."'
+                  rows={1} placeholder='Ask Modaya…  e.g. "Color grade like reference" or "Make it vibrant and bright"'
                   style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', resize: 'none', color: C.text, fontFamily: F, fontSize: 13.5, lineHeight: 1.5, maxHeight: 90 }}
                 />
                 <button onClick={() => sendRefinement()} disabled={!input.trim() || chatBusy} style={{ width: 34, height: 34, borderRadius: 9, border: 'none', background: input.trim() && !chatBusy ? C.accent : C.b3, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: input.trim() ? 'pointer' : 'default', flexShrink: 0 }}>
@@ -1075,7 +1075,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
                 </button>
               </div>
               <p style={{ color: C.dim, fontSize: 11, margin: '8px 2px 0', lineHeight: 1.5 }}>
-                “Make it more cinematic.” · “Remove the captions.” · “Use the reference’s transitions.”
+                “Color grade like reference.” · “Make it vibrant & bright.” · “Don’t cut anything.”
               </p>
             </div>
           </div>
