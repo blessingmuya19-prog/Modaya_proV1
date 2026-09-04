@@ -1,8 +1,8 @@
 /**
  * Timeline clip shape shared by Studio's editor timeline.
  *
- * Kept outside the (deleted) Pro Editor component tree so Studio uses the
- * same clip vocabulary without dragging the old editor along.
+ * Kept out of the component tree so Studio shares one clip vocabulary
+ * with the AI timeline.
  */
 import type { TextStyle } from '@/lib/ai/operations';
 import type { MotionTrackConfig } from '@/lib/ai/motionTracker';

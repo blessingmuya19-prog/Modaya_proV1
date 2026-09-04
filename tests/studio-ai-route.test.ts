@@ -2,7 +2,7 @@
  * /api/projects/:id/ai must be able to edit the timeline the Studio sends
  * from the browser. Studio keeps its clips in IndexedDB, so the server copy
  * is empty while the browser owns the real timeline — the route has to trust
- * the body, or the Studio would run the Pro Editor AI against nothing.
+ * the body, or the Studio would run the editor AI against nothing.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
@@ -94,5 +94,65 @@ describe('studio sends its timeline to the pro AI route', () => {
     });
     expect(d.edit.savedS).toBe(0);          // nothing valid to cut
     expect(d.edit.newClips).toHaveLength(0);
+  });
+});
+
+describe('one AI: first pass, presets and look decisions', () => {
+  it('generate mode makes Version 1 from a full-length seed clip', async () => {
+    const d = await ask({
+      mode: 'generate',
+      message: 'add bold captions',
+      durationS: 100,
+      silences: [[40, 50]],
+      energy: [0.5, 0.2, 0.2, 0.2],
+      audio: 'ready',
+      transcript: {
+        segments: [{ startS: 2, endS: 5, text: 'hello there' }],
+        language: '', model: 'whisper', madeAt: new Date().toISOString(),
+      },
+    });
+    const video = d.edit.newClips.filter((c: { type: string }) => c.type === 'video');
+    expect(video).toEqual([{ id: 'src-v', trackId: 'video', label: 'Footage', startS: 0, endS: 100, type: 'video' }]);
+    const cap = d.edit.newClips.find((c: { label: string }) => c.label === 'hello there');
+    expect(cap).toBeTruthy();
+    expect(cap.type).toBe('subtitle');
+    expect(cap.textPosition).toBe('lower');
+  });
+
+  it("understands \"don't cut anything\" as a real instruction", async () => {
+    const d = await ask({
+      message: "don't cut anything",
+      durationS: 100,
+      clips: [{ id: 'v1', trackId: 'video', label: 'Shot', startS: 0, endS: 100, type: 'video' }],
+      silences: [[40, 50]],
+    });
+    expect(d.edit.summary).toBe('kept all footage uncut');
+    expect(d.edit.savedS).toBe(0);
+    expect(d.edit.newClips).toHaveLength(1);
+    expect(d.aiMessage.text).toMatch(/kept every second/i);
+  });
+
+  it('exposes the operations it applied, for look-only decisions', async () => {
+    process.env.GROQ_API_KEY = 'gsk_streaming_ok';
+    const llmFetch = vi.fn(async () => new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({
+        reply: 'Colour graded.',
+        operations: [{ op: 'grade', brightness: 1.1, contrast: 0.9, saturation: 1.3 }],
+      }) } }],
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', llmFetch);
+
+    const d = await ask({
+      message: 'make it vibrant',
+      durationS: 100,
+      clips: [{ id: 'v1', trackId: 'video', label: 'Shot', startS: 0, endS: 100, type: 'video' }],
+      energy: [0.5, 0.5, 0.5],
+    });
+    expect(d.engine.source).toBe('llm');
+    expect(d.edit.applied).toContainEqual(
+      expect.objectContaining({ op: 'grade', brightness: 1.1, saturation: 1.3 }),
+    );
+    /* a look-only op never moves the clip list */
+    expect(d.edit.newClips).toHaveLength(1);
   });
 });

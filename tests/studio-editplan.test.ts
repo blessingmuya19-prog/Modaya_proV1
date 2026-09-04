@@ -167,7 +167,7 @@ describe('composeStudioPlan — full re-cut', () => {
   });
 
   it('never burns a filename into fallback caption cards, even with a reference profile', () => {
-    // The Pro Editor's AI writes a neutral "Caption" label; matching it means
+    // The editor AI writes a neutral "Caption" label; matching it means
     // a reference or footage filename can never appear burned into the video.
     const withRef = profile({ uncut: true, sourceName: 'my-reference-video.mp4' });
     const plan = composeStudioPlan({

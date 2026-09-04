@@ -48,7 +48,7 @@ export interface EditVersion {
     cuts:     number;
     match:    number;      // reference match %, 0 without reference
   };
-  /** Present when the Pro Editor AI produced this version's timeline. */
+  /** Present when the AI produced this version's timeline. */
   snapshot?: VersionSnapshot;
 }
 

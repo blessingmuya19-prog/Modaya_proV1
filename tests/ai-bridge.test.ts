@@ -1,7 +1,7 @@
 /**
- * The Studio ⇄ Pro Editor AI bridge.
+ * The Studio ⇄ editor AI bridge.
  *
- * The Pro AI thinks in source time (clips laid end-to-end, gaps = removed
+ * The editor AI thinks in source time (clips laid end-to-end, gaps = removed
  * sections); the Studio thinks in programme time (condensed output, sourceIn
  * pointing back into the footage). These tests pin the conversion and the
  * round-trip invariants: footage untouched ⇒ Studio plan survives verbatim
@@ -10,9 +10,10 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  toProView, applyProResult, syncProfileAfterPro, effectsForProfile,
-  sourceToTimeline, timelineToSource, type ShotMap,
-} from '@/lib/studio/proAi';
+  toAiView, applyAiResult, syncProfileAfterAi, effectsForProfile,
+  sourceToTimeline, timelineToSource, uncutStudioPlan, applyAiLook, parseAiLook,
+  type ShotMap,
+} from '@/lib/studio/aiBridge';
 import { DEFAULT_TRANSFORM, DEFAULT_EFFECTS, type StyleLayer } from '@/lib/render/sequence';
 import type { StudioPlan } from '@/lib/studio/editPlan';
 
@@ -60,7 +61,7 @@ const profile = {
   beatSynced: false, bpm: null, energy: 0.5,
 };
 
-describe('studio ⇄ pro AI bridge', () => {
+describe('studio ⇄ editor AI bridge', () => {
   it('mirrors the source/programme timebases both ways', () => {
     const shots: ShotMap[] = [
       { id: 'a', srcS: 0, srcE: 4,  tlS: 0, tlE: 4 },
@@ -75,13 +76,13 @@ describe('studio ⇄ pro AI bridge', () => {
   });
 
   it('round-trips an unchanged timeline with b-roll and caption placement intact', () => {
-    const view = toProView(plan(), styleLayer);
+    const view = toAiView(plan(), styleLayer);
     const videos = view.clips.filter(c => c.type === 'video' && c.trackId === 'video');
     expect(videos.map(v => [v.startS, v.endS])).toEqual([[0, 4], [6, 10]]);
     const sub = view.clips.find(c => c.type === 'subtitle');
     expect(sub).toMatchObject({ id: 'cap-0', label: 'Hello there', startS: 1, endS: 2, textPosition: 'lower' });
 
-    const out = applyProResult(plan(), styleLayer, profile, 10, view.clips);
+    const out = applyAiResult(plan(), styleLayer, profile, 10, view.clips);
     expect(out).not.toBeNull();
     expect(out!.applied).toBe(false);
     expect(out!.plan.durationS).toBe(8);
@@ -92,7 +93,7 @@ describe('studio ⇄ pro AI bridge', () => {
   });
 
   it('condenses a re-cut and re-maps captions into the surviving programme', () => {
-    const view = toProView(plan(), styleLayer);
+    const view = toAiView(plan(), styleLayer);
     /* The AI additionally removed 6–7 from the source: the surviving windows
        [0–4] [7–10] are condensed into a continuous 7s programme. */
     const cut = [
@@ -101,7 +102,7 @@ describe('studio ⇄ pro AI bridge', () => {
       { id: 'cap-0', trackId: 'subs', label: 'Hello there', type: 'subtitle' as const,
         startS: 1, endS: 2, textPosition: 'lower' as const, textAlign: 'centre' as const },
     ];
-    const out = applyProResult(plan(), styleLayer, profile, 10, cut);
+    const out = applyAiResult(plan(), styleLayer, profile, 10, cut);
     expect(out).not.toBeNull();
     expect(out!.applied).toBe(true);
     expect(out!.plan.durationS).toBe(7);
@@ -118,7 +119,7 @@ describe('studio ⇄ pro AI bridge', () => {
   });
 
   it('clamps captions that land on a removed span into their host shot', () => {
-    const view = toProView(plan(), styleLayer);
+    const view = toAiView(plan(), styleLayer);
     const cut = [
       { id: 'v1', trackId: 'video', label: 'Shot', type: 'video' as const, startS: 0, endS: 4 },
       { id: 'v2', trackId: 'video', label: 'Shot', type: 'video' as const, startS: 7, endS: 10 },
@@ -126,7 +127,7 @@ describe('studio ⇄ pro AI bridge', () => {
       { id: 'cap-x', trackId: 'subs', label: 'Zombie', type: 'subtitle' as const,
         startS: 5, endS: 6, textPosition: 'lower' as const },
     ];
-    const out = applyProResult(plan(), styleLayer, profile, 10, cut);
+    const out = applyAiResult(plan(), styleLayer, profile, 10, cut);
     expect(out!.plan.clips.filter(c => c.type === 'text')).toHaveLength(0);
   });
 
@@ -140,7 +141,7 @@ describe('studio ⇄ pro AI bridge', () => {
 
   it('syncs the profile so the next regenerate keeps the AI decisions', () => {
     const p = plan();
-    const synced = syncProfileAfterPro({ ...profile, captions: { present: false, position: 'lower', emphasis: 0 } }, p);
+    const synced = syncProfileAfterAi({ ...profile, captions: { present: false, position: 'lower', emphasis: 0 } }, p);
     expect(synced.captions.present).toBe(true);
     expect(synced.captions.position).toBe('lower');
     expect(synced.cutsPerMin).toBe(15);          // 2 cuts / 8s → 15/min, rounded to 1dp
@@ -151,7 +152,44 @@ describe('studio ⇄ pro AI bridge', () => {
       clips: [{ ...p.clips[0], startS: 0, endS: 10, sourceIn: 0 }],
       durationS: 10,
     };
-    const synced2 = syncProfileAfterPro({ ...profile, captions: { present: false, position: 'lower', emphasis: 0 } }, whole);
+    const synced2 = syncProfileAfterAi({ ...profile, captions: { present: false, position: 'lower', emphasis: 0 } }, whole);
     expect(synced2.uncut).toBe(true);
+  });
+});
+
+describe('one-AI first pass and look decisions', () => {
+  it('builds a single uncut source clip as the canvas the AI edits', () => {
+    const base = uncutStudioPlan(profile, 10, '9:16');
+    expect(base.clips).toHaveLength(1);
+    expect(base.clips[0]).toMatchObject({
+      type: 'video', trackId: 'video', startS: 0, endS: 10, sourceIn: 0,
+    });
+    expect(base.frame.ratio).toBe('9:16');
+    expect(base.durationS).toBe(10);
+  });
+
+  it('renders a grade operation onto the layer exactly as the AI asked', () => {
+    const base = uncutStudioPlan(profile, 10, '16:9');
+    const layer: StyleLayer = { 'shot-1': { sourceIn: 0, effects: { ...DEFAULT_EFFECTS } } };
+    const out = applyAiLook(layer, profile, [
+      { op: 'grade', brightness: 1.12, contrast: 0.9, saturation: 1.4 },
+      { op: 'punch_in', rate: 0.6 },
+    ]);
+    expect(out.changed).toBe(true);
+    expect(out.layer['shot-1']!.effects).toMatchObject({
+      brightness: 1.12, contrast: 0.9, saturation: 1.4,
+    });
+    expect(out.layer['shot-1']!.effects!.colorGrade?.vibrance).toBe(28);
+    /* profile keeps the look for the next regenerate (relative grade + punch) */
+    expect(out.profile.punchInRate).toBe(0.6);
+    expect(out.profile.grade.saturation).toBeCloseTo((1.4 - 1) / 0.85, 3);
+    expect(out.profile.grade.brightness).toBeCloseTo((1.12 - 1) / 0.4, 3);
+  });
+
+  it('detects look ops but not timeline ops', () => {
+    expect(parseAiLook([{ op: 'grade', brightness: 1 }]).changed).toBe(true);
+    expect(parseAiLook([{ op: 'remove_ranges', ranges: [] }]).changed).toBe(false);
+    expect(parseAiLook([]).changed).toBe(false);
+    expect(applyAiLook({}, profile, []).layer).toEqual({});
   });
 });

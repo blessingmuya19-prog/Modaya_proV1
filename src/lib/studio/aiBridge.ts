@@ -1,14 +1,16 @@
 /**
- * Bridge between the Studio copilot and the Pro Editor AI.
+ * Bridge between the Studio timeline and the shared editor AI
+ * (`/api/projects/[id]/ai`) — the one AI that understands every instruction
+ * in Modaya, from the drop-screen brief to chat refinements.
  *
- * The Pro Editor's AI (`/api/projects/[id]/ai`) reasons about a timeline whose
- * clip positions are BOTH source and programme time (its clips are written in
- * source order, gaps = removed sections). The Studio's plans are the opposite:
- * a condensed programme where `startS` is the output position and `sourceIn`
- * points back into the source file.
+ * The AI reasons about a timeline whose clip positions are BOTH source and
+ * programme time (its clips are written in source order, gaps = removed
+ * sections). The Studio's plans are the opposite: a condensed programme where
+ * `startS` is the output position and `sourceIn` points back into the source
+ * file.
  *
- * This module converts between the two timebases, so the same AI that edits
- * the Pro Editor can drive the Studio. All functions are pure and unit-tested.
+ * This module converts between the two timebases. All functions are pure and
+ * unit-tested.
  */
 import type { StudioPlan, PlannedShot, TranscriptLine } from './editPlan';
 import {
@@ -17,8 +19,8 @@ import {
 } from '../render/sequence';
 import type { StyleProfile } from '../ai/styleProfile';
 
-/** The clip shape the Pro Editor AI route accepts. */
-export interface ProClip {
+/** The clip shape the editor AI route accepts. */
+export interface AiClip {
   id: string;
   trackId: string;
   label: string;
@@ -42,8 +44,8 @@ export interface ShotMap {
 }
 
 /** Timeline the AI sees when it edits a Studio plan. */
-export interface ProView {
-  clips: ProClip[];
+export interface AiView {
+  clips: AiClip[];
   shots: ShotMap[];
 }
 
@@ -97,12 +99,10 @@ export function effectsForProfile(profile: StyleProfile): Effects {
   };
 }
 
-/**
- * Build the source-aligned view the Pro AI edits. Text/caption clips are
- * translated into source time (the AI's coordinate system); overlays are
- * dropped — the AI reason about the programme, not cutaway artwork.
- */
-export function toProView(plan: StudioPlan | null, styleLayer: StyleLayer): ProView {
+/** Build the source-aligned view the AI edits. Text/caption clips are
+ *  translated into source time (the AI's coordinate system); overlays are
+ *  dropped — the AI reasons about the programme, not cutaway artwork. */
+export function toAiView(plan: StudioPlan | null, styleLayer: StyleLayer): AiView {
   const shots: ShotMap[] = [];
   if (plan) {
     for (const c of plan.clips) {
@@ -114,7 +114,7 @@ export function toProView(plan: StudioPlan | null, styleLayer: StyleLayer): ProV
   }
   shots.sort((a, b) => a.tlS - b.tlS);
 
-  const clips: ProClip[] = shots.map(s => ({
+  const clips: AiClip[] = shots.map(s => ({
     id: s.id, trackId: 'video', label: 'Shot', type: 'video',
     startS: Number(s.srcS.toFixed(3)), endS: Number(s.srcE.toFixed(3)),
   }));
@@ -138,7 +138,7 @@ export function toProView(plan: StudioPlan | null, styleLayer: StyleLayer): ProV
   return { clips, shots };
 }
 
-export interface ProApplyResult {
+export interface AiApplyResult {
   plan: StudioPlan;
   styleLayer: StyleLayer;
   /** True when the programme actually changed (captions added/moved, cuts…). */
@@ -155,13 +155,13 @@ export interface ProApplyResult {
  * - Text clips: translated source → programme time, clamped into the shot
  *   that hosts them.
  */
-export function applyProResult(
+export function applyAiResult(
   plan: StudioPlan | null,
   styleLayer: StyleLayer,
   profile: StyleProfile,
   sourceDurationS: number,
-  newClips: ProClip[],
-): ProApplyResult | null {
+  newClips: AiClip[],
+): AiApplyResult | null {
   const videos = (newClips ?? []).filter(c => c.type === 'video' && c.trackId === 'video')
     .sort((a, b) => a.startS - b.startS);
   const texts = (newClips ?? []).filter(c => c.type === 'text' || c.type === 'subtitle');
@@ -298,9 +298,40 @@ export function applyProResult(
   };
 }
 
+/** An uncut source-only plan — the empty canvas the AI's first pass edits. */
+export function uncutStudioPlan(
+  profile: StyleProfile,
+  sourceDurationS: number,
+  ratio: StudioPlan['frame']['ratio'],
+): StudioPlan {
+  const frame = ratio === '9:16' ? { width: 1080, height: 1920, ratio }
+    : ratio === '1:1' ? { width: 1080, height: 1080, ratio }
+    : { width: 1920, height: 1080, ratio };
+  const dur = Math.max(0.1, sourceDurationS);
+  const effects = effectsForProfile(profile);
+  return {
+    clips: [{
+      id: 'shot-1', trackId: 'video', label: 'Shot 1',
+      startS: 0, endS: dur, type: 'video', sourceIn: 0,
+      transform: { ...DEFAULT_TRANSFORM, fit: ratio === '9:16' ? 'cover' : 'contain', scale: 1 },
+      effects,
+    }],
+    durationS: dur,
+    removedS: 0,
+    cutCount: 1,
+    summary: '',
+    profileName: profile.sourceName,
+    frame,
+    captions: 0,
+    broll: 0,
+    brollFromLibrary: false,
+    hookFirst: false,
+  };
+}
+
 /** After an AI edit, mirror what happened back into the Studio profile so the
  *  next regenerate and the suggestion chips stay truthful. */
-export function syncProfileAfterPro(profile: StyleProfile, plan: StudioPlan | null): StyleProfile {
+export function syncProfileAfterAi(profile: StyleProfile, plan: StudioPlan | null): StyleProfile {
   if (!plan) return profile;
   const caps = plan.clips.filter(c => c.type === 'text');
   const positions = caps.map(c => c.textPosition).filter(Boolean) as ('top' | 'centre' | 'lower')[];
@@ -344,4 +375,82 @@ export function applyProfileEffectsToLayer(layer: StyleLayer, profile: StyleProf
     out[id] = { ...st, effects };
   }
   return out;
+}
+
+/** One AI look decision carried in the response's `applied` ops. */
+export interface AiLook {
+  grade?: { brightness: number; contrast: number; saturation: number };
+  punchInRate?: number;
+  changed: boolean;
+}
+
+/** Read the look-only operations out of an AI answer. */
+export function parseAiLook(applied: unknown): AiLook {
+  const ops = Array.isArray(applied) ? applied : [];
+  let grade: AiLook['grade'];
+  let punchInRate: number | undefined;
+  for (const raw of ops) {
+    const op = raw as { op?: string; brightness?: number; contrast?: number; saturation?: number; rate?: number };
+    if (op?.op === 'grade' && typeof op.brightness === 'number') {
+      grade = { brightness: op.brightness, contrast: Number(op.contrast) || 1, saturation: Number(op.saturation) || 1 };
+    }
+    if (op?.op === 'punch_in' && typeof op.rate === 'number') punchInRate = op.rate;
+  }
+  return { grade, punchInRate, changed: !!grade || punchInRate !== undefined };
+}
+
+/** Render a grade op onto the layer immediately and fold it into the profile
+ *  so the next regenerate keeps the look (approximate, clamp keeps the
+ *  profile in its relative-grade domain). */
+export function applyAiLook(
+  layer: StyleLayer,
+  profile: StyleProfile,
+  applied: unknown,
+): { layer: StyleLayer; profile: StyleProfile; changed: boolean } {
+  const look = parseAiLook(applied);
+  if (!look.changed) return { layer, profile, changed: false };
+
+  let layerOut = layer;
+  if (look.grade) {
+    const g = look.grade;
+    layerOut = {};
+    for (const [id, st] of Object.entries(layer)) {
+      const base = st.effects ?? {};
+      layerOut[id] = {
+        ...st,
+        effects: {
+          ...DEFAULT_EFFECTS, ...base,
+          brightness: g.brightness,
+          contrast: g.contrast,
+          saturation: g.saturation,
+          colorGrade: {
+            temperature: base.colorGrade?.temperature ?? 0,
+            tint: 0,
+            vibrance: Math.round((g.saturation - 1) * 70),
+            exposure: g.brightness - 1,
+            contrast: g.contrast,
+            highlights: 0,
+            shadows: 0,
+            intensity: 100,
+          },
+        },
+      };
+    }
+  }
+
+  const clampRel = (v: number) => Math.max(-0.69, Math.min(0.69, v));
+  const grade = profile.grade ?? { brightness: 0, contrast: 0, saturation: 0, warmth: 0 };
+  const profileOut: StyleProfile = {
+    ...profile,
+    ...(look.grade
+      ? { grade: {
+          ...grade,
+          brightness: clampRel((look.grade.brightness - 1) / 0.4),
+          contrast:   clampRel((look.grade.contrast - 1) / 0.8),
+          saturation: clampRel((look.grade.saturation - 1) / 0.85),
+        } }
+      : {}),
+    ...(look.punchInRate !== undefined ? { punchInRate: Math.max(0, Math.min(1, look.punchInRate)) } : {}),
+  };
+  return { layer: layerOut, profile: profileOut, changed: true };
 }

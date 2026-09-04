@@ -24,7 +24,7 @@ type Intent =
   | 'describe'
   | 'tighten' | 'clean' | 'moments' | 'captions' | 'text_overlay' | 'restyle'
   | 'move_text' | 'remove_text'
-  | 'vertical' | 'highlights' | 'cut_silence' | 'clips' | 'unknown';
+  | 'vertical' | 'highlights' | 'cut_silence' | 'clips' | 'uncut' | 'unknown';
 
 /** Capitalise a summary and end it properly, leaving a question mark be. */
 function sentence(s: string): string {
@@ -36,6 +36,10 @@ function detectIntent(text: string): Intent {
   const p = text.toLowerCase();
   if (p.match(/pause|dead.?air|silence|gap|tighten|pace/))         return 'cut_silence';
   if (p.match(/filler|um+|uh+|stutter|repeat|clean/))              return 'clean';
+  /* "Don't cut anything" is a real instruction, not a refusal — Studio's
+     drop-screen presets reach the one AI too. */
+  if (p.match(/uncut|full (?:length|video|footage)|no ?cuts?|keep (?:all|the whole|everything|100)|don.?t cut|dont cut|raw (?:footage|video|file)/))
+                                                                   return 'uncut';
   /* Captions before highlights: "captions at the top" is about captions, and
      a bare "top" used to be read as "top moment" and pick highlights. */
   if (p.match(/caption|subtitle|transcri/))                        return 'captions';
@@ -109,6 +113,14 @@ export function wordsForOverlay(message: string): string | null {
 
 /* ── Reply & edit generation ─────────────────────────────────────────────────── */
 
+/** One full-length source clip — the seed the AI edits on a first pass. */
+function seedClips(durationS: number): Clip[] {
+  return [{
+    id: 'src-v', trackId: 'video', label: 'Footage',
+    startS: 0, endS: Math.max(0.1, durationS), type: 'video',
+  }] as unknown as Clip[];
+}
+
 /** Validate a timeline sent from the browser. Studio owns its clips locally,
  *  so a missing/invalid body falls back to the server copy. */
 function parseClientClips(raw: unknown): Clip[] | null {
@@ -157,6 +169,10 @@ interface EditResult {
   /** Clipping result: standalone short clips the user can cut to, without
       touching the timeline until one is chosen. */
   clipSuggestions?: ClipSuggestion[];
+  /** The executed operations — lets a client apply look-only decisions
+      (grade, punch-in) that leave the clip list unchanged while still being
+      part of the same single AI answer. */
+  applied?:     Operation[];
 }
 
 /**
@@ -469,6 +485,13 @@ function applyEdit(
       };
     }
 
+    case 'uncut':
+      return {
+        reply: 'Kept every second of your footage untouched.',
+        summary: 'kept all footage uncut', savedS: 0, affectedIds: [],
+        newClips: clips, intent,
+      };
+
     case 'vertical':
       return nothing(
         "I can't reframe to 9:16 yet — that needs subject tracking so the speaker stays in shot. " +
@@ -734,14 +757,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   /* The Studio keeps its timeline in the browser (IndexedDB + local state)
      rather than on the server, so the route must be able to operate on the
-     clips it is sent — otherwise the same AI that edits the Pro Editor would
-     run against an empty timeline in Studio. The server copy is only a
-     fallback for the editor flow. */
+     clips it is sent — otherwise the same AI that edits Studio would
+     run against an empty timeline. The server copy is only a fallback for
+     projects whose timeline lives there. */
   const clientClips = parseClientClips(body.clips);
   const durationS = Number(body.durationS) > 0
     ? Number(body.durationS)
     : project?.durationS ?? 1578;
-  const clips: Clip[] = clientClips ?? (project?.clips ?? []);
+  /* First pass: the drop-screen brief is a user instruction, so it goes
+     through this SAME AI — on an empty timeline the route operates on a
+     single full-length seed clip instead of the server copy. */
+  const generating = body.mode === 'generate';
+  const clips: Clip[] = clientClips ?? (generating ? seedClips(durationS) : project?.clips ?? []);
 
   if (project && project.userId !== user.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -911,6 +938,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         affectedIds: outcome.affectedIds,
         newClips:    outcome.clips as Clip[],
         intent:      'unknown',
+        applied:     outcome.applied,
         ...(plan.clips?.length ? { clipSuggestions: plan.clips } : {}),
       };
     }
@@ -971,6 +999,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       affectedIds: edit.affectedIds,
       intent:      edit.intent,
       newClips:    edit.newClips,
+      ...(edit.applied?.length ? { applied: edit.applied } : {}),
       ...(edit.clipSuggestions?.length ? { clips: edit.clipSuggestions } : {}),
     },
     engine: {
