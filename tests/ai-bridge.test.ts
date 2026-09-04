@@ -241,6 +241,22 @@ describe('one-AI first pass and look decisions', () => {
     expect(neutral).toContain('no captions');
   });
 
+  it('sends the full measured rule card — rhythm, beat, push-ins and opening shot', () => {
+    const s = styleForAi({
+      ...profile,
+      cutsPerMin: 12, shotMeanS: 5, shotMedianS: 4.8, shotVariance: 0.3,
+      cuts: [4.8],
+      beatSynced: true, bpm: 120, energy: 0.8,
+      punchInRate: 0.4,
+      grade: { brightness: 0.08, contrast: 0.38, saturation: 0.45, warmth: 0.24 },
+      captions: { present: true, position: 'lower', emphasis: 0.7 },
+    });
+    expect(s).toContain('rhythm character: punctuated');
+    expect(s).toContain('~120 BPM');
+    expect(s).toContain('push-ins on ~40% of shots');
+    expect(s).toContain('opening shot: 4.8s long');
+  });
+
   it('tells the AI when the reference captions transition and what colour pulses', () => {
     const moving = styleForAi({
       ...profile,
@@ -249,7 +265,7 @@ describe('one-AI first pass and look decisions', () => {
         animated: true, highlightColour: '#facc15',
       },
     });
-    expect(moving).toContain('animated pop-in captions along the bottom');
+    expect(moving).toContain('bold captions along the bottom, animated pop-in');
     expect(moving).toContain('yellow highlights');
 
     const staticCaps = styleForAi({

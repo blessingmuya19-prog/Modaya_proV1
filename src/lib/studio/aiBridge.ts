@@ -18,6 +18,7 @@ import {
   type StyleLayer, type Transform, type Effects,
 } from '../render/sequence';
 import type { StyleProfile } from '../ai/styleProfile';
+import { styleRulesText } from '../ai/styleRules';
 
 /** The clip shape the editor AI route accepts. */
 export interface AiClip {
@@ -405,52 +406,15 @@ export function needsVision(text: string): boolean {
     .test(text);
 }
 
-/** Nearest plain name for a measured caption highlight colour — the AI's
- *  style string is words, not hex, so the style lock can re-read it. */
-export function captionColourName(hex: string): string {
-  const c = hex.toLowerCase().replace(/^#/, '');
-  const rgb = c.length === 3
-    ? c.split('').map(x => parseInt(x + x, 16))
-    : [parseInt(c.slice(0, 2), 16), parseInt(c.slice(2, 4), 16), parseInt(c.slice(4, 6), 16)];
-  const [r, g, b] = rgb.map(v => Number.isFinite(v) ? v : 0);
-  const max = Math.max(r, g, b), min = Math.min(r, g, b);
-  const d = max - min;
-  if (max < 60) return 'white';                       // dark band = black box/outline
-  if (d < 40) return r > 180 ? 'white' : 'yellow';    // near-neutral: white or pale
-  if (max === r && g > 90 && g < 190 && b < 90) return 'red';
-  if (max === r && g >= 190 && b < 120) return 'yellow';
-  if (max === g && r < 140 && b < 140) return 'green';
-  if (max === g && r >= 140) return 'yellow';
-  if (max === b && g >= 140) return 'cyan';
-  if (max === b) return 'blue';
-  return 'yellow';
+/** A short description of the learned reference style — now the full rule
+ *  card (rhythm character, beat, push-ins, caption motion, grade), so the AI
+ *  reads what the measurements MEAN, not just three numbers. Still keeps the
+ *  exact phrases the style lock parses. */
+export function styleForAi(profile: StyleProfile): string {
+  return styleRulesText(profile, profile.sourceName);
 }
 
-/** A short description of the learned reference style, sent as the AI's
- *  `style` hint so the model knows what "the same style" means. */
-export function styleForAi(profile: StyleProfile): string {
-  const g = profile.grade;
-  const gradeBits: string[] = [];
-  if (g.warmth > 0.08) gradeBits.push('warm', `warmth ${g.warmth.toFixed(2)}`);
-  if (g.brightness > 0.05) gradeBits.push(`brightness +${(g.brightness * 100).toFixed(0)}%`);
-  if (g.contrast > 0.15) gradeBits.push(`contrast +${(g.contrast * 100).toFixed(0)}%`);
-  if (g.saturation > 0.2) gradeBits.push(`saturation +${(g.saturation * 100).toFixed(0)}%`);
-  const capture = profile.captions.present
-    ? `bold ${profile.captions.animated ? 'animated pop-in ' : ''}captions along the ${
-        profile.captions.position === 'centre' ? 'middle' : 'bottom'}${
-        profile.captions.animated
-          ? ` (${profile.captions.highlightColour
-              ? `${captionColourName(profile.captions.highlightColour)} highlights`
-              : 'word-by-word transitions'})`
-          : ''}`
-    : 'no captions';
-  const pacing = profile.uncut
-    ? 'single uncut take'
-    : profile.cutsPerMin > 0
-      ? `~${profile.cutsPerMin.toFixed(0)} cuts per minute`
-      : 'cut to the rhythm';
-  return `${gradeBits.length ? gradeBits.join(', ') + ' grade' : 'neutral grade'}; ${pacing}; ${capture}`;
-}
+export { captionColourName } from '@/lib/ai/styleRules';
 
 /** One AI look decision carried in the response's `applied` ops. */
 export interface AiLook {

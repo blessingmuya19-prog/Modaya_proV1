@@ -915,6 +915,9 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
                 ? framesRef.current.slice(0, 6).map(f => f.dataUrl)
                 : undefined,
               style: withRef && profile ? styleForAi(profile) : undefined,
+              assets: brollItems.slice(0, 60).map(b => ({
+                name: b.name, mimeType: b.mimeType, durationS: b.durationS,
+              })),
             }),
           });
           if (!res.ok) return null;
@@ -1300,6 +1303,9 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
             ? framesRef.current.slice(0, 6).map(f => f.dataUrl)
             : undefined,
           style: ctxRef.current.hasRef ? styleForAi(ctxRef.current.baseProfile) : undefined,
+          assets: brollItems.slice(0, 60).map(b => ({
+            name: b.name, mimeType: b.mimeType, durationS: b.durationS,
+          })),
           history: chats.slice(-8).map(m => ({ role: m.role, text: m.text })),
         }),
       });

@@ -16,6 +16,7 @@ import { transcriptForPrompt, fillerRanges, sanitiseSegments, Transcript } from 
 import { chatDetailed, explainFailure, extractJson, detectProvider, FailureReason } from '@/lib/ai/llm';
 import { summariseVisual, keyframeTimes, motionBetween, type VisualScan } from '@/lib/ai/visualScan';
 import { groundOperations, validateOperations, applyOperations, parseStyle, parsePlacement, loudnessPeaks, Operation, TimelineClip } from '@/lib/ai/operations';
+import { describeAssets, type AssetInfo } from '@/lib/ai/assetTags';
 import { findClipsByMeasurement, sanitiseClips, mergeClips, parseClipRequest, ClipSuggestion } from '@/lib/ai/clips';
 
 // ── Intent detection ──────────────────────────────────────────────────────────
@@ -733,8 +734,17 @@ Rules:
   final footage; then captions/text; then looks (grade, punch_in). Never put a
   grade before a cut that changes what the grade applies to.
 - When the request references a reference video ("like the reference", "match
-  its style"), read the REFERENCE STYLE LEARNED block and apply the grade and
-  caption style it describes — never invent one. If it is absent, say so.
+  its style"), read the REFERENCE STYLE LEARNED block — it is a measured rule
+  card (pace, rhythm character, beat/BPM, push-in rate, caption motion and
+  grade) — and apply what it describes verbatim: no inventing, no rounding a
+  measured number to a vague one. If it is absent, say so.
+- The ASSET KIT block lists the user's uploaded assets and their real types
+  (cutaway footage, graphics, fonts, transition SFX, voiceover, music). When
+  the request involves one ("cut to the swoosh", "use the warning graphic"),
+  name the actual asset from the list; never invent assets or filenames that
+  are not in the block. The edit engine places uploaded cutaways
+  automatically, so your operations stay structural (ranges, texts, styles)
+  — use the kit to be specific in reply and in match choices.
 
 PACING RULE — mapping reference pace onto THIS footage, only when REFERENCE
 STYLE LEARNED states a cut rate ("~12 cuts per minute", "fast cuts", "short
@@ -820,6 +830,8 @@ async function planWithLlm(opts: {
   audio:     'pending' | 'ready' | 'failed';
   transcript: Transcript | null;
   style?:    string;
+  /** The user's asset kit — names/types the model may refer to. */
+  assets?:   AssetInfo[];
   history:   { role: 'user' | 'ai'; text: string }[];
   /** Shot changes, movement and brightness measured in the browser. */
   visual?:   VisualScan | null;
@@ -860,7 +872,8 @@ async function planWithLlm(opts: {
             .map(t => `${t.toFixed(1)}s`).join(', ')}. ` +
         'Describe only what is in them. If you are unsure, say so.'
       : null,
-    opts.style ? `REFERENCE STYLE LEARNED: ${opts.style}` : null,
+    opts.style ? `REFERENCE STYLE LEARNED:\n${opts.style}` : null,
+    describeAssets(opts.assets ?? []),
   ].filter(Boolean).join('\n\n');
 
   const recent = opts.history.slice(-6).map(m => ({
@@ -966,6 +979,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     ? body.silences.filter((r: unknown) => Array.isArray(r) && r.length === 2).slice(0, 200)
     : [];
   const style: string | undefined = typeof body.style === 'string' ? body.style : undefined;
+  /* The user's asset kit (B-roll library, graphics, fonts, SFX) — what the AI
+     can refer to by name instead of guessing what exists. */
+  const assets: AssetInfo[] = Array.isArray(body.assets)
+    ? body.assets
+        .filter((a: unknown): a is AssetInfo => Boolean(a) && typeof (a as AssetInfo).name === 'string')
+        .slice(0, 60)
+    : [];
   const audio: 'pending' | 'ready' | 'failed' =
     body.audio === 'pending' || body.audio === 'failed' ? body.audio : 'ready';
   const energy: number[] = Array.isArray(body.energy)
@@ -1082,7 +1102,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (provider.ready) {
     const attempt = await planWithLlm({
-      message, durationS, clips, silences, energy, onsets, audio, transcript, style, visual, frames,
+      message, durationS, clips, silences, energy, onsets, audio, transcript, style, assets, visual, frames,
       history: (Array.isArray(body.history) && body.history.length
         ? body.history.slice(-8)
         : (project?.aiHistory ?? []))
