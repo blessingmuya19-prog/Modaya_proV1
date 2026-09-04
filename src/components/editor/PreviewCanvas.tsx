@@ -81,12 +81,11 @@ export default function PreviewCanvas({
   useEffect(() => {
     try {
       const e = engineRef.current;
-      if (e) {
+      if (e && sequence) {
         e.setSequence(sequence);
-        e.seek(playheadS, playing);
       }
     } catch {}
-  }, [sequence, playheadS, playing]);
+  }, [sequence]);
 
   useEffect(() => {
     try {
