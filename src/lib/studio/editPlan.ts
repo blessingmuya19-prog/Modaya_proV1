@@ -423,19 +423,71 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
   } else if (mode === 'short') {
     const targetS = clamp(opts.targetSeconds ?? (refShort ? profile.durationS : 45), 20, 90);
     const moments = chooseMoments({ durationS, targetS, interest, onsets, hookFirst: true });
-    moments.forEach((m, idx) => {
-      const len = m.e - m.s;
-      const punchIn = rand() < profile.punchInRate;
-      const scale = punchIn ? 1 + (profile.punchInMax - 1) * (0.6 + rand() * 0.4) : 1;
-      video.push({
-        id: `shot-${idx}`, trackId: 'video', label: `Moment ${idx + 1}`,
-        startS: Number(cursor.toFixed(3)), endS: Number((cursor + len).toFixed(3)),
-        type: 'video', sourceIn: Number(m.s.toFixed(3)),
-        // Cover-crop only if forced 9:16 without matching sourceRatio, otherwise contain
-        transform: { ...DEFAULT_TRANSFORM, fit: ratio === '9:16' && !opts.sourceRatio ? 'cover' : 'contain', scale, offsetX: punchIn ? (idx % 2 ? 0.02 : -0.02) : 0 },
-        effects,
-      });
-      cursor += len; kept++;
+    // Subdivide moments into rhythmic, engaging shots matching profile.cutsPerMin (or ~2.5s-4.5s shots)
+    // so the video actually has professional editing rhythm and alternating punch-ins on speech emphasis!
+    const targetShotLen = profile.cutsPerMin > 0 ? clamp(60 / profile.cutsPerMin, 1.8, 5.0) : 3.2;
+
+    moments.forEach((m, mIdx) => {
+      const momentLen = m.e - m.s;
+
+      if (momentLen <= targetShotLen * 1.35) {
+        const punchIn = rand() < profile.punchInRate;
+        const scale = punchIn ? 1 + (profile.punchInMax - 1) * (0.6 + rand() * 0.4) : 1;
+        video.push({
+          id: `shot-${video.length}`,
+          trackId: 'video',
+          label: mIdx === 0 ? '🔥 Hook Intro' : `Moment ${mIdx + 1}`,
+          startS: Number(cursor.toFixed(3)),
+          endS: Number((cursor + momentLen).toFixed(3)),
+          type: 'video',
+          sourceIn: Number(m.s.toFixed(3)),
+          transform: {
+            ...DEFAULT_TRANSFORM,
+            fit: ratio === '9:16' && !opts.sourceRatio ? 'cover' : 'contain',
+            scale,
+            offsetX: punchIn ? (video.length % 2 ? 0.02 : -0.02) : 0,
+          },
+          effects,
+        });
+        cursor += momentLen;
+        kept++;
+      } else {
+        // Subdivide moment into dynamic, rhythm-matched sub-shots with alternating punch-in framing
+        let mCur = m.s;
+        let subIdx = 0;
+        while (mCur < m.e - 0.4) {
+          const nextTarget = mCur + targetShotLen * (0.85 + rand() * 0.3);
+          const snapped = snap(onsets, nextTarget, 0.35);
+          const subEnd = Math.min(m.e, Math.max(mCur + 1.2, snapped));
+          const subLen = subEnd - mCur;
+
+          // Alternate punch-in on every other sub-shot or when punchInRate fires
+          const punchIn = (subIdx % 2 === 1) || (rand() < profile.punchInRate);
+          const scale = punchIn ? 1 + (profile.punchInMax - 1) * (0.7 + rand() * 0.3) : 1;
+
+          video.push({
+            id: `shot-${video.length}`,
+            trackId: 'video',
+            label: mIdx === 0 && subIdx === 0 ? '🔥 Hook Intro' : `Shot ${video.length + 1}`,
+            startS: Number(cursor.toFixed(3)),
+            endS: Number((cursor + subLen).toFixed(3)),
+            type: 'video',
+            sourceIn: Number(mCur.toFixed(3)),
+            transform: {
+              ...DEFAULT_TRANSFORM,
+              fit: ratio === '9:16' && !opts.sourceRatio ? 'cover' : 'contain',
+              scale,
+              offsetX: punchIn ? (subIdx % 2 ? 0.02 : -0.02) : 0,
+            },
+            effects,
+          });
+
+          cursor += subLen;
+          mCur = subEnd;
+          subIdx++;
+          kept++;
+        }
+      }
     });
   } else {
     // Full re-cut: cut on the reference's rhythm, drop the weakest stretches.
@@ -489,10 +541,10 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
     for (let i = 1; i < main.length && ci < cuts.length; i++) {
       const shot = main[i];
       const shotLen = shot.endS - shot.startS;
-      if (shotLen < 3.5) continue;
+      if (shotLen < 1.2) continue;
       const src = cuts[ci++];
-      const len = Math.min(src.lenS, shotLen * 0.5);
-      const outStart = shot.startS + shotLen * 0.28;
+      const len = Math.min(src.lenS, Math.max(0.8, shotLen * 0.85));
+      const outStart = shot.startS + Math.max(0.05, shotLen * 0.08);
       broll.push({
         id: `broll-${broll.length}`, trackId: 'overlay', label: 'B-roll',
         startS: Number(outStart.toFixed(3)), endS: Number((outStart + len).toFixed(3)),

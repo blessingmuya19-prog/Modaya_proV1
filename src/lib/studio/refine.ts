@@ -172,17 +172,40 @@ export function refineProfile(base: StyleProfile, message: string): RefineResult
     did.push('generated and brought captions onto the timeline');
   }
 
-  // Professional / Cinematic presets
-  const makePro = /\b(make it (look )?pro(fessional)?|cinematic|make it look good|improve|make it (cool|epic|awesome)|high quality)\b/i.test(text);
+  // Professional, Cinematic, and Reference Production Level presets
+  const makePro = /\b(replicate (the )?reference|match (the )?reference|production level|production quality|make it (look )?pro(fessional)?|cinematic|creator style|make it look good|improve|make it (cool|epic|awesome)|high quality)\b/i.test(text);
+  const wantsBeatSync = /\b(beat sync|sync to beat|on the beat|musical cuts?|beat locked)\b/i.test(text);
+  const wantsSilenceRemoval = /\b(remove silence|cut dead air|remove pauses|no dead air|tighter cuts?|remove filler|make it snappy)\b/i.test(text);
+
   if (makePro) {
-    p.grade = { brightness: 0.02, contrast: 0.08, saturation: 0.08, warmth: 0.04 };
-    p.punchInRate = Math.max(p.punchInRate, 0.35);
-    p.punchInMax = 1.15;
-    p.captions = { present: true, position: 'lower', emphasis: 0.6 };
-    p.energy = clamp(p.energy + 0.1, 0, 1);
-    setPacing(p, 1.15);
+    p.grade = {
+      brightness: clamp(p.grade.brightness + 0.04, -0.3, 0.3),
+      contrast: clamp(p.grade.contrast + 0.08, -0.3, 0.4),
+      saturation: clamp(p.grade.saturation + 0.08, -0.3, 0.4),
+      warmth: clamp(p.grade.warmth + 0.04, -0.5, 0.5),
+    };
+    p.punchInRate = Math.max(p.punchInRate, 0.45);
+    p.punchInMax = Math.max(p.punchInMax, 1.18);
+    p.captions = { present: true, position: p.captions?.position ?? 'lower', emphasis: 0.75 };
+    p.beatSynced = true;
+    p.energy = clamp(Math.max(p.energy, 0.7), 0, 1);
+    setPacing(p, 1.2);
     changed = true;
-    did.push('applied cinematic color grading, dynamic punch-ins, and high-visibility captions');
+    did.push('replicated reference production level with beat-synced rhythm, dynamic punch-ins, cinematic grading, and high-visibility captions');
+  }
+
+  if (wantsBeatSync) {
+    p.beatSynced = true;
+    changed = true;
+    did.push('locked shot cuts directly to musical beats and speech onsets');
+  }
+
+  if (wantsSilenceRemoval) {
+    p.energy = clamp(p.energy + 0.15, 0, 1);
+    setPacing(p, 1.25);
+    changed = true;
+    did.push('trimmed dead air pauses and tightened clip boundaries');
+  }
   }
 
   // Colour grade
