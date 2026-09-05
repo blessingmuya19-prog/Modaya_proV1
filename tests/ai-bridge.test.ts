@@ -16,6 +16,7 @@ import {
   type ShotMap,
 } from '@/lib/studio/aiBridge';
 import { DEFAULT_TRANSFORM, DEFAULT_EFFECTS, type StyleLayer } from '@/lib/render/sequence';
+import { zoomKeyframesForShot } from '@/lib/render/transitions';
 import type { StudioPlan } from '@/lib/studio/editPlan';
 
 const styleLayer: StyleLayer = {
@@ -289,5 +290,54 @@ describe('one-AI first pass and look decisions', () => {
       .toMatchObject([{ startS: 0, endS: 2, sourceIn: 7 }]);
     /* The caption at source 1–2 falls outside the window — dropped. */
     expect(out!.plan.clips.filter(c => c.type === 'text')).toHaveLength(0);
+  });
+});
+
+describe('kinetic layer through the AI round-trip', () => {
+  const punchy = { ...profile, punchInRate: 1, punchInMax: 1.2, energy: 0.8, beatSynced: true };
+
+  it('re-applies animated zooms and transitions to a re-cut (fresh, mapped keyframes)', () => {
+    const base = uncutStudioPlan(punchy, 10, '9:16');
+    const cut = [
+      { id: 'shot-a', trackId: 'video', label: 'A', type: 'video' as const, startS: 1, endS: 4 },
+      { id: 'shot-b', trackId: 'video', label: 'B', type: 'video' as const, startS: 7, endS: 9 },
+    ];
+    const out = applyAiResult(base, {}, punchy, 10, cut, [1.5, 2.5, 7.5], 42);
+    expect(out!.applied).toBe(true);
+    const videos = out!.plan.clips.filter(c => c.trackId === 'video');
+    expect(videos.length).toBe(2);
+    /* Every punch-in became a moving zoom: keyframes present, no double scale */
+    expect(videos.every(v => v.zoom?.length === 5)).toBe(true);
+    expect(videos.every(v => (v.transform.scale ?? 1) === 1)).toBe(true);
+    /* Anchors are in OUTPUT time, inside each new shot — not stale source
+       seconds from the old timeline. */
+    expect(videos[0]!.zoom![1].time).toBeCloseTo(0.5, 1);   // source 1.5 − 1 + 0
+    expect(videos[1]!.zoom![1].time).toBeCloseTo(3.5, 1);   // source 7.5 − 7 + 3
+    /* The source jump (4 → 7) gets a transition on the incoming shot */
+    expect(videos[1]!.transition?.kind).toBeTruthy();
+    /* The style layer the renderer reads carries it too */
+    expect(out!.styleLayer['shot-a']?.zoom?.length).toBe(5);
+    expect(out!.styleLayer['shot-b']?.transition).toBeTruthy();
+  });
+
+  it('keeps plan-carried kinetics through an UNCHANGED round-trip (layer mirror)', () => {
+    const p = plan();
+    p.clips = p.clips.map(c => c.trackId === 'video' && c.id === 'shot-1'
+      ? { ...c, zoom: zoomKeyframesForShot(0, 4, 1, 1.2) }
+      : c);
+    const out = applyAiResult(p, {}, profile, 10, toAiView(p, {}).clips);
+    expect(out!.applied).toBe(false);
+    expect(out!.styleLayer['shot-1']?.zoom?.length).toBe(5);
+    expect(out!.plan.clips.find(c => c.id === 'shot-1')?.zoom?.length).toBe(5);
+  });
+
+  it('measures punch-ins from animated zooms as well as static scale', () => {
+    const p = plan();
+    p.clips = [
+      { ...p.clips[0], transform: { ...DEFAULT_TRANSFORM, scale: 1 }, zoom: zoomKeyframesForShot(0, 4, 1, 1.2) },
+      { ...p.clips[2], transform: { ...DEFAULT_TRANSFORM, scale: 1 } },
+    ];
+    const synced = syncProfileAfterAi({ ...profile, punchInRate: 0 }, p);
+    expect(synced.punchInRate).toBe(0.5);
   });
 });

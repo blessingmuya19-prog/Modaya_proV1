@@ -584,11 +584,16 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
       beatSnapRate: measuredBeatSnapRate(videoShots, ctx?.onsets ?? []),
       refBeatSynced: refProfile.beatSynced,
       refPunchInRate: refProfile.punchInRate,
-      /* Punch-in rate measured from the plan's own shots (scale > 1) — never
-         carried from a profile, so a plan that barely pushes in is scored as
-         is and a reference rate is not mistaken for an achieved one. */
+      /* Punch-in rate measured from the plan's own shots — never carried from
+         a profile, so a plan that barely pushes in is scored as is and a
+         reference rate is not mistaken for an achieved one. The kinetic layer
+         expresses a punch as animated zoom keyframes (static scale reset to
+         1), so both forms count. */
       editPunchInRate: (() => {
-        const punched = videoShots.filter(c => (c.transform?.scale ?? 1) > 1.02).length;
+        const punched = videoShots.filter(c =>
+          (c.transform?.scale ?? 1) > 1.02 ||
+          (c.zoom?.some(k => k.scale > 1.02) ?? false),
+        ).length;
         return videoShots.length ? punched / videoShots.length : 0;
       })(),
       captionsWanted: Boolean(ctx?.captionsWanted || editProfile.captions?.present),
@@ -656,6 +661,11 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           // A library cutaway reads from its own media object.
           ...(c.sourceId ? { sourceId: c.sourceId } : {}),
           transform: c.transform, effects: c.effects,
+          /* The kinetic layer rides on the style layer — the renderer reads
+             zoom/transition from here. Without it the plan's animated zooms
+             and whip/dissolve cuts never reach the preview. */
+          ...(c.zoom ? { zoom: c.zoom } : {}),
+          ...(c.transition ? { transition: c.transition } : {}),
         };
       }
     }
@@ -710,7 +720,14 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           };
           const layer: StyleLayer = {};
           for (const c of restored.clips) {
-            if (c.type === 'video') layer[c.id] = { sourceIn: c.sourceIn, transform: c.transform, effects: c.effects };
+            if (c.type === 'video') {
+              layer[c.id] = {
+                sourceIn: c.sourceIn, transform: c.transform, effects: c.effects,
+                /* Snapshot clips carry the kinetic layer — keep it on restore. */
+                ...(c.zoom ? { zoom: c.zoom } : {}),
+                ...(c.transition ? { transition: c.transition } : {}),
+              };
+            }
           }
           setPlan(restored);
           setClips(restored.clips.map(clipToEditor));
@@ -948,7 +965,8 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           const data = await res.json().catch(() => null);
           const edit = data?.edit;
           if (!edit || !Array.isArray(edit.newClips)) return null;
-          const out = applyAiResult(base, baseLayer, profile, durationS, edit.newClips as AiClip[]);
+          const out = applyAiResult(base, baseLayer, profile, durationS, edit.newClips as AiClip[],
+            ctxRef.current!.onsets, 1);
           if (!out?.applied) {
             briefAiNote = String(data?.aiMessage?.text ?? '');
             return null;
@@ -1339,7 +1357,8 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
       const edit = data?.edit;
       if (!edit || !Array.isArray(edit.newClips)) throw new Error('bad ai response');
 
-      const proOut = applyAiResult(plan, styleLayer, current, ctxRef.current.durationS, edit.newClips as AiClip[]);
+      const proOut = applyAiResult(plan, styleLayer, current, ctxRef.current.durationS, edit.newClips as AiClip[],
+        ctxRef.current.onsets, seedRef.current);
       const aiText = String(data?.aiMessage?.text ?? edit.summary ?? '');
       const aiReason = typeof edit.reason === 'string' ? edit.reason.trim() : undefined;
       const captionNote = /caption|subtitle|transcri/i.test(text) && ctxRef.current.transcript.length === 0
@@ -1488,7 +1507,8 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         id: `cut-${Date.now()}`, trackId: 'video', label: clip.title,
         type: 'video', startS: clip.startS, endS: clip.endS,
       }];
-      const out = applyAiResult(plan, styleLayer, current, ctxRef.current.durationS, cutClips);
+      const out = applyAiResult(plan, styleLayer, current, ctxRef.current.durationS, cutClips,
+        ctxRef.current.onsets, seedRef.current);
       if (out?.applied) {
         undoRef.current = [...undoRef.current.slice(-19), {
           plan, styleLayer, profile: current, seed: seedRef.current,

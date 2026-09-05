@@ -13,6 +13,7 @@
  * unit-tested.
  */
 import type { StudioPlan, PlannedShot, TranscriptLine } from './editPlan';
+import { applyKineticLayer, seededRand } from './editPlan';
 import {
   DEFAULT_TRANSFORM, DEFAULT_EFFECTS,
   type StyleLayer, type Transform, type Effects,
@@ -162,6 +163,10 @@ export function applyAiResult(
   profile: StyleProfile,
   sourceDurationS: number,
   newClips: AiClip[],
+  /** Source-time onsets (measured energy spikes) that anchor animated zooms. */
+  onsets: number[] = [],
+  /** Deterministic seed so the same re-cut always picks the same kinetics. */
+  seed = 1,
 ): AiApplyResult | null {
   const videos = (newClips ?? []).filter(c => c.type === 'video' && c.trackId === 'video')
     .sort((a, b) => a.startS - b.startS);
@@ -195,11 +200,31 @@ export function applyAiResult(
     videoOut = plan ? plan.clips.filter(c => c.type === 'video' && c.trackId === 'video') : [];
     brollOut = plan ? plan.clips.filter(c => c.type === 'video' && c.trackId !== 'video') : [];
     layerOut = { ...styleLayer };
+    /* The plan carries the kinetic layer (animated zooms / transitions); the
+       renderer reads it from the style layer, so mirror it — an unchanged
+       round-trip must keep what the preview already showed. */
+    for (const c of videoOut) {
+      if (!c.zoom && !c.transition) continue;
+      layerOut[c.id] = {
+        ...(layerOut[c.id] ?? { sourceIn: c.sourceIn, transform: c.transform, effects: c.effects }),
+        ...(c.zoom ? { zoom: c.zoom } : {}),
+        ...(c.transition ? { transition: c.transition } : {}),
+      };
+    }
   } else {
     // Condense the surviving source windows into a continuous programme.
+    const rand = seededRand(
+      Math.floor(sourceDurationS * 131) ^ (videos.length * 7919) ^ (seed >>> 0),
+    );
     let cursor = 0;
     videoOut = videos.map((v, i) => {
       const len = v.endS - v.startS;
+      /* Same push-in draw as the composer: the reference's punch-in RATE
+         decides which shots punch, the max decides how far. */
+      const punchIn = rand() < profile.punchInRate;
+      const scale = punchIn
+        ? 1 + (profile.punchInMax - 1) * (0.6 + rand() * 0.4)
+        : 1;
       const out: PlannedShot = {
         id: v.id || `shot-${i}`,
         trackId: 'video',
@@ -208,19 +233,25 @@ export function applyAiResult(
         endS: Number((cursor + len).toFixed(3)),
         type: 'video',
         sourceIn: Number(v.startS.toFixed(3)),
-        transform: { ...DEFAULT_TRANSFORM, fit: useCover ? 'cover' : 'contain', scale: 1 },
+        transform: { ...DEFAULT_TRANSFORM, fit: useCover ? 'cover' : 'contain', scale },
         effects,
-      };
-      layerOut[out.id] = {
-        sourceIn: out.sourceIn, transform: out.transform, effects,
-        /* Kinetic styling belongs to the shot, not the operation: keep the
-           zoom keyframes and transition attached through the AI round-trip. */
-        ...(styleLayer[out.id]?.zoom ? { zoom: styleLayer[out.id].zoom } : {}),
-        ...(styleLayer[out.id]?.transition ? { transition: styleLayer[out.id].transition } : {}),
       };
       cursor += len;
       return out;
     });
+    /* Regenerate the kinetic layer for the NEW timeline: the old keyframes
+       are stamped in the old programme's seconds, so carrying them over
+       would zoom at the wrong moment (or never — past the shot's end). A
+       re-cut re-applies the reference's kinetic DNA, not stale timings. */
+    applyKineticLayer(videoOut, profile, onsets, rand);
+    layerOut = {};
+    for (const out of videoOut) {
+      layerOut[out.id] = {
+        sourceIn: out.sourceIn, transform: out.transform, effects,
+        ...(out.zoom ? { zoom: out.zoom } : {}),
+        ...(out.transition ? { transition: out.transition } : {}),
+      };
+    }
     durationS = Number(cursor.toFixed(3));
     brollOut = [];   // cutaway artwork is dropped on a structural re-cut
   }
@@ -348,10 +379,14 @@ export function syncProfileAfterAi(profile: StyleProfile, plan: StudioPlan | nul
   const videos = plan.clips.filter(c => c.type === 'video' && c.trackId === 'video');
   const fullSource = videos.length === 1 &&
     Math.abs((videos[0]?.endS ?? 0) - (videos[0]?.startS ?? 0) - plan.durationS) < 0.1;
-  /* Punch-ins are measured from the plan itself (scale > 1 means the shot
-     pushes in) — never carried over from the reference, so the next
-     regenerate and the match score see what the edit ACTUALLY does. */
-  const punched = videos.filter(v => (v.transform?.scale ?? 1) > 1.02).length;
+  /* Punch-ins are measured from the plan itself — never carried over from
+     the reference, so the next regenerate and the match score see what the
+     edit ACTUALLY does. The kinetic layer expresses a punch as animated zoom
+     keyframes (static scale reset to 1), so both forms count. */
+  const punched = videos.filter(v =>
+    (v.transform?.scale ?? 1) > 1.02 ||
+    (v.zoom?.some(k => k.scale > 1.02) ?? false),
+  ).length;
   return {
     ...profile,
     captions: {

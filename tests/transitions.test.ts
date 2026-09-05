@@ -8,7 +8,7 @@ import {
   transitionAlpha, transitionTransform,
   type TransitionSpec,
 } from '@/lib/render/transitions';
-import { DEFAULT_TRANSFORM, buildSequence, videoClipsAt } from '@/lib/render/sequence';
+import { DEFAULT_TRANSFORM, DEFAULT_EFFECTS, buildSequence, videoClipsAt } from '@/lib/render/sequence';
 
 describe('zoomKeyframesForShot', () => {
   it('ramps 1.0 → target at the measured peak, holds, then settles', () => {
@@ -119,5 +119,27 @@ describe('sequence build — the overlap that makes a transition playable', () =
     const a = seq.clips.find(c => c.id === 'a')!;
     expect(a.timelineOut).toBe(4);
     expect(videoClipsAt(seq, 4.2).map(c => c.id)).toEqual(['b']);
+  });
+
+  it('reads zoom and transition from the style layer (the Studio wiring)', () => {
+    /* The Studio builds the sequence from editor clips + a StyleLayer; the
+       kinetic data lives in the layer. This pins that pass-through — the
+       exact gap that made every plan render flat. */
+    const style = {
+      a: { sourceIn: 2, transform: { ...DEFAULT_TRANSFORM }, effects: { ...DEFAULT_EFFECTS },
+          zoom: zoomKeyframesForShot(0, 4, 0.8, 1.18) },
+      b: { sourceIn: 9, transform: { ...DEFAULT_TRANSFORM }, effects: { ...DEFAULT_EFFECTS },
+          transition: { kind: 'whip', durS: 0.4 } as TransitionSpec },
+    };
+    const seq = buildSequence([
+      { id: 'a', trackId: 'video', label: 'A', startS: 0, endS: 4, type: 'video' as const, sourceIn: 0 },
+      { id: 'b', trackId: 'video', label: 'B', startS: 4, endS: 8, type: 'video' as const, sourceIn: 0 },
+    ], { durationS: 8, width: 1080, height: 1920, sourceId: 's', style });
+    const a = seq.clips.find(c => c.id === 'a')!;
+    const b = seq.clips.find(c => c.id === 'b')!;
+    expect(a.zoom?.length).toBe(5);
+    expect(a.sourceIn).toBe(2);                    // styled clip reads from the edit
+    expect(b.transition?.kind).toBe('whip');
+    expect(a.timelineOut).toBeGreaterThan(4);      // overlap still built
   });
 });

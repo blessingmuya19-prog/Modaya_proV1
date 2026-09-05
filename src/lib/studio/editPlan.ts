@@ -114,6 +114,9 @@ function rng(seed: number) {
     return s / 0xffffffff;
   };
 }
+/** The same deterministic PRNG, exported for the AI round-trip so a re-cut
+ *  from the same plan always picks the same punch-ins and transitions. */
+export function seededRand(seed: number): () => number { return rng(seed); }
 function hashString(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
@@ -141,6 +144,66 @@ function snap(onsets: number[], t: number, windowS: number): number {
     if (d < bestD) { bestD = d; best = o; }
   }
   return bestD <= windowS ? best : t;
+}
+
+/**
+ * Kinetic layer — animated zooms at the measured emphasises, transitions at
+ * the source jumps. A static pre-scale is NOT a zoom: the reference's
+ * punch-in rate becomes a scale ramp on the shot that hosts a measured onset
+ * (1.0 → target over ~0.45s, held on the moment, settled before the cut).
+ * The rate is preserved exactly — every shot the reference would have punched
+ * in either zooms (when there is a timing anchor) or keeps the static
+ * push-in. Transitions happen only where the source actually jumps, so a
+ * continuous talk track never gets a fake dissolve.
+ *
+ * `onsets` are SOURCE-time (measured from the original footage); this maps
+ * each one into the shot's OUTPUT window before building keyframes — the
+ * renderer interpolates in programme time.
+ *
+ * Shared by the composer and the AI round-trip so a re-cut keeps the same
+ * kinetic DNA instead of flattening to a static plan.
+ */
+export function applyKineticLayer(
+  video: PlannedShot[],
+  profile: StyleProfile,
+  onsets: number[],
+  rand: () => number,
+): void {
+  video.forEach(shot => {
+    const len = shot.endS - shot.startS;
+    if ((shot.transform.scale ?? 1) <= 1.02) return;      // not a push-in shot
+    const srcEnd = shot.sourceIn + len;
+    const peakSrc = onsets.find(o => o >= shot.sourceIn && o <= srcEnd);
+    if (peakSrc === undefined) return;                    // no anchor: keep static
+    /* Source time → programme time: the shot reads [sourceIn, srcEnd] for
+       [startS, endS], so an onset Ns into the source window is Ns into the
+       shot. Without this, keyframes for every shot after the first are
+       stamped past the cut and the zoom collapses to a flicker. */
+    const peak = shot.startS + (peakSrc - shot.sourceIn);
+    const keys = zoomKeyframesForShot(
+      shot.startS, shot.endS, peak,
+      1 + (profile.punchInMax - 1) * 0.9,
+    );
+    if (keys.length) {
+      shot.zoom = keys;
+      shot.transform.scale = 1;                           // animated, no double scale
+    }
+  });
+  for (let i = 1; i < video.length; i++) {
+    const prev = video[i - 1], cur = video[i];
+    const prevSrcEnd = prev.sourceIn + (prev.endS - prev.startS);
+    const curLen = Math.max(0.4, cur.endS - cur.startS);
+    const sourceJump = Math.abs(cur.sourceIn - prevSrcEnd) > Math.max(0.6, curLen * 0.25);
+    if (!sourceJump) continue;
+    const t = transitionForJunction({
+      energy: profile.energy,
+      beatSynced: profile.beatSynced,
+      punchInRate: profile.punchInRate,
+      sourceJump,
+      decision: rand(),
+    });
+    if (t) cur.transition = t;
+  }
 }
 
 /**
@@ -596,43 +659,9 @@ export function composeStudioPlan(opts: ComposeOpts): StudioPlan {
   }
 
   /* ── Kinetic layer: animated zooms at the measured emphasises, transitions
-     at the source jumps. A static pre-scale is NOT a zoom — the reference's
-     punch-in rate becomes a scale ramp on the shot that hosts a measured
-     onset (1.0 → target over ~0.45s, held on the moment, settled before the
-     cut). The rate is preserved exactly: every shot the reference would have
-     punched in either zooms (when there is a timing anchor) or keeps the
-     static push-in. Transitions happen only where the source actually jumps,
-     so a continuous talk track never gets a fake dissolve. ── */
-  video.forEach(shot => {
-    const len = shot.endS - shot.startS;
-    if ((shot.transform.scale ?? 1) <= 1.02) return;      // not a push-in shot
-    const srcEnd = shot.sourceIn + len;
-    const peakS = onsets.find(o => o >= shot.sourceIn && o <= srcEnd);
-    if (peakS === undefined) return;                      // no anchor: keep static
-    const keys = zoomKeyframesForShot(
-      shot.startS, shot.endS, peakS,
-      1 + (profile.punchInMax - 1) * 0.9,
-    );
-    if (keys.length) {
-      shot.zoom = keys;
-      shot.transform.scale = 1;                           // animated, no double scale
-    }
-  });
-  for (let i = 1; i < video.length; i++) {
-    const prev = video[i - 1], cur = video[i];
-    const prevSrcEnd = prev.sourceIn + (prev.endS - prev.startS);
-    const curLen = Math.max(0.4, cur.endS - cur.startS);
-    const sourceJump = Math.abs(cur.sourceIn - prevSrcEnd) > Math.max(0.6, curLen * 0.25);
-    if (!sourceJump) continue;
-    const t = transitionForJunction({
-      energy: profile.energy,
-      beatSynced: profile.beatSynced,
-      punchInRate: profile.punchInRate,
-      sourceJump,
-      decision: rand(),
-    });
-    if (t) cur.transition = t;
-  }
+     at the source jumps. Shared with the AI round-trip so a re-cut keeps the
+     same kinetic DNA. ── */
+  applyKineticLayer(video, profile, onsets, rand);
 
   // B-roll: short, silent cutaways dropped over the middle of shots like a
   // real TikTok cutaway. The base talk track keeps playing beneath them.

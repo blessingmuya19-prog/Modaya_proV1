@@ -225,6 +225,31 @@ describe('composeStudioPlan — short mode', () => {
     }
   });
 
+  it('maps SOURCE-time onsets into each shot\'s OUTPUT window before zooming', () => {
+    const grid = Array.from({ length: 400 }, (_, i) => i * 0.5);
+    const p = composeStudioPlan({
+      profile: profile({ punchInRate: 1, punchInMax: 1.15, targetRatio: '9:16' }),
+      sourceDurationS: 300, interest: interestWithSpike(), onsets: grid,
+    });
+    const zoomed = p.clips.filter(c => c.trackId === 'video' && c.zoom?.length);
+    expect(zoomed.length).toBeGreaterThan(0);
+    for (const s of zoomed) {
+      const zoomOn = s.zoom![1];                       // ramp start = the emphasis
+      /* The emphasis lands INSIDE the shot — not crammed into its last 0.55s
+         by an unmapped source time, and not past the cut. */
+      expect(zoomOn.time).toBeGreaterThanOrEqual(s.startS);
+      expect(zoomOn.time).toBeLessThanOrEqual(s.endS - 0.55 + 0.02);
+      const onsetSrc = grid.find(o => o >= s.sourceIn && o <= s.sourceIn + (s.endS - s.startS));
+      if (onsetSrc !== undefined) {
+        const expected = s.startS + (onsetSrc - s.sourceIn);
+        if (expected <= s.endS - 0.56) {
+          /* unclamped: exactly source time translated to programme time */
+          expect(Math.abs(zoomOn.time - expected)).toBeLessThan(0.06);
+        }
+      }
+    }
+  });
+
   it('adds whip transitions at source jumps for an energetic beat-synced reference', () => {
     const p = composeStudioPlan({
       profile: profile({ energy: 0.8, beatSynced: true, punchInRate: 0.4, targetRatio: '9:16' }),
