@@ -10,6 +10,9 @@ import {
   FrameSample, AudioEnvelope, StyleProfile,
   buildStyleProfile, detectOnsets, estimateBpm,
 } from './styleProfile';
+import {
+  sampleReferenceKeyframes, type ReferenceKeyframe,
+} from './referenceFrames';
 
 const SAMPLE_W = 96;
 const SAMPLE_H = 54;
@@ -271,7 +274,13 @@ export async function analyseReference(
   range?: { startS: number; endS: number },
   sourceBlob?: Blob | File,
   sourceDurationS?: number,
-): Promise<{ profile: StyleProfile; audio: AudioEnvelope | null } | null> {
+): Promise<{
+  profile: StyleProfile;
+  audio: AudioEnvelope | null;
+  /** A handful of reference frames for the model to SEE (the lost signal —
+   *  previously sampled for metrics, then discarded). Empty on failure. */
+  keyframes?: ReferenceKeyframe[];
+} | null> {
   const url = URL.createObjectURL(file);
   let sourceUrl: string | null = null;
   try {
@@ -299,7 +308,14 @@ export async function analyseReference(
     const fullAudio = await analyseAudio(file);
     const audio = range ? sliceAudio(fullAudio, winStart, winLen) : fullAudio;
 
-    onProgress?.({ stage: 'profiling', progress: 0.9, message: 'Working out the style…' });
+    /* The pixels the model never saw: after the metrics are built, keep a
+       small set of reference frames (with their timestamps) so the edit
+       request can attach them for comparison. Best-effort — a reference
+       must never block an edit because it wouldn't decode twice. */
+    onProgress?.({ stage: 'profiling', progress: 0.9, message: 'Keeping frames the AI can compare…' });
+    const keyframes = await sampleReferenceKeyframes(url, winLen, 6, range)
+      .catch(() => [] as ReferenceKeyframe[]);
+
     const profile = frames.length >= 2
       ? buildStyleProfile({
           sourceName: meta.name,
@@ -327,7 +343,7 @@ export async function analyseReference(
         };
 
     onProgress?.({ stage: 'done', progress: 1, message: 'Style learned' });
-    return { profile, audio };
+    return { profile, audio, keyframes };
   } finally {
     URL.revokeObjectURL(url);
     if (sourceUrl) URL.revokeObjectURL(sourceUrl);

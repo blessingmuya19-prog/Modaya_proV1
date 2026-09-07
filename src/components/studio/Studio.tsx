@@ -26,6 +26,7 @@ import { getMedia, setMedia, subscribeMedia, analyseFile, type MediaEntry } from
 import { saveMediaFile, saveBrollLibrary, saveBrollFile, loadBrollLibrary, deleteBrollFiles, type BrollMeta } from '@/lib/mediaDb';
 import { getProjectMedia, uploadProjectMedia, getReferenceBlob, getBrollLibrary, backupBrollToCloud, trimCloudBroll } from '@/lib/mediaCloud';
 import { analyseAudio, analyseReference, interestCurve } from '@/lib/ai/analyseReference';
+import type { ReferenceKeyframe } from '@/lib/ai/referenceFrames';
 import type { StyleProfile } from '@/lib/ai/styleProfile';
 import { applyVibe, clampVibe, DEFAULT_VIBE, type VibeParams } from '@/lib/ai/vibe';
 import { composeStudioPlan, type StudioPlan, type PlannedShot, type TranscriptLine } from '@/lib/studio/editPlan';
@@ -435,6 +436,8 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
     /** Grounding for the AI route: measured pauses + audio state. */
     silences: [number, number][];
     audio: 'pending' | 'ready' | 'failed';
+    /** Reference keyframes the model can SEE (the lost signal). */
+    refFrames: ReferenceKeyframe[];
   } | null>(null);
   /** What the browser measured from the pixels + frames a model can see.
    *  Stored separately from ctx so the background scan can finish after the
@@ -842,6 +845,8 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
 
     try {
       let profile: StyleProfile | null = null as StyleProfile | null;
+      /* Reference pixels for the model — captured alongside the profile. */
+      let refKeyframes: ReferenceKeyframe[] = [];
 
       // 1 — understand the source footage (audio / energy)
       let env: Awaited<ReturnType<typeof analyseAudio>> = null as Awaited<ReturnType<typeof analyseAudio>>;
@@ -870,6 +875,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
             durationS,
           ).catch(() => null);
           profile = res?.profile ?? null;
+          refKeyframes = res?.keyframes ?? [];
         });
       }
 
@@ -913,6 +919,9 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
         /* Grounding for the Pro AI route. */
         silences: env ? detectSilences(env.rms, env.hopS) : [],
         audio: env ? 'ready' : 'failed',
+        /* Reference pixels — previously measured then discarded. The model
+           compares these against the footage instead of a metrics sheet. */
+        refFrames: refKeyframes,
       };
       profileRef.current = baseProfile;
       seedRef.current = 1;
@@ -958,6 +967,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
                 ? framesRef.current.slice(0, 6).map(f => f.dataUrl)
                 : undefined,
               style: withRef && profile ? styleForAi(profile) : undefined,
+              refFrames: withRef ? (ctxRef.current?.refFrames ?? []).map(f => ({ tS: f.tS, dataUrl: f.dataUrl })) : [],
               vibe: vibeRef.current,
               assets: brollItems.slice(0, 60).map(b => ({
                 name: b.name, mimeType: b.mimeType, durationS: b.durationS,
@@ -1163,6 +1173,9 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
           sourceName: footage.filename || media.filename,
           silences: env ? detectSilences(env.rms, env.hopS) : [],
           audio: env ? 'ready' : 'failed',
+          /* Reopen has no reference pixels in the recipe — honest: metrics
+             only until a new analysis runs (matches the no-key tier too). */
+          refFrames: [],
         };
         profileRef.current = last.recipe.profile;
         seedRef.current = last.recipe.seed;
@@ -1348,6 +1361,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
             ? framesRef.current.slice(0, 6).map(f => f.dataUrl)
             : undefined,
           style: ctxRef.current.hasRef ? styleForAi(ctxRef.current.baseProfile) : undefined,
+          refFrames: ctxRef.current.hasRef ? ctxRef.current.refFrames.map(f => ({ tS: f.tS, dataUrl: f.dataUrl })) : [],
           vibe: vibeRef.current,
           assets: brollItems.slice(0, 60).map(b => ({
             name: b.name, mimeType: b.mimeType, durationS: b.durationS,

@@ -861,6 +861,9 @@ async function planWithLlm(opts: {
   visual?:   VisualScan | null;
   /** A few frames, as data URLs, for a model that can actually see. */
   frames?:   string[];
+  /** A few REFERENCE frames (timestamped) — the pixels the model compares
+   *  the edit's style against. Attached only when a vision model exists. */
+  refFrames?: { tS: number; dataUrl: string }[];
 }): Promise<{
   plan:    { reply: string; operations: Operation[]; clips?: ClipSuggestion[]; reason?: string } | null;
   failure: { reason: FailureReason; detail: string } | null;
@@ -891,10 +894,23 @@ async function planWithLlm(opts: {
     `TRANSCRIPT:\n${transcriptForPrompt(opts.transcript)}`,
     opts.visual ? `PICTURE (measured from the pixels, not guessed):\n${summariseVisual(opts.visual)}` : null,
     opts.frames?.length
-      ? `FRAMES ATTACHED: ${opts.frames.length}, taken at ` +
+      ? `FOOTAGE FRAMES ATTACHED: ${opts.frames.length}, taken at ` +
         `${(opts.visual ? keyframeTimes(opts.visual, opts.frames.length) : [])
             .map(t => `${t.toFixed(1)}s`).join(', ')}. ` +
         'Describe only what is in them. If you are unsure, say so.'
+      : null,
+    opts.refFrames?.length
+      ? `REFERENCE FRAMES ATTACHED: ${opts.refFrames.length}, taken at ` +
+        `${opts.refFrames.map(f => `${f.tS.toFixed(1)}s`).join(', ')}. ` +
+        'These are from the REFERENCE VIDEO, not the footage. Compare the reference\'s ' +
+        'pacing, emphasis, framing and caption style with the measurements — cite reference ' +
+        'moments by their timestamp when you mean them ("like the reference cuts right ' +
+        'after the beat at 0:12\"). If you cannot see them, say so and use the measured ' +
+        'style rules below only. Never describe something that is not visible.'
+      : null,
+    (opts.frames?.length || opts.refFrames?.length)
+      ? `IMAGE ORDER: ${opts.frames?.length ?? 0} footage frames first, then ` +
+        `${opts.refFrames?.length ?? 0} reference frames.`
       : null,
     opts.style ? `REFERENCE STYLE LEARNED:\n${opts.style}` : null,
     /* The 4-track deconstruction — retrieved from measured signals, not
@@ -931,7 +947,11 @@ async function planWithLlm(opts: {
     { role: 'user', content: opts.message },
   ], { json: true, images, timeoutMs: images.length ? 45_000 : 20_000 });
 
-  let res   = await ask(opts.frames ?? []);
+  const allImages = [
+    ...(opts.frames ?? []),
+    ...(opts.refFrames ?? []).map(f => f.dataUrl),
+  ];
+  let res   = await ask(allImages);
   let blind = false;
 
   /* No model here can see. The question still deserves an answer from the
@@ -1073,6 +1093,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         .filter((f: unknown) => typeof f === 'string' && f.startsWith('data:image/'))
         .slice(0, 6)
     : [];
+  /* Reference pixels — timestamped. Only the pixel and the time travel; the
+     model compares these against the footage instead of a metrics sheet. */
+  const refFrames: { tS: number; dataUrl: string }[] = Array.isArray(body.refFrames)
+    ? body.refFrames
+        .filter((f: unknown): f is { tS: number; dataUrl: string } =>
+          Boolean(f) && typeof (f as { tS?: unknown }).tS === 'number' &&
+          isFinite((f as { tS: number }).tS) &&
+          typeof (f as { dataUrl?: unknown }).dataUrl === 'string' &&
+          (f as { dataUrl: string }).dataUrl.startsWith('data:image/'))
+        .map((f: { tS: number; dataUrl: string }) => ({ tS: Number(f.tS.toFixed(3)), dataUrl: f.dataUrl }))
+        .slice(0, 8)
+    : [];
 
   /**
    * Prefer the transcript the browser sent. The server's copy lives in memory,
@@ -1148,7 +1180,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (provider.ready) {
     const attempt = await planWithLlm({
-      message, durationS, clips, silences, energy, onsets, audio, transcript, style, assets, vibe, visual, frames,
+      message, durationS, clips, silences, energy, onsets, audio, transcript, style, assets, vibe, visual, frames, refFrames,
       history: (Array.isArray(body.history) && body.history.length
         ? body.history.slice(-8)
         : (project?.aiHistory ?? []))
@@ -1163,9 +1195,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     /* Frames were offered and nothing could look at them. Never let an answer
        stand as if it had seen the video. */
-    const blindNote = attempt.blind && frames.length
-      ? ' (I answered from the measurements — no model available to this app can look at the frames. ' +
-        'A Google AI Studio key, or a Groq account with qwen/qwen3.6-27b, and I can.)'
+    const blindNote = attempt.blind && (frames.length || refFrames.length)
+      ? ' (I answered from the measurements — no model available to this app can look at the frames' +
+        (refFrames.length ? ', including the reference frames' : '') +
+        '. A Google AI Studio key, or a Groq account with qwen/qwen3.6-27b, and I can.)'
       : '';
 
     if (plan) {
