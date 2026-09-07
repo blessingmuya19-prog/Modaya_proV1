@@ -5,8 +5,8 @@ import { ScrollToTop } from "@/components/ScrollToTop";
 
 export const metadata: Metadata = {
   title: "Modaya — AI Video Editor",
-  description: "Upload your footage. Tell AI how to edit it. Modaya handles the cuts, captions and pacing — no timeline, no manual editing.",
-  keywords: "AI video editor, automatic video editing, AI cuts, auto captions, podcast editing, YouTube editing, short form video",
+  description: "Drop your footage, describe the edit (or give it a reference to match) and Modaya cuts, captions, grades and re-times it for you. Editing, not generation — every frame is yours.",
+  keywords: "AI video editor, automatic video editing, AI cuts, auto captions, podcast editing, YouTube editing, short form video, editing not generation",
   metadataBase: new URL("https://modaya-pro-v1.vercel.app"),
   openGraph: {
     title: "Modaya — AI Video Editor",

@@ -59,13 +59,16 @@ const F = "'Inter',system-ui,-apple-system,sans-serif";
  * panels and wells; `media` is the near-black video canvas (darkest of all).
  */
 const C = {
-  bg: '#000000', surface: '#0A0A0B', s2: '#131316', s3: '#1C1C21',
-  b: '#27272A', b2: '#3F3F46', b3: '#3F3F46',
-  accent: '#FAFAFA', accentH: '#D4D4D8',
-  text: '#FAFAFA', sec: '#D4D4D8', muted: '#A1A1AA', dim: '#71717A',
+  bg: '#050505', surface: '#0B0B0E', s2: '#121216', s3: '#17171C',
+  b: '#232329', b2: '#33333B', b3: '#33333B',
+  /* One confident accent — electric indigo. Actions, active states, markers. */
+  accent: '#7C5CFF', accentH: '#9F8BFF',
+  accentSoft: 'rgba(124,92,255,0.13)', accentBrink: 'rgba(124,92,255,0.42)',
+  accentGlow: 'rgba(124,92,255,0.32)',
+  text: '#FAFAFA', sec: '#C9CBD2', muted: '#8E909A', dim: '#5E606B',
   green: '#34D399', gold: '#F4F4F5',
   danger: '#F87171', warn: '#A1A1AA', broll: '#71717A',
-  media: '#000000', mediaBorder: '#27272A', mediaShade: 'rgba(0,0,0,0.55)',
+  media: '#000000', mediaBorder: '#232329', mediaShade: 'rgba(0,0,0,0.55)',
 };
 
 type Phase = 'drop' | 'working' | 'result';
@@ -1830,6 +1833,15 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
             </div>
 
             {/* Edit Map — Modaya's transparent record of what it did */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.accent, boxShadow: `0 0 8px ${C.accentGlow}` }} />
+              <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted }}>
+                Edit map
+              </span>
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: C.dim }}>
+                what changed, and why — click a marker
+              </span>
+            </div>
             <EditMap
               markers={editMap} durationS={totalS} playheadS={playhead}
               selectedId={selectedMarker?.id ?? null}
@@ -1883,7 +1895,8 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
                   width: 32,
                   height: 32,
                   borderRadius: 10,
-                  background: 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 50%, #EC4899 100%)',
+                  background: `linear-gradient(135deg, ${C.accentH} 0%, ${C.accent} 100%)`,
+                  border: `1px solid ${C.accentBrink}`,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -1894,7 +1907,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
                 </div>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontWeight: 800, fontSize: 14.5, letterSpacing: '-0.02em', color: '#FAFAFA' }}>Modaya Copilot</span>
+                    <span style={{ fontWeight: 800, fontSize: 14.5, letterSpacing: '-0.02em', color: '#FAFAFA' }}>Modaya — your editor</span>
                     <span style={{
                       fontSize: 10,
                       fontWeight: 700,
@@ -1918,7 +1931,7 @@ export default function Studio({ projectId, projectName, mode: initialMode = 'ed
                       {chatBusy ? 'Editing…' : 'Ready'}
                     </span>
                   </div>
-                  <span style={{ fontSize: 11, color: C.dim }}>Interactive AI Video Director</span>
+                  <span style={{ fontSize: 11, color: C.dim }}>Creative collaborator — edits, explains, owns its limits</span>
                 </div>
               </div>
 

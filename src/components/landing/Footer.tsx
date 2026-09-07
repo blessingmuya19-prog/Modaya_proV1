@@ -1,165 +1,83 @@
 'use client';
 import React from 'react';
 import Link from 'next/link';
-import { ArrowUpRight } from 'lucide-react';
+import { Logo } from '../ui/Logo';
+import { ACCENT, ACCENT_HI, INK, FONT_D, FONT_M } from './kit';
 
 const NAV_COLS = [
   {
     heading: 'Product',
     links: [
-      { label: 'How it works',  href: '#how-it-works' },
-      { label: 'AI capabilities', href: '#ai' },
-      { label: 'Use cases',     href: '#use-cases' },
-      { label: 'Pricing',       href: '#pricing' },
-      { label: 'Changelog',     href: '#' },
+      { label: 'How it works', href: '#how-it-works' },
+      { label: 'Proof', href: '#proof' },
+      { label: 'Honesty', href: '#honesty' },
+      { label: 'Pricing', href: '#pricing' },
+      { label: 'FAQ', href: '#faq' },
     ],
   },
   {
     heading: 'Use cases',
     links: [
-      { label: 'Podcasts',      href: '#' },
-      { label: 'YouTube',       href: '#' },
-      { label: 'Short-form',    href: '#' },
-      { label: 'Interviews',    href: '#' },
-      { label: 'Webinars',      href: '#' },
+      { label: 'Podcasts', href: '/new' },
+      { label: 'YouTube', href: '/new' },
+      { label: 'Short-form', href: '/new' },
+      { label: 'Interviews', href: '/new' },
+      { label: 'Webinars', href: '/new' },
     ],
   },
   {
-    heading: 'Company',
+    heading: 'Account',
     links: [
-      { label: 'About',         href: '#' },
-      { label: 'Blog',          href: '#' },
-      { label: 'Careers',       href: '#', badge: "We're hiring" },
-      { label: 'Contact',       href: '#' },
+      { label: 'Start a project', href: '/new' },
+      { label: 'Dashboard', href: '/dashboard' },
+      { label: 'Settings', href: '/dashboard/settings' },
+      { label: 'Sign in', href: '/login' },
     ],
   },
   {
     heading: 'Legal',
     links: [
-      { label: 'Privacy policy',  href: '#' },
+      { label: 'Privacy policy', href: '#' },
       { label: 'Terms of service', href: '#' },
-      { label: 'Cookie policy',   href: '#' },
+      { label: 'Cookie policy', href: '#' },
     ],
   },
 ];
 
-const SOCIALS = [
-  { label: 'X',         href: '#', svg: `<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>` },
-  { label: 'YouTube',   href: '#', svg: `<svg viewBox="0 0 71 50" fill="currentColor" width="20" height="14"><path d="M69.5 7.8C68.7 4.9 66.4 2.6 63.5 1.8 57.9 0 35.5 0 35.5 0S13.2 0 7.5 1.8C4.6 2.6 2.3 4.9 1.5 7.8 0 13.5 0 25 0 25s0 11.5 1.5 17.2c.8 2.9 3.1 5.2 6 6C13.2 50 35.5 50 35.5 50s22.4 0 28.1-1.8c2.9-.8 5.2-3.1 6-6C71 36.5 71 25 71 25s0-11.5-1.5-17.2zM28.4 35.6V14.4L46.9 25l-18.5 10.6z"/></svg>` },
-  { label: 'LinkedIn',  href: '#', svg: `<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M20.447 20.452H16.89v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a1.98 1.98 0 0 1-1.977-1.98c0-1.093.885-1.979 1.977-1.979s1.977.886 1.977 1.979a1.98 1.98 0 0 1-1.977 1.98zm1.761 13.019H3.574V9h3.524v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>` },
-];
-
-// Inline Logo mark matching Logo.tsx style
-function FooterLogo() {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      {/* Mark */}
-      <svg width="22" height="22" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect width="32" height="32" rx="8" fill="#D4D4D8" fillOpacity="0.12" />
-        <rect x="1" y="1" width="30" height="30" rx="7" stroke="#D4D4D8" strokeOpacity="0.3" strokeWidth="1" />
-        <path d="M9 23 L16 9 L23 23" stroke="#D4D4D8" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M11.5 18 L20.5 18" stroke="#D4D4D8" strokeWidth="2" strokeLinecap="round" />
-      </svg>
-      {/* Wordmark */}
-      <span style={{ fontFamily: "'Satoshi','Inter',system-ui,-apple-system,sans-serif", fontSize: 17, fontWeight: 900, color: '#FAFAFA', letterSpacing: '-0.04em' }}>
-        Modaya
-      </span>
-    </div>
-  );
-}
-
 export function Footer() {
   return (
-    <footer style={{
-      position: 'relative', zIndex: 0,
-      background: '#000000',
-      borderTop: '1px solid #27272A',
-    }}>
-      {/* Top section */}
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: 'clamp(40px,6vw,80px) clamp(16px,3vw,48px) clamp(32px,4vw,56px)' }}>
-        <div className="footer-grid">
+    <footer style={{ background: '#030304', borderTop: `1px solid ${INK.line}`, padding: 'clamp(50px, 6vw, 80px) clamp(18px, 4vw, 40px) 34px' }}>
+      <div style={{ maxWidth: 1160, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap', marginBottom: 44 }}>
+          <Link href="/" style={{ textDecoration: 'none' }}><Logo size={26} /></Link>
+          <span style={{ fontSize: 12.5, color: INK.dim, fontFamily: FONT_M }}>
+            An AI editor, not a generator. If it can&rsquo;t, it says so.
+          </span>
+        </div>
 
-          {/* Brand column */}
-          <div className="footer-brand-col" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <FooterLogo />
-            <p style={{ fontSize: 13, color: '#A1A1AA', lineHeight: 1.5, letterSpacing: '-0.01em', maxWidth: 200, margin: 0 }}>
-              Upload your footage.<br />Tell AI how to edit it.
-            </p>
-
-            {/* Socials */}
-            <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-              {SOCIALS.map(s => (
-                <a key={s.label} href={s.href} aria-label={s.label} style={{
-                  width: 34, height: 34, borderRadius: 8,
-                  background: '#131316', border: '1px solid #27272A',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#A1A1AA', textDecoration: 'none', transition: 'all 200ms ease',
-                }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#1C1C21'; e.currentTarget.style.borderColor = '#3F3F46'; e.currentTarget.style.color = '#FAFAFA'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#131316'; e.currentTarget.style.borderColor = '#3F3F46'; e.currentTarget.style.color = '#A1A1AA'; }}
-                >
-                  <span dangerouslySetInnerHTML={{ __html: s.svg }} />
-                </a>
-              ))}
-            </div>
-
-            {/* CTA */}
-            <Link href="/new" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '9px 18px', fontSize: 13, fontWeight: 700, color: '#09090B',
-                background: 'linear-gradient(180deg,#FFFFFF,#E4E4E7)',
-                borderRadius: 12, boxShadow: '0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(255,255,255,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
-              }}>
-                Start editing free <ArrowUpRight size={13} />
-              </span>
-            </Link>
-          </div>
-
-          {/* Nav columns */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 28, marginBottom: 44 }}>
           {NAV_COLS.map(col => (
-            <div key={col.heading} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <p style={{ fontSize: 11, fontWeight: 600, color: '#71717A', letterSpacing: '0.06em', textTransform: 'uppercase', margin: 0 }}>
-                {col.heading}
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {col.links.map(link => (
-                  <a key={link.label} href={link.href} style={{
-                    fontSize: 14, color: '#A1A1AA', textDecoration: 'none',
-                    display: 'inline-flex', alignItems: 'center', gap: 7,
-                    transition: 'color 200ms ease',
-                  }}
-                    onMouseEnter={e => { e.currentTarget.style.color = '#D4D4D8'; }}
-                    onMouseLeave={e => { e.currentTarget.style.color = '#A1A1AA'; }}
+            <div key={col.heading}>
+              <p style={{ fontSize: 11, color: INK.mut, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', margin: '0 0 12px', fontFamily: FONT_D }}>{col.heading}</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {col.links.map(l => (
+                  <a key={l.label} href={l.href} style={{ fontSize: 13, color: INK.dim, textDecoration: 'none', transition: 'color 130ms ease' }}
+                    onMouseEnter={e => { e.currentTarget.style.color = ACCENT_HI; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = INK.dim; }}
                   >
-                    {link.label}
-                    {'badge' in link && link.badge && (
-                      <span style={{ fontSize: 9, fontWeight: 600, color: '#D4D4D8', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', padding: '1px 6px', borderRadius: 9999, letterSpacing: '0.04em' }}>
-                        {link.badge}
-                      </span>
-                    )}
+                    {l.label}
                   </a>
                 ))}
               </div>
             </div>
           ))}
         </div>
-      </div>
 
-      {/* Hairline */}
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 clamp(16px,3vw,48px)' }}>
-        <div style={{ height: 1, background: 'linear-gradient(to right, transparent, #1C1C21 20%, #1C1C21 80%, transparent)' }} />
-      </div>
-
-      {/* Bottom bar */}
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: 'clamp(16px,2vw,24px) clamp(16px,3vw,48px)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <p style={{ fontSize: 12, color: '#71717A', margin: 0 }}>
-            © 2026 Modaya. All rights reserved.
-          </p>
-          <p style={{ fontSize: 12, color: '#71717A', margin: 0 }}>
-            Made for creators who have footage, not time.
-          </p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap', borderTop: `1px solid ${INK.line}`, paddingTop: 22 }}>
+          <span style={{ fontSize: 12, color: INK.dim }}>© {new Date().getFullYear()} Modaya. Built as an editor, not a hype machine.</span>
+          <span style={{ fontSize: 11.5, color: INK.dim, fontFamily: FONT_M }}>
+            <span style={{ color: ACCENT }}>■</span> dark mode is the only mode
+          </span>
         </div>
       </div>
     </footer>

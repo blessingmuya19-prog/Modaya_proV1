@@ -1,13 +1,11 @@
 'use client';
 /**
- * Brand theme for Modaya — a monochrome, premium look.
+ * Brand theme for Modaya — dark canvas, one confident accent.
  *
- * Pure black canvas (#000000), near-black charcoal raised cards, white text
- * and white primary buttons with black text. Buttons follow a clean, modern
- * SaaS pattern (Opus-style): crisp 12px rounded rectangles, a subtle light
- * gradient for depth, a soft static shadow and a gentle hover.
- *
- * Video canvases are pure black — the darkest surface on screen.
+ * Pure black canvas, near-black charcoal raised cards, white text, and a
+ * single electric-indigo accent (#7C5CFF) for actions, active states,
+ * highlights and the primary button. Dark-mode-first; video canvases are
+ * pure black — the darkest surface on screen.
  */
 import React from 'react';
 
@@ -18,17 +16,24 @@ export const FONT_DISPLAY = "'Satoshi','Inter',system-ui,-apple-system,sans-seri
 /** Technical details / timestamps / processing. */
 export const FONT_MONO = "'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace";
 
-/** Neutral light gradient used for small icon tiles / accents. */
-export const GLOW_GRADIENT = 'linear-gradient(135deg, #FFFFFF 0%, #A1A1AA 100%)';
+/** The one accent — electric indigo. Actions, active states, highlights. */
+export const ACCENT = '#7C5CFF';
+export const ACCENT_HI = '#9F8BFF';
+export const ACCENT_SOFT = 'rgba(124,92,255,0.13)';
+export const ACCENT_BRD = 'rgba(124,92,255,0.42)';
+export const ACCENT_GLOW = 'rgba(124,92,255,0.32)';
 
-/** The primary button fill — a subtle vertical white → light-grey gradient. */
-export const BTN_GRADIENT = 'linear-gradient(180deg, #FFFFFF 0%, #E4E4E7 100%)';
-export const BTN_GRADIENT_HOVER = 'linear-gradient(180deg, #F4F4F5 0%, #D4D4D8 100%)';
+/** Neutral light gradient used for small icon tiles / accents. */
+export const GLOW_GRADIENT = `linear-gradient(135deg, ${ACCENT_HI} 0%, ${ACCENT} 100%)`;
+
+/** The primary button fill — accent gradient, white text, soft glow. */
+export const BTN_GRADIENT = `linear-gradient(180deg, ${ACCENT_HI} 0%, ${ACCENT} 100%)`;
+export const BTN_GRADIENT_HOVER = 'linear-gradient(180deg, #8F7BFF 0%, #6F4DEE 100%)';
 // Flat (no glow) — used for in-app primary actions. The landing page keeps its
 // own glowing buttons; these deliberately carry only a soft contact shadow.
-export const BTN_SHADOW = '0 1px 2px rgba(0,0,0,0.5)';
-export const BTN_SHADOW_HOVER = '0 2px 6px rgba(0,0,0,0.55)';
-export const BTN_SHADOW_ACTIVE = '0 1px 2px rgba(0,0,0,0.5)';
+export const BTN_SHADOW = `0 1px 2px rgba(0,0,0,0.5), 0 8px 26px ${ACCENT_GLOW}`;
+export const BTN_SHADOW_HOVER = `0 2px 8px rgba(0,0,0,0.55), 0 12px 34px ${ACCENT_GLOW}`;
+export const BTN_SHADOW_ACTIVE = `0 1px 2px rgba(0,0,0,0.5), 0 4px 14px ${ACCENT_GLOW}`;
 
 export const TC = {
   /* canvas + surfaces */
@@ -40,10 +45,10 @@ export const TC = {
   /* borders (cool greys) */
   border:    '#27272A',
   border2:   '#3F3F46',
-  /* brand — monochrome: white is the accent */
-  accent:    '#FAFAFA',
-  accentH:   '#FFFFFF',
-  glow:      'rgba(255,255,255,0.35)',
+  /* brand — one accent: electric indigo */
+  accent:    ACCENT,
+  accentH:   ACCENT_HI,
+  glow:      ACCENT_GLOW,
   /* text */
   text:      '#FAFAFA',
   sec:       '#D4D4D8',
@@ -74,8 +79,8 @@ interface GlowButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> 
 }
 
 /**
- * The primary SaaS button (Opus-style): a crisp 12px rounded rectangle, white
- * with black text, a subtle vertical light gradient and a gentle hover lift.
+ * The primary button — a crisp 12px rounded rectangle in the accent gradient
+ * with white text, a soft violet glow and a gentle hover lift.
  */
 export function GlowButton({ size = 'md', fullWidth, icon, children, disabled, style, ...rest }: GlowButtonProps) {
   const padY = size === 'lg' ? 14 : 11;
@@ -89,10 +94,10 @@ export function GlowButton({ size = 'md', fullWidth, icon, children, disabled, s
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           padding: `${padY}px ${size === 'lg' ? 28 : 20}px`,
           width: fullWidth ? '100%' : undefined,
-          border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, cursor: disabled ? 'not-allowed' : 'pointer',
+          border: '1px solid rgba(255,255,255,0.16)', borderRadius: 12, cursor: disabled ? 'not-allowed' : 'pointer',
           fontFamily: FONT, fontWeight: 600, fontSize, letterSpacing: '-0.01em',
-          color: disabled ? '#71717A' : '#000000',
-          background: disabled ? '#1C1C21' : BTN_GRADIENT,
+          color: disabled ? '#8E909A' : '#FFFFFF',
+          background: disabled ? '#17171C' : BTN_GRADIENT,
           boxShadow: disabled ? 'none' : BTN_SHADOW,
           transition: 'transform 120ms ease, box-shadow 150ms ease, filter 150ms ease, background 150ms ease',
           ...style,
@@ -102,8 +107,8 @@ export function GlowButton({ size = 'md', fullWidth, icon, children, disabled, s
         {icon}{children}
       </button>
       <style>{`
-        .modaya-btn:not(:disabled):hover { transform: translateY(-1px); filter: brightness(0.97); box-shadow: ${BTN_SHADOW_HOVER}; }
-        .modaya-btn:not(:disabled):active { transform: translateY(0); filter: brightness(0.92); box-shadow: ${BTN_SHADOW_ACTIVE}; }
+        .modaya-btn:not(:disabled):hover { transform: translateY(-1px); filter: brightness(1.05); box-shadow: ${BTN_SHADOW_HOVER}; }
+        .modaya-btn:not(:disabled):active { transform: translateY(0); filter: brightness(0.96); box-shadow: ${BTN_SHADOW_ACTIVE}; }
       `}</style>
     </>
   );
@@ -128,7 +133,7 @@ export function GhostButton({ children, fullWidth, style, ...rest }: React.Butto
         {children}
       </button>
       <style>{`
-        .modaya-ghost-btn:hover { background: #27272A; border-color: rgba(255,255,255,0.35); color: #fff; }
+        .modaya-ghost-btn:hover { background: #17171C; border-color: rgba(124,92,255,0.5); color: #fff; }
         .modaya-ghost-btn:active { transform: translateY(0); }
       `}</style>
     </>
