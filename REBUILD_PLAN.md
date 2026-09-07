@@ -193,6 +193,11 @@ Phase 1 — Reference-matching prototype (the root cause)
     they're just dropped today)
   · keep metrics as grounding + fallback; A/B on the benchmark
   · exit: feel-match mean ≥ 3.5/5 and ≥ old pipeline on the same pairs
+  · STATUS: steps 1–3 built (`b4b4e32`): analyseReference samples 6
+    reference keyframes, route attaches them after footage frames with
+    an IMAGE ORDER + cite-by-timestamp prompt, honest no-key fallback.
+    Step 4 is HELD until the old-pipeline baseline is human-rated — no
+    A/B result may be claimed before that baseline exists.
 
 Phase 2 — Editing pipeline rebuild
   · separate intent classification from execution; six v1 primitives (D3);
