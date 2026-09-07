@@ -1,5 +1,9 @@
 # Modaya — Complete Capability Breakdown
 
+> **⚠️ Superseded (2026-09-07):** this document predates the AI context layer, the
+> kinetic layer (real zooms/transitions) and the fixes that made them render.
+> The current, code-audited report is **`FULL_REPORT.md`** at commit `f9de063`.
+
 *Everything Modaya can do, in one document. Written from the actual code in this
 repository — nothing here is marketing. Where a capability exists as a built,
 tested engine but is not yet exposed in the Studio UI, it is marked
