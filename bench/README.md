@@ -61,6 +61,9 @@ bench/
   manifest.example.json ← pair manifest schema + example
   stats.mjs            ← pure scoring math (mean, agreement, Spearman)
   score.mjs            ← CLI: merge ratings, produce the report
+  reliability-stats.mjs ← pure D4 math (five numbers + exclusion signal)
+  reliability.mjs      ← CLI: D4 report from execution-evidence JSONL
+  reliability.example.jsonl ← evidence schema example (passing run)
   media/               ← PUT FILES HERE (gitignored): refs-/footage-/
   results/             ← per-run ratings JSONL (committed — it's the evidence)
 ```
@@ -86,6 +89,24 @@ bench/media/refs/ref-01-*.mp4 ... bench/media/footage/foot-01-*.mp4
 # 5. Report
 node bench/score.mjs --manifest bench/manifest.json --ratings bench/results/baseline.jsonl
 ```
+
+## D4 reliability scorer (Phase 2 measuring stick)
+
+The Phase 2 exit gate is D4's five numbers. This scorer is the fixed,
+code-checkable version: feed it the execution evidence and it computes
+**intent match, no-op rate, order fidelity, timecode validity (boundary vs
+±0.12s anchor or explicit flag), deterministic reproducibility (canonical
+plan JSON per footage+reference+seed group)** — plus the ambiguous-
+instruction exclusion rate. Missing data for a check **fails** the run
+(never a silent pass); exclusion >20% fails the run on its own.
+
+```bash
+node bench/reliability.mjs --corpus bench/reliability.example.jsonl
+```
+
+Evidence schema: one row per instruction execution — see the doc header of
+`bench/reliability-stats.mjs`. Phase 2's pipeline records it as it processes;
+nothing in the product claims reliability before this report passes.
 
 ## Rater instructions (paste into the sheet)
 
