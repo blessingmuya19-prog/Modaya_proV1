@@ -44,6 +44,15 @@ The new approach replaces the old **only when**:
    feel-match** — if it's not strongly positive, the honest fix is to say so,
    not to trust the number.
 
+## D4 exclusion rule (locked 2026-09-07)
+
+Reliability runs (Phase 2's intent-match and no-op metrics) report the
+**ambiguous-instruction exclusion rate** in the same report: `excluded /
+total instructions`. Excluded instructions don't count against #1/#2, but an
+exclusion rate **above 20% fails the run on its own** — it means vocabulary
+or UI never let the instruction reach the machinery. Verdict implemented in
+`bench/stats.mjs` (`exclusionRate`, `evaluateExclusion`, `EXCLUSION_LIMIT`).
+
 ## File layout
 
 ```

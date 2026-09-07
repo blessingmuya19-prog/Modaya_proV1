@@ -12,15 +12,19 @@ code-grounded recommendations so they can be locked down.
 | D1 | Vision provider + fallback | **LOCKED**: provider-agnostic vision (existing Groq/Gemini/OpenRouter/Ollama chains, Cloudflare stays text-only). No-key mode = metrics-only, **labelled in the UI as lower fidelity** ("matching without an AI key uses basic measurements only"). Feature never blocked behind a key |
 | D2 | Benchmark before prototype | **LOCKED**: benchmark-first (Phase 0). Human-rated set defined in Part B; `bench/` harness built |
 | D3 | Op vocabulary | **LOCKED (owner's list — overrides the draft table below)**: v1 = `remove_ranges`, `keep_ranges`, `trim_to`, `add_captions`, `add_text`/`move_text`/`remove_text`, `style_text`, `grade`, `uncut`. **Deferred**: `punch_in` op and reference-driven pacing/beat-matching — both stay dormant until the new reference-matching path (§3) is validated |
-| D4 | Definition of "reliable" | **PROPOSED (5 numbers, Part B) — awaiting one-line sign-off** |
+| D4 | Definition of "reliable" | **LOCKED (5 numbers, Part B + exclusion-rate condition, 2026-09-07)** |
 | D5 | Client vs server | **LOCKED**: staged hybrid (recommendation adopted) — keep analysis/preview client-side; project state + AI pipeline become one server-side source of truth; cloud render deferred to a v1.1 gate (worker+queue, never serverless headless browser) |
 | D6 | Orphaned engines | **LOCKED**: none in v1. Re-enter one at a time, wired in the same PR: auto-reframe → LUTs → ducking/mixer → motion-tracked text |
 | C1 | Editable timeline export | Named phase after reference-matching v1 (was missing from the spec; flagged, not silently dropped) |
 | C2 | Asset placement | Deferred; assets remain **advisory** (classified + described, never placed) until a named phase |
 
-D4 is the only open item. The proposal below (intent ≥90%, no-op ≤10%, order
-fidelity ≥95%, timecode validity 100%, reproducibility ≥99%) is ready to be
-accepted or adjusted in one line.
+D4 is LOCKED (see Part B). The five numbers stand, plus the condition attached
+to them on sign-off: **the ambiguous-instruction exclusion rate is reported
+alongside #1 and #2 on every reliability run, and an exclusion rate above
+~20% is its own failure signal (a vocabulary/UI problem) — not a free pass
+on the metric.** The exclusion logic lives in `bench/stats.mjs`
+(`exclusionRate` / `evaluateExclusion`, limit 20%) so every reporter reuses
+the same verdict.
 
 ---
 
@@ -106,8 +110,8 @@ reference matching.)
 
 ### D4. Definition of "reliable" (measurable)
 
-**Recommendation — five numbers, tracked per release against the fixed test
-set (D2):**
+**LOCKED (2026-09-07) — five numbers, tracked per release against the fixed
+test set (D2), plus the exclusion-rate condition below:**
 1. **Intent match ≥ 90%** — manual binary: does the edit match the stated intent?
 2. **No-op rate ≤ 10%** — replies that changed nothing when change was asked for.
 3. **Order fidelity ≥ 95%** — the plan executes in the order the model proposed
@@ -116,6 +120,18 @@ set (D2):**
    explicitly reported (no invented times — already the honesty rule).
 5. **Deterministic reproducibility ≥ 99%** — same footage + reference + seed →
    same edit (fixes the "unstable" complaint; today the score/plan can drift).
+
+**Condition attached to the lock (owner's requirement):**
+- Instructions the system cannot machine-interpret are marked `ambiguous` and
+  are **excluded** from #1 and #2 (they would be judged against a requirement
+  the machinery never received).
+- The **exclusion rate is reported on every run** alongside #1 and #2 — never
+  as a side note: `excluded / total instructions`, printed in the same report.
+- An exclusion rate **above ~20% fails the run as its own signal** (vocabulary
+  or UI problem), even if the excluded metrics would otherwise pass.
+- The other four numbers are code-checkable against a fixed corpus — no
+  judgment call, no adjustment. Determinism (#5) applies to the plan executed
+  from a fixed intent; provider/prompt-seed drift is out of scope.
 
 ### D5. Client-side vs server-side — the central architecture call
 

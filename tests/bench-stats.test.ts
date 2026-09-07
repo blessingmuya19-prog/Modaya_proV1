@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   mean, stdev, agreementWithin1, spearman, evaluateGate,
+  exclusionRate, evaluateExclusion, EXCLUSION_LIMIT,
 } from '../bench/stats.mjs';
 
 describe('bench stats — mean / stdev', () => {
@@ -65,5 +66,31 @@ describe('bench stats — the gate', () => {
 
   it('baseline can be absent (first run) — gate then needs only feel + agreement', () => {
     expect(evaluateGate({ feelMean: 3.8, baselineFeelMean: null, agreement: 0.7 }).pass).toBe(true);
+  });
+});
+
+describe('bench stats — D4 ambiguous-instruction exclusion signal', () => {
+  it('limit is 20%', () => {
+    expect(EXCLUSION_LIMIT).toBe(0.20);
+  });
+
+  it('rate at or below the limit passes; above it fails with a signal', () => {
+    expect(evaluateExclusion(0.20).pass).toBe(true);
+    expect(evaluateExclusion(0.19).pass).toBe(true);
+    const over = evaluateExclusion(0.21);
+    expect(over.pass).toBe(false);
+    expect(over.signal).toContain('excluded');
+  });
+
+  it('exclusion rate is excluded / total, null on empty total', () => {
+    expect(exclusionRate(5, 25)).toBe(0.2);
+    expect(exclusionRate(0, 25)).toBe(0);
+    expect(exclusionRate(0, 0)).toBeNull();
+    expect(exclusionRate(-1, 25)).toBe(-0.04);   // raw math; the verdict handles sanity
+  });
+
+  it('non-finite or non-number rates get no verdict', () => {
+    expect(evaluateExclusion(Number.NaN)).toBeNull();
+    expect(evaluateExclusion(undefined as never)).toBeNull();
   });
 });

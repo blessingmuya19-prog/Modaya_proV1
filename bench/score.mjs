@@ -127,8 +127,9 @@ const correlation = corrPairs.length >= 5
   : null;
 
 const agg = (k) => {
-  const xs = report.perPair.map(p => p[k]).filter(v => v !== null && v !== undefined);
-  return mean(xs);
+  const active = report.perPair.filter(p => p.nSeen > 0);   // unrated pairs count nowhere
+  const xs = active.map(p => p[k]).filter(v => v !== null && v !== undefined);
+  return xs.length ? mean(xs) : null;
 };
 
 /* mean agreement across pairs (null-safe) */

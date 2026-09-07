@@ -89,3 +89,35 @@ export function evaluateGate({ feelMean, baselineFeelMean, agreement }) {
     agreement,
   };
 }
+
+/**
+ * D4.lock — ambiguous-instruction exclusion signal.
+ *
+ * Instructions the system cannot machine-interpret are excluded from the
+ * intent-match and no-op metrics, but an excluded instruction is NOT free:
+ * the exclusion rate must be reported in the same run as those metrics, and
+ * anything above EXCLUSION_LIMIT is its own failure signal (a vocabulary or
+ * UI problem — the instruction never reached the machinery).
+ */
+export const EXCLUSION_LIMIT = 0.20;
+
+/**
+ * Pure verdict: pass when the exclusion rate is at or below the limit,
+ * fail when it exceeds it. Rate from a total of 0 → null (nothing to judge;
+ * callers should not both score and exclude nothing).
+ */
+export function evaluateExclusion(rate) {
+  if (typeof rate !== 'number' || !Number.isFinite(rate)) return null;
+  return {
+    pass: rate <= EXCLUSION_LIMIT,
+    excludedRate: rate,
+    limit: EXCLUSION_LIMIT,
+    signal: rate > EXCLUSION_LIMIT ? 'too many instructions excluded' : null,
+  };
+}
+
+/** Exclusion rate from raw counts: excluded / total, or null on empty total. */
+export function exclusionRate(excluded, total) {
+  if (!Number.isFinite(total) || total <= 0) return null;
+  return excluded / total;
+}
