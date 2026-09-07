@@ -5,6 +5,23 @@ repository at commit `2676af4` (686 tests, 59 files, tsc + build clean).
 This document does **not** replace the spec — it answers the open questions with
 code-grounded recommendations so they can be locked down.
 
+## Decision status — locked 2026-09-07
+
+| # | Decision | Status |
+|---|---|---|
+| D1 | Vision provider + fallback | **LOCKED**: provider-agnostic vision (existing Groq/Gemini/OpenRouter/Ollama chains, Cloudflare stays text-only). No-key mode = metrics-only, **labelled in the UI as lower fidelity** ("matching without an AI key uses basic measurements only"). Feature never blocked behind a key |
+| D2 | Benchmark before prototype | **LOCKED**: benchmark-first (Phase 0). Human-rated set defined in Part B; `bench/` harness built |
+| D3 | Op vocabulary | **LOCKED (owner's list — overrides the draft table below)**: v1 = `remove_ranges`, `keep_ranges`, `trim_to`, `add_captions`, `add_text`/`move_text`/`remove_text`, `style_text`, `grade`, `uncut`. **Deferred**: `punch_in` op and reference-driven pacing/beat-matching — both stay dormant until the new reference-matching path (§3) is validated |
+| D4 | Definition of "reliable" | **PROPOSED (5 numbers, Part B) — awaiting one-line sign-off** |
+| D5 | Client vs server | **LOCKED**: staged hybrid (recommendation adopted) — keep analysis/preview client-side; project state + AI pipeline become one server-side source of truth; cloud render deferred to a v1.1 gate (worker+queue, never serverless headless browser) |
+| D6 | Orphaned engines | **LOCKED**: none in v1. Re-enter one at a time, wired in the same PR: auto-reframe → LUTs → ducking/mixer → motion-tracked text |
+| C1 | Editable timeline export | Named phase after reference-matching v1 (was missing from the spec; flagged, not silently dropped) |
+| C2 | Asset placement | Deferred; assets remain **advisory** (classified + described, never placed) until a named phase |
+
+D4 is the only open item. The proposal below (intent ≥90%, no-op ≤10%, order
+fidelity ≥95%, timecode validity 100%, reproducibility ≥99%) is ready to be
+accepted or adjusted in one line.
+
 ---
 
 ## Part A — Spec verification (what the code actually says)
@@ -65,23 +82,27 @@ in-between.** The UI already says "no model can see this" — keep that.
 
 ### D3. Operation vocabulary: full vs narrowed v1
 
-**Recommendation — narrow v1 to six primitives; keep the rest engine-ready:**
+**LOCKED — owner's call (2026-09-07):** v1 keeps the *foundational and
+testable* set:
 
-| v1 (ship) | Deferred (engine-ready, unwired is fine) |
+| v1 (ship) | Deferred (until reference-matching §3 is validated) |
 |---|---|
-| `remove_ranges` (dead air/filler) | `style_text` (restyle existing text) |
-| `keep_ranges` (highlight selection) | `move_text` / `remove_text` |
-| `trim_to` | `punch_in` (covered by profile kinetics) |
-| `add_captions` | `grade` (covered by reference profile) |
-| `add_text` | `none`/questions layer stays |
+| `remove_ranges` (dead air/filler) | `punch_in` |
+| `keep_ranges` (highlight selection) | reference-driven pacing/beat-matching |
+| `trim_to` | everything else (already engine-ready) |
+| `add_captions` | |
+| `add_text` / `move_text` / `remove_text` | |
+| `style_text` | |
+| `grade` | |
 | `uncut` | |
 
-Rationale: each v1 op is **measurably verifiable after execution**
-(seconds removed, words retained, hook placement), which makes "reliable"
-testable. `grade`/`punch_in` are already folded into the reference profile and
-kinetic layer, so they can be dropped from the *instruction* vocabulary
-without losing the feature. Chat still accepts every current phrase — the
-**parser** narrows, not the UX.
+Rationale (owner's): the ops most entangled with the broken reference signal
+are exactly the ones to freeze until the new multimodal reference path is
+proven. `punch_in` and reference pacing stay in the *profile/kinetic layer* as
+data, but are not driven by unreliable reference reconstruction for v1. Chat
+still understands every phrase — the parser narrows, not the UX. (`uncut` is
+kept alongside the owner's list as a foundational op that doesn't touch
+reference matching.)
 
 ### D4. Definition of "reliable" (measurable)
 
