@@ -5,6 +5,14 @@ without it; nothing about "new beats old" can be claimed until this lands.
 This document makes the media and rater sourcing as cheap and fast as it can
 be — it does not change the locked design (36 pairs, 5 raters, D2 gate).
 
+## Decisions (owner, 2026-09-07)
+
+- **Media — Path A+B:** the three footage files come from the owner's own
+  archive; the 12 references come from free-license stock. Full 36-pair set.
+- **Raters — Mixed route:** 3 Prolific raters + 2 network raters (5 total,
+  full agreement math). Cost ≈ £120–130 (~R3,000); the two network raters
+  can start as soon as the edits exist while the Prolific waves are set up.
+
 ---
 
 ## 1. What the media actually requires

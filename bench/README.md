@@ -64,6 +64,9 @@ bench/
   reliability-stats.mjs ← pure D4 math (five numbers + exclusion signal)
   reliability.mjs      ← CLI: D4 report from execution-evidence JSONL
   reliability.example.jsonl ← evidence schema example (passing run)
+  make-rater-sheets.mjs ← manifest → 5 shuffled rater sheets + empty JSONL rows
+  SOURCING_PLAN.md     ← media + rater sourcing (decisions, costs, protocol)
+  RECRUITMENT.md       ← copy for network + Prolific raters, calibration script
   media/               ← PUT FILES HERE (gitignored): refs-/footage-/
   results/             ← per-run ratings JSONL (committed — it's the evidence)
 ```
